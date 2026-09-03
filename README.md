@@ -8,6 +8,8 @@ A local-first clip library for NVIDIA ShadowPlay (and any other recorder) — El
 - **Previews.** Poster frames plus hover-to-scrub strips, rendered once by a bundled ffmpeg at below-normal CPU priority and cached in `%APPDATA%\sift\thumbs`.
 - **Player.** Custom controls, keyboard shortcuts, prev/next through the grid, autoplay-next, loop, speed, fullscreen.
 - **Manage.** A details pane beside the video carries the file's video and file figures, its location, and the actions — show in Explorer, copy path, rename, delete (to Recycle Bin). The same actions are on every card's right-click menu.
+- **Trim & export.** Press `E` in the player to drop in/out handles on the timeline, optionally mute, name the clip and export. Exports are an ffmpeg stream copy (seconds, original quality, the start snaps to the previous keyframe) into `Videos\Sift Clips\<Game>\` — the recording is never touched. The folder is changeable under Settings → Clips.
+- **Clips.** Everything you exported, grouped by game, with in-flight exports shown as progress cards. Each clip links back to the recording it was cut from.
 
 ## Run
 
@@ -47,6 +49,18 @@ Output lands in `dist/`. `npm run build:unpack` produces an unpacked folder for 
 | N / P | Next / previous clip |
 | F | Fullscreen · Esc back |
 | I | Show / hide the details pane |
+| E | Trim & export (edit mode) · Esc leaves it |
+| , . | Step one frame back / forward |
+
+In edit mode:
+
+| Key | Action |
+| --- | --- |
+| [ ] | Set the start / end to the playhead |
+| { } | Jump to the start / end |
+| Shift+M | Mute the export |
+| Shift+R | Reset the range |
+| Ctrl+Enter | Export |
 
 ## Layout
 
@@ -85,4 +99,5 @@ All of them respect the Animations toggle / reduced-motion (they render static o
 - Main → renderer updates are batched every 150 ms.
 - ffmpeg jobs run with bounded concurrency (default 2, configurable), `-threads 1` on every input, and below-normal process priority. Poster and sprite strip come out of a single ffmpeg run of keyframe-only seeks (`-noaccurate_seek -skip_frame nokey`) stitched with `hstack`, so a clip costs about one decoded I-frame per strip frame rather than a full GOP per seek.
 - Video streams through a custom `clip://` protocol with HTTP range support; read streams are torn down the moment Chromium abandons a request.
+- Exports never re-encode: `-ss`/`-to` as input options seek to the previous keyframe and stop exactly at the out-point, then `-c copy` writes the packets out. One export runs at a time (disk-bound), with `-progress` on stdout for the progress card and a stall watchdog instead of the fixed job timeout. The file is written under a `~` name the indexer ignores and renamed into place when ffmpeg is done.
 - All animation is transform/opacity only, and every transition collapses to instant when Windows asks for reduced motion or the setting is off.
