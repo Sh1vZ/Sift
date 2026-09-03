@@ -5,7 +5,7 @@ import SettingsRow from './SettingsRow.vue'
 import { settings, updateSettings } from '@/composables/useLibrary'
 import { osReduced } from '@/composables/useMotion'
 
-type ToggleKey = keyof Pick<Settings, 'hoverPreview' | 'autoplayNext'>
+type ToggleKey = keyof Pick<Settings, 'hoverPreview' | 'editOnOpen' | 'autoplayNext'>
 
 const toggles: Array<{ key: ToggleKey; icon: string; title: string; description: string }> = [
   {
@@ -13,6 +13,12 @@ const toggles: Array<{ key: ToggleKey; icon: string; title: string; description:
     icon: 'eye',
     title: 'Hover to scrub',
     description: 'Move across a card to preview the clip without opening it.'
+  },
+  {
+    key: 'editOnOpen',
+    icon: 'scissors',
+    title: 'Open clips in edit mode',
+    description: 'Start with the trim timeline showing. Press E or Esc to leave it; off, E enters it when you want.'
   },
   {
     key: 'autoplayNext',

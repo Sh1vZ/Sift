@@ -468,10 +468,23 @@ function onKey(e: KeyboardEvent): void {
 
 // ------------------------------------------------------------- lifecycle
 
+/**
+ * Enter edit mode on open when asked to (Trim & export from a menu) or when the
+ * setting says every clip opens that way. Waits for the probe if it must, via
+ * the `canEdit` watcher; `pendingEdit` is consumed either way so a later clip
+ * change does not re-trigger a one-off request.
+ */
+let autoEdit = false
 function consumePendingEdit(): void {
-  if (!pendingEdit.value) return
-  pendingEdit.value = false
-  if (canEdit.value) enterEdit(clip.value)
+  if (pendingEdit.value) {
+    pendingEdit.value = false
+    autoEdit = true
+  } else if (settings.value.editOnOpen && !editing.value) {
+    autoEdit = true
+  }
+  if (!autoEdit || !canEdit.value) return
+  autoEdit = false
+  enterEdit(clip.value)
 }
 
 watch(
@@ -492,7 +505,7 @@ watch(
 
 // A clip opened straight into edit mode may still be probing; enter as soon as it can.
 watch(canEdit, (ok) => {
-  if (ok) consumePendingEdit()
+  if (ok && autoEdit) consumePendingEdit()
 })
 
 onMounted(async () => {

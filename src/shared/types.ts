@@ -128,6 +128,8 @@ export interface Settings {
   gridSize: GridSize
   /** Whether the player opens with its details pane showing. */
   detailsPane: boolean
+  /** Open the player straight into trim mode whenever the clip can be trimmed. */
+  editOnOpen: boolean
   sort: SortBy
   groupBy: GroupBy
   theme: ThemeId
@@ -240,6 +242,7 @@ export const DEFAULT_SETTINGS: Settings = {
   muted: false,
   gridSize: 'large',
   detailsPane: true,
+  editOnOpen: true,
   sort: 'newest',
   groupBy: 'date',
   theme: 'sift',
