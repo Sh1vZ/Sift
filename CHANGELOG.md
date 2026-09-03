@@ -1,0 +1,19 @@
+# Changelog
+
+All notable changes to Sift are recorded here. The section for each version becomes
+that release's notes on GitHub and the "What's new" shown in the app after it updates.
+
+The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Sift
+uses [semantic versioning](https://semver.org/spec/v2.0.0.html) — beta builds carry a
+`-beta.N` suffix and update from the beta channel.
+
+## [1.0.0-beta.1] - 2026-09-03
+
+The first public beta.
+
+### Added
+
+- Sift now updates itself. It checks for a new beta in the background, downloads it
+  quietly, and shows a "Restart to update" pill in the title bar when one is ready.
+- Settings → About gained an Updates section: the current status, the notes for a
+  pending version, a "Check now" button, and a switch to turn automatic checks off.

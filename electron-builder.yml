@@ -14,10 +14,36 @@ files:
 extraResources:
   - from: build/icon.png
     to: icon.png
+  # Read at launch for the one-time "What's new" after the app updates itself, so
+  # the notes for the running build do not depend on the network.
+  - from: CHANGELOG.md
+    to: CHANGELOG.md
 asarUnpack:
   - node_modules/ffmpeg-static/**
   - node_modules/ffprobe-static/bin/**
 npmRebuild: false
+
+# electron-builder infers a GitHub provider from the git remote, but the inferred
+# default is `releaseType: draft` — and a draft release is invisible to
+# electron-updater, so the app would silently report "up to date" forever.
+#
+# The GitHub provider has no named update channels: it always writes latest.yml
+# and expresses "beta" through the release's own prerelease flag, which the app
+# opts into with `allowPrerelease` (see src/main/lib/updater.ts). Setting
+# `channel:` here, or `generateUpdatesFilesForAllChannels`, does nothing for this
+# provider. Promoting the beta line to stable is a one-word change below.
+publish:
+  provider: github
+  owner: Sh1vZ
+  repo: Sift
+  releaseType: prerelease
+
+# Written by `npm run release:notes` from the CHANGELOG section for this version.
+# Becomes the GitHub release body and the manifest's releaseNotes. A local build
+# without it simply ships no notes.
+releaseInfo:
+  releaseNotesFile: build/release-notes.md
+
 win:
   icon: build/icon.png
   target:

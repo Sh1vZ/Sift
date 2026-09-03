@@ -27,6 +27,13 @@ const api: Api = {
     cancel: (id) => ipcRenderer.invoke('export:cancel', id),
     dismiss: (id) => ipcRenderer.invoke('export:dismiss', id)
   },
+  updates: {
+    get: () => ipcRenderer.invoke('updates:get'),
+    check: () => ipcRenderer.invoke('updates:check'),
+    install: () => void ipcRenderer.invoke('updates:install'),
+    whatsNew: () => ipcRenderer.invoke('updates:whats-new'),
+    dismissWhatsNew: () => void ipcRenderer.invoke('updates:dismiss-whats-new')
+  },
   window: {
     minimize: () => void ipcRenderer.invoke('window:minimize'),
     toggleMaximize: () => void ipcRenderer.invoke('window:toggle-maximize'),

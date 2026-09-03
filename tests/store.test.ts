@@ -11,6 +11,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
+import { changelogSection, changelogToText } from '@shared/changelog'
 import { DEFAULT_SETTINGS, type Clip, type LibraryFolder } from '@shared/types'
 import { buildExportArgs, exportExt, safeGameDir, sanitizeName, uniqueName, parseProgressLine } from '../src/main/lib/exports'
 import { Store } from '../src/main/lib/store'
@@ -206,10 +207,39 @@ function exportHelperCases(): void {
   check(muted.includes('-an') && !muted.includes('0:a?') && !muted.includes('hvc1'), 'muted drops audio')
 }
 
+const CHANGELOG = `# Changelog
+
+## [1.0.0-beta.2] - 2026-09-10
+### Added
+- Sift updates itself now.
+
+## [1.0.0-beta.1] - 2026-09-03
+### Fixed
+- A thing.
+`
+
+function changelogCases(): void {
+  check(
+    changelogSection(CHANGELOG, '1.0.0-beta.2') === '### Added\n- Sift updates itself now.',
+    'changelogSection stops at the next version heading'
+  )
+  check(
+    changelogSection(CHANGELOG, 'v1.0.0-beta.1') === '### Fixed\n- A thing.',
+    'changelogSection tolerates a v prefix and reads the last section'
+  )
+  check(changelogSection(CHANGELOG, '9.9.9') === '', 'changelogSection is empty for an unknown version')
+  check(changelogSection('', '1.0.0') === '' && changelogSection(CHANGELOG, '') === '', 'changelogSection handles empties')
+  check(
+    changelogToText('### Added\n- One\n* Two') === 'Added\n• One\n• Two',
+    'changelogToText drops sub-headings and normalises bullets'
+  )
+}
+
 async function main(): Promise<void> {
   await storeCases()
   await migrationCase()
   exportHelperCases()
+  changelogCases()
 }
 
 main()

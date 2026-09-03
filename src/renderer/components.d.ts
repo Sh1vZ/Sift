@@ -68,5 +68,6 @@ declare module 'vue' {
     USkeleton: typeof import('./../../node_modules/@nuxt/ui/dist/runtime/components/Skeleton.vue')['default']
     USwitch: typeof import('./../../node_modules/@nuxt/ui/dist/runtime/components/Switch.vue')['default']
     UTooltip: typeof import('./../../node_modules/@nuxt/ui/dist/runtime/components/Tooltip.vue')['default']
+    WhatsNewDialog: typeof import('./src/components/WhatsNewDialog.vue')['default']
   }
 }

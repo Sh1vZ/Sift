@@ -1,6 +1,7 @@
 import { BrowserWindow, dialog, ipcMain } from 'electron'
 import { THEME_IDS, type ExportRequest, type Settings } from '@shared/types'
 import type { Library } from './lib/library'
+import type { Updater } from './lib/updater'
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : '')
 const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : NaN)
@@ -16,7 +17,9 @@ export function registerIpc(
   getWindow: () => BrowserWindow | null,
   onRendererReady: () => void,
   /** Runs after every accepted settings patch, so main can react to app-level flags. */
-  onSettingsApplied: (settings: Settings) => void
+  onSettingsApplied: (settings: Settings) => void,
+  /** The auto-update state machine; inert in development builds. */
+  updates: Updater
 ): void {
   ipcMain.handle('library:snapshot', () => library.snapshot())
 
@@ -32,6 +35,8 @@ export function registerIpc(
     const p = { ...((patch ?? {}) as Partial<Settings>) }
     // Unknown theme ids would leave the renderer on no theme block at all.
     if (p.theme !== undefined && !THEME_IDS.includes(p.theme)) delete p.theme
+    if (p.autoCheckUpdates !== undefined) p.autoCheckUpdates = p.autoCheckUpdates === true
+    if (p.lastSeenVersion !== undefined) p.lastSeenVersion = str(p.lastSeenVersion)
     const settings = library.setSettings(p)
     onSettingsApplied(settings)
     return settings
@@ -66,6 +71,12 @@ export function registerIpc(
 
   ipcMain.handle('export:cancel', (_e, id) => library.cancelExport(str(id)))
   ipcMain.handle('export:dismiss', (_e, id) => library.dismissExport(str(id)))
+
+  ipcMain.handle('updates:get', () => updates.state())
+  ipcMain.handle('updates:check', () => updates.check(true))
+  ipcMain.handle('updates:install', () => updates.install())
+  ipcMain.handle('updates:whats-new', () => library.whatsNew())
+  ipcMain.handle('updates:dismiss-whats-new', () => library.dismissWhatsNew())
 
   ipcMain.handle('window:minimize', () => getWindow()?.minimize())
   ipcMain.handle('window:toggle-maximize', () => {

@@ -1,0 +1,95 @@
+name: Release
+
+# Tag a version to ship it:
+#   1. write the CHANGELOG.md section for the new version
+#   2. bump package.json to match
+#   3. git tag v<version> && git push --follow-tags
+on:
+  push:
+    tags:
+      - 'v*'
+
+# electron-builder creates the GitHub release and uploads the installer with the
+# built-in token. Without this it builds for six minutes and then 403s.
+permissions:
+  contents: write
+
+# One build per tag, and never cancelled: a half-published release keeps some of
+# its assets, which the updater will happily read and then fail to download from.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v5
+
+      # 24 because tests/store.test.ts runs under plain Node and
+      # src/main/lib/store.ts imports node:sqlite, which needs no flag only from
+      # Node 22.13 on. Electron bundles its own Node, so this constrains the
+      # test step rather than the app.
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      # ~200 MB of Electron zip plus electron-builder's nsis/winCodeSign
+      # resources, re-downloaded on every cold run otherwise.
+      - name: Cache Electron downloads
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~\AppData\Local\electron\Cache
+            ~\AppData\Local\electron-builder\Cache
+          key: ${{ runner.os }}-electron-${{ hashFiles('package-lock.json') }}
+          restore-keys: ${{ runner.os }}-electron-
+
+      # electron-builder names artifacts from package.json and the updater
+      # compares against app.getVersion(). A tag that disagrees would ship a
+      # build that can never be offered as an update to anyone.
+      - name: Verify tag matches package.json
+        shell: pwsh
+        run: |
+          $tag = '${{ github.ref_name }}'
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          if ($tag -ne "v$version") {
+            Write-Host "::error::Tag '$tag' does not match package.json version '$version'. Bump package.json, commit, then re-tag."
+            exit 1
+          }
+          Write-Host "Building Sift $version from $tag"
+
+      - name: Install
+        run: npm ci
+
+      # Fails when CHANGELOG.md has no section for this version, so a release can
+      # never ship untitled. Deliberately before the build: seconds, not minutes.
+      - name: Extract release notes
+        run: npm run release:notes
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: Build and publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run release:win
+
+      # Not the installer — that is already on the release, and a second copy of
+      # 160 MB buys nothing. This is what you need to debug a failed update.
+      - name: Upload update metadata
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: update-metadata
+          path: |
+            dist/*.yml
+            dist/*.blockmap
+          retention-days: 7
+          if-no-files-found: warn

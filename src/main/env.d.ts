@@ -6,4 +6,5 @@
 interface ImportMetaEnv {
   readonly MAIN_VITE_USER_DATA_DIR?: string
   readonly MAIN_VITE_OPEN_DEVTOOLS?: string
+  readonly MAIN_VITE_UPDATER_DEV?: string
 }

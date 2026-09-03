@@ -4,6 +4,7 @@
     "src/main/**/*",
     "src/preload/**/*",
     "src/shared/**/*",
+    "scripts/**/*",
     "tests/**/*"
   ],
   "compilerOptions": {

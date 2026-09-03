@@ -8,7 +8,9 @@ import type {
   ExportRequest,
   LibraryFolder,
   LibrarySnapshot,
-  Settings
+  Settings,
+  UpdateState,
+  WhatsNew
 } from './types'
 
 /** The surface exposed to the renderer as `window.api`. */
@@ -45,6 +47,21 @@ export interface Api {
     cancel(id: string): Promise<ActionResult>
     /** Drops a finished/failed job from the list ahead of its automatic pruning. */
     dismiss(id: string): Promise<void>
+  }
+  updates: {
+    /** Current updater state; safe to call before any check has run. */
+    get(): Promise<UpdateState>
+    /** Checks now, even when automatic checks are switched off. */
+    check(): Promise<UpdateState>
+    /**
+     * Quits, installs the downloaded update and relaunches. No-op unless one is
+     * ready. Fire-and-forget: the process is going away, so there is nothing to await.
+     */
+    install(): void
+    /** Notes for the build now running, the first time it runs after an update. */
+    whatsNew(): Promise<WhatsNew | null>
+    /** Marks those notes read so they are not offered again. */
+    dismissWhatsNew(): void
   }
   window: {
     minimize(): void

@@ -8,8 +8,10 @@ import SettingsView from './components/SettingsView.vue'
 import PlayerOverlay from './components/PlayerOverlay.vue'
 import DialogHost from './components/DialogHost.vue'
 import ToastBridge from './components/ToastBridge.vue'
+import WhatsNewDialog from './components/WhatsNewDialog.vue'
 import { initLibrary, initialExports, ready, view } from '@/composables/useLibrary'
 import { initExports } from '@/composables/useExports'
+import { initUpdates } from '@/composables/useUpdates'
 import { isOpen } from '@/composables/usePlayer'
 import { openSettings } from '@/composables/useSettings'
 // Side-effect import: applies the persisted theme to <html> before first paint.
@@ -22,6 +24,9 @@ onMounted(async () => {
   try {
     await initLibrary()
     initExports(initialExports.value)
+    // Not awaited: the splash must not wait on the updater, and a failure here
+    // is never a reason to hold up the library.
+    void initUpdates()
   } finally {
     // The launch splash holds the screen until this lands: one frame after the
     // first real render, so the window is never revealed mid-paint. In the
@@ -52,6 +57,7 @@ onMounted(async () => {
         <PlayerOverlay v-if="isOpen" />
       </Transition>
       <DialogHost />
+      <WhatsNewDialog />
       <ToastBridge />
     </div>
   </UApp>

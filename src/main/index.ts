@@ -7,6 +7,7 @@ import { ensureDirs } from './lib/paths'
 import { installProtocol, registerScheme } from './lib/protocol'
 import { createSplash, type Splash } from './lib/splash'
 import { createTray, type AppTray } from './lib/tray'
+import { createUpdater, type Updater } from './lib/updater'
 import { createMainWindow } from './lib/window'
 
 // Optional isolated profile (separate library, cache and single-instance lock) —
@@ -22,6 +23,7 @@ let mainWindow: BrowserWindow | null = null
 let library: Library | null = null
 let splash: Splash | null = null
 let tray: AppTray | null = null
+let updater: Updater | null = null
 /** Set as soon as a quit begins, so the close handler stops hiding the window. */
 let quitting = false
 
@@ -68,13 +70,26 @@ if (!app.requestSingleInstanceLock()) {
     splash.theme(library.settings.theme, library.settings.animations)
     splash.status('Loading your clips…')
 
+    // Same lazy send as the Library emitter above: the window does not exist yet.
+    updater = createUpdater({
+      emit: (name, payload) => {
+        if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(name, payload)
+      },
+      quit: () => app.quit()
+    })
+
     installProtocol((id) => library?.clipPath(id))
     registerIpc(
       library,
       () => mainWindow,
       () => splash?.finish(),
-      (s) => syncTray(s.minimizeToTray)
+      (s) => {
+        syncTray(s.minimizeToTray)
+        updater?.setAutoCheck(s.autoCheckUpdates)
+      },
+      updater
     )
+    updater.setAutoCheck(library.settings.autoCheckUpdates)
 
     app.on('browser-window-created', (_, window) => optimizer.watchWindowShortcuts(window))
 
@@ -116,10 +131,18 @@ if (!app.requestSingleInstanceLock()) {
     if (shuttingDown || !library) return
     event.preventDefault()
     shuttingDown = true
+    updater?.dispose()
     // Drop the icon straight away: quitting flushes the library first, and a
     // tray icon left sitting there through it looks like nothing happened.
     tray?.destroy()
     tray = null
-    void library.shutdown().finally(() => app.quit())
+    void library.shutdown().finally(() => {
+      // Order matters: quitAndInstall spawns the NSIS installer *before* it quits,
+      // so running it any earlier would have the installer fighting file locks
+      // against a library still flushing its WAL. It calls app.quit() itself,
+      // which re-enters this handler and falls out at the shuttingDown guard.
+      if (updater?.wantsInstall()) updater.runInstaller()
+      else app.quit()
+    })
   })
 }

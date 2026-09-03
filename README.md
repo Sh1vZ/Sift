@@ -26,6 +26,7 @@ Optional. Copy `.env.example` to `.env` (git-ignored) and set what you need; res
 | --- | --- | --- |
 | `MAIN_VITE_USER_DATA_DIR` | `.env`, dev builds only | Run against an isolated profile (own `library.db`, thumbnail cache, single-instance lock) — test a build next to a running install without touching its library |
 | `MAIN_VITE_OPEN_DEVTOOLS` | `.env`, dev builds only | `true` opens detached DevTools when the window appears |
+| `MAIN_VITE_UPDATER_DEV` | `.env`, dev builds only | `true` runs the auto-updater against a `dev-app-update.yml` feed instead of leaving it inert |
 | `SIFT_USER_DATA` | shell environment, any build | Same profile override, but honoured by packaged builds too (`$env:SIFT_USER_DATA = "D:\sift-test"; npm run dev`) |
 
 Only `MAIN_VITE_*` / `PRELOAD_VITE_*` / `RENDERER_VITE_*` / `VITE_*` names reach the bundles; anything else in `.env` is ignored. `src/main/env.d.ts` types the ones the main process reads.
@@ -37,6 +38,26 @@ npm run build:win
 ```
 
 Output lands in `dist/`. `npm run build:unpack` produces an unpacked folder for a quick test.
+
+## Publish a release
+
+`.github/workflows/release.yml` builds and publishes on any `v*` tag, so shipping is three steps:
+
+1. Add the section for the new version to `CHANGELOG.md` — it becomes the GitHub release body, the notes shown next to a pending update, and the in-app "What's new". CI fails without it.
+2. Set the same version in `package.json`. CI fails if the tag and `package.json` disagree.
+3. Tag and push:
+
+```bash
+git commit -am "chore(release): 1.0.0-beta.2" && git tag v1.0.0-beta.2 && git push --follow-tags
+```
+
+Beta versions carry a `-beta.N` suffix and the GitHub release is flagged as a prerelease; a build whose own version is a prerelease opts into those, a stable build only sees stable releases. Beta users are still offered a later stable release, so promoting the line is just `releaseType: prerelease` → `release` in `electron-builder.yml` alongside dropping the suffix.
+
+Installed copies check on launch and every four hours, download in the background, and show a **Restart to update** pill in the title bar. Settings → About → Info has the current state, the notes for a pending version, a **Check now** button, and a switch to turn automatic checks off.
+
+Installers are unsigned, so SmartScreen warns on a manual download from the Releases page. Auto-updates are not affected — the downloaded installer carries no mark-of-the-web.
+
+To exercise the update flow without publishing anything, see `MAIN_VITE_UPDATER_DEV` above.
 
 ## Keyboard (player)
 

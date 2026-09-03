@@ -118,8 +118,9 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
         id: 'info',
         label: 'Info',
         icon: 'i-lucide-info',
-        description: 'This build, what it is currently using, and what it keeps to itself.',
-        keywords: 'version electron chromium node memory uptime ffmpeg platform privacy'
+        description: 'This build, keeping it current, and what it keeps to itself.',
+        keywords:
+          'version electron chromium node memory uptime ffmpeg platform privacy update updates upgrade release changelog download install restart beta channel'
       }
     ]
   }

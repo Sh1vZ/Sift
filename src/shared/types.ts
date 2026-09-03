@@ -144,8 +144,15 @@ export interface Settings {
   concurrency: number
   /** Closing the window hides it to the tray and leaves the library running. */
   minimizeToTray: boolean
+  /** Look for a new version on launch and every few hours. Manual checks work either way. */
+  autoCheckUpdates: boolean
   /** Internal: the one-time `still running` tray balloon has been shown. Never surfaced in the UI. */
   trayHintShown: boolean
+  /**
+   * Internal: the version whose release notes the user has already seen. Empty on a
+   * fresh install, which suppresses the first-run "What's new". Never surfaced in the UI.
+   */
+  lastSeenVersion: string
 }
 
 export interface ScanState {
@@ -216,6 +223,62 @@ export interface ClipPatch extends Partial<Clip> {
   id: string
 }
 
+// ---------------------------------------------------------------- updates
+
+/**
+ * Where the updater is in its cycle. `unsupported` is a development build (or any
+ * build with no update feed): the updater is inert and the UI says so rather than
+ * offering a button that cannot work.
+ */
+export type UpdateStatus =
+  | 'unsupported'
+  | 'idle'
+  | 'checking'
+  | 'available'
+  | 'downloading'
+  | 'downloaded'
+  | 'up-to-date'
+  | 'error'
+
+export interface UpdateState {
+  status: UpdateStatus
+  /** The running build, so the UI can render `1.0.0-beta.1 → 1.0.0-beta.2`. */
+  currentVersion: string
+  /** Version on offer; empty when there is nothing to offer. */
+  version: string
+  /** 0..1 while downloading. */
+  progress: number
+  /** Download speed; 0 outside a download. */
+  bytesPerSecond: number
+  /**
+   * Release notes for the offered version, already flattened to plain text in main.
+   * The GitHub feed serves rendered HTML, so the renderer never sees markup.
+   */
+  notes: string
+  /** Human-readable reason when `status` is `error`. */
+  error: string
+  /** When the last completed check finished; 0 if none has. */
+  checkedAtMs: number
+}
+
+export const IDLE_UPDATE_STATE: UpdateState = {
+  status: 'idle',
+  currentVersion: '',
+  version: '',
+  progress: 0,
+  bytesPerSecond: 0,
+  notes: '',
+  error: '',
+  checkedAtMs: 0
+}
+
+/** The changelog section for the version now running, shown once after an update. */
+export interface WhatsNew {
+  version: string
+  /** Plain text from the bundled CHANGELOG.md; empty when there was no section. */
+  notes: string
+}
+
 /** Payloads pushed from main → renderer. */
 export interface EventMap {
   'clips:added': Clip[]
@@ -229,6 +292,8 @@ export interface EventMap {
   'window:maximized': boolean
   /** The tray Settings item: show the settings screen on the OS settings pane. */
   'app:open-settings': null
+  /** The whole updater state on every transition; the renderer replaces its copy. */
+  'update:changed': UpdateState
 }
 
 export type EventName = keyof EventMap
@@ -261,5 +326,7 @@ export const DEFAULT_SETTINGS: Settings = {
   theme: 'sift',
   concurrency: 2,
   minimizeToTray: false,
-  trayHintShown: false
+  autoCheckUpdates: true,
+  trayHintShown: false,
+  lastSeenVersion: ''
 }

@@ -16,3 +16,10 @@ export const userDataOverride: string =
 
 /** Open Chromium DevTools as soon as the window shows (dev only). */
 export const openDevTools: boolean = !app.isPackaged && import.meta.env.MAIN_VITE_OPEN_DEVTOOLS === 'true'
+
+/**
+ * Run the updater against `dev-app-update.yml` instead of leaving it inert, so the
+ * download/install flow can be exercised without publishing a release. Dev only —
+ * a packaged build always uses the real feed.
+ */
+export const updaterDev: boolean = !app.isPackaged && import.meta.env.MAIN_VITE_UPDATER_DEV === 'true'

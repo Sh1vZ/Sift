@@ -4,8 +4,14 @@ out
 .DS_Store
 *.log
 .vite
+# generated per build by scripts/release-notes.ts
+build/release-notes.md
+# local updater feed for testing a packaged update against a static server
+dev-app-update.yml
 # local environment (keep .env.example)
 .env
 .env.local
 .env.*.local
 !.env.example
+
+.claude/skills/ui-ux-pro-max

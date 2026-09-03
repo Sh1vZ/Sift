@@ -16,8 +16,10 @@ import type {
   LibraryFolder,
   LibrarySnapshot,
   ScanState,
-  Settings
+  Settings,
+  WhatsNew
 } from '@shared/types'
+import { releaseNotesFor } from './changelog'
 import { cleanTitle, clipId, deriveGame, parseRecordedAt } from './clips'
 import {
   INVALID_NAME,
@@ -45,7 +47,7 @@ import { collectStats } from './stats'
 import { Store } from './store'
 import { watchFolder } from './watcher'
 
-type Emit = <K extends EventName>(name: K, payload: EventMap[K]) => void
+export type Emit = <K extends EventName>(name: K, payload: EventMap[K]) => void
 
 const FLUSH_MS = 150
 const ADD_BATCH = 40
@@ -319,6 +321,35 @@ export class Library {
     }
     const error = await shell.openPath(path)
     return error ? { ok: false, error } : { ok: true }
+  }
+
+  // --------------------------------------------------------------- updates
+
+  /**
+   * The changelog section for the build now running, the first time it runs after
+   * an update — or null when there is nothing to say. A fresh install records
+   * where it started and stays quiet: a first-run changelog is just noise.
+   */
+  async whatsNew(): Promise<WhatsNew | null> {
+    const version = app.getVersion()
+    const seen = this.settings.lastSeenVersion
+    if (!seen || seen === version) {
+      if (!seen) this.setSettings({ lastSeenVersion: version })
+      return null
+    }
+    const notes = await releaseNotesFor(version)
+    // Nothing written for this version — mark it seen so the file is not re-read
+    // on every launch from here on.
+    if (!notes) {
+      this.setSettings({ lastSeenVersion: version })
+      return null
+    }
+    return { version, notes }
+  }
+
+  /** The user has read the notes; do not offer them again. */
+  dismissWhatsNew(): void {
+    this.setSettings({ lastSeenVersion: app.getVersion() })
   }
 
   // --------------------------------------------------------------- settings

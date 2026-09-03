@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { scan, screen, selectedGame } from '@/composables/useLibrary'
 import { exportLabel } from '@/composables/useExports'
 import { activeSection } from '@/composables/useSettings'
+import { installUpdate, update, updatePill } from '@/composables/useUpdates'
 
 const api = window.api
 const maximized = ref(false)
@@ -53,6 +54,29 @@ const status = computed(() => {
         }"
       />
     </div>
+    <Transition name="fade">
+      <UTooltip
+        v-if="updatePill"
+        :text="
+          updatePill.ready
+            ? `Sift ${update.version} is downloaded — restart to install it`
+            : `Downloading Sift ${update.version} in the background`
+        "
+      >
+        <!-- A button, not a badge: this is the primary way to install an update,
+             so it has to be reachable and activatable from the keyboard. -->
+        <UButton
+          class="update"
+          :icon="updatePill.icon"
+          :label="updatePill.label"
+          :color="updatePill.ready ? 'primary' : 'neutral'"
+          variant="subtle"
+          size="xs"
+          :disabled="!updatePill.ready"
+          @click="installUpdate()"
+        />
+      </UTooltip>
+    </Transition>
     <Transition name="fade">
       <UBadge
         v-if="status"
@@ -121,6 +145,11 @@ const status = computed(() => {
 }
 .status {
   margin-right: 12px;
+  -webkit-app-region: no-drag;
+}
+/* Sits left of the scan badge so both can show at once during a first scan. */
+.update {
+  margin-right: 10px;
   -webkit-app-region: no-drag;
 }
 .controls {
