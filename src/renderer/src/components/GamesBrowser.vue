@@ -69,51 +69,57 @@ const open = (g: GameSummary): void => openGame(g.name)
       <UBadge color="neutral" variant="subtle" size="md" :label="`${filteredGames.length} of ${games.length}`" class="mono" />
     </div>
 
-    <AnimatedList
-      v-if="filteredGames.length"
-      :items="filteredGames"
-      :item-key="keyOf"
-      :active="!playerOpen"
-      :animated="motionEnabled"
-      :gradient-color="activeTheme.colors.bg1"
-      class-name="games-list"
-      @item-selected="open"
-    >
-      <template #default="{ item: g, selected }">
-        <SpotlightCard
-          as="button"
-          class="game"
-          :class="{ 'is-selected': selected }"
-          :spotlight-color="activeTheme.spotlight"
-          :title="g.name"
+    <div class="stage">
+      <Transition name="crossfade">
+        <AnimatedList
+          v-if="filteredGames.length"
+          key="list"
+          :items="filteredGames"
+          :item-key="keyOf"
+          :active="!playerOpen"
+          :animated="motionEnabled"
+          :gradient-color="activeTheme.colors.bg1"
+          class-name="games-list"
+          @item-selected="open"
         >
-          <span class="cover">
-            <img v-if="g.cover" :src="api.thumbUrl(g.cover)" alt="" loading="lazy" decoding="async" />
-            <Icon v-else name="gamepad" :size="24" :stroke="1.6" />
-          </span>
-          <span class="text">
-            <span class="name truncate">{{ g.name }}</span>
-            <span class="stats">
-              <UBadge color="primary" variant="soft" size="sm" :label="`${g.count} clip${g.count === 1 ? '' : 's'}`" />
-              <span class="mono">{{ formatDuration(g.totalDuration) }}</span>
-              <span class="dot">·</span>
-              <span>{{ formatBytes(g.totalSize) }}</span>
-            </span>
-            <span class="last truncate">Last clip {{ formatRelative(g.latestMs, now).toLowerCase() }}</span>
-          </span>
-          <Icon name="chevron-right" :size="20" class="chev" />
-        </SpotlightCard>
-      </template>
-    </AnimatedList>
+          <template #default="{ item: g, selected }">
+            <SpotlightCard
+              as="button"
+              class="game"
+              :class="{ 'is-selected': selected }"
+              :spotlight-color="activeTheme.spotlight"
+              :title="g.name"
+            >
+              <span class="cover">
+                <img v-if="g.cover" :src="api.thumbUrl(g.cover)" alt="" loading="lazy" decoding="async" />
+                <Icon v-else name="gamepad" :size="24" :stroke="1.6" />
+              </span>
+              <span class="text">
+                <span class="name truncate">{{ g.name }}</span>
+                <span class="stats">
+                  <UBadge color="primary" variant="soft" size="sm" :label="`${g.count} clip${g.count === 1 ? '' : 's'}`" />
+                  <span class="mono">{{ formatDuration(g.totalDuration) }}</span>
+                  <span class="dot">·</span>
+                  <span>{{ formatBytes(g.totalSize) }}</span>
+                </span>
+                <span class="last truncate">Last clip {{ formatRelative(g.latestMs, now).toLowerCase() }}</span>
+              </span>
+              <Icon name="chevron-right" :size="20" class="chev" />
+            </SpotlightCard>
+          </template>
+        </AnimatedList>
 
-    <UEmpty
-      v-else
-      class="empty"
-      icon="i-lucide-search"
-      :title="`No games match “${gameQuery}”`"
-      description="Try a shorter name — the search also ignores spaces and punctuation."
-      :actions="[{ label: 'Clear search', color: 'neutral', variant: 'subtle', onClick: () => (gameQuery = '') }]"
-    />
+        <UEmpty
+          v-else
+          key="empty"
+          class="empty"
+          icon="i-lucide-search"
+          :title="`No games match “${gameQuery}”`"
+          description="Try a shorter name — the search also ignores spaces and punctuation."
+          :actions="[{ label: 'Clear search', color: 'neutral', variant: 'subtle', onClick: () => (gameQuery = '') }]"
+        />
+      </Transition>
+    </div>
   </div>
 </template>
 
@@ -147,6 +153,16 @@ const open = (g: GameSummary): void => openGame(g.name)
 }
 .tools > .mono {
   margin-left: auto;
+}
+
+/* Holds the box the list and the empty state animate inside; without it the
+   leaving one, which goes absolute mid-transition, would cover the search row. */
+.stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 /* AnimatedList fills the remaining height. Rows flow into as many columns as the

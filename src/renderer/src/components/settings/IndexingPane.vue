@@ -31,19 +31,24 @@ const pending = computed(() => allClips.value.filter((c) => c.probeState === 'pe
 
 <template>
   <div class="stack">
-    <UAlert
-      v-if="scan.active || scan.pending"
-      color="primary"
-      variant="subtle"
-      icon="i-lucide-loader-circle"
-      :title="scan.active ? `Scanning ${scan.folder}` : 'Building previews'"
-      :description="
-        scan.active
-          ? `${scan.found} new clip${scan.found === 1 ? '' : 's'} found so far.`
-          : `${scan.pending} clip${scan.pending === 1 ? '' : 's'} still queued.`
-      "
-      :ui="{ icon: 'animate-spin' }"
-    />
+    <Transition name="collapse">
+      <div v-if="scan.active || scan.pending">
+        <div class="collapse-body">
+          <UAlert
+            color="primary"
+            variant="subtle"
+            icon="i-lucide-loader-circle"
+            :title="scan.active ? `Scanning ${scan.folder}` : 'Building previews'"
+            :description="
+              scan.active
+                ? `${scan.found} new clip${scan.found === 1 ? '' : 's'} found so far.`
+                : `${scan.pending} clip${scan.pending === 1 ? '' : 's'} still queued.`
+            "
+            :ui="{ icon: 'animate-spin' }"
+          />
+        </div>
+      </div>
+    </Transition>
 
     <SettingsPanel
       title="Indexing"

@@ -35,70 +35,75 @@ async function remove(folder: LibraryFolder): Promise<void> {
         <UButton icon="i-lucide-folder-plus" label="Add folder" color="primary" @click="addFolder()" />
       </template>
 
-      <UEmpty
-        v-if="!libraryFolders.length"
-        class="panel-empty"
-        icon="i-lucide-folder"
-        title="No folders yet"
-        description="Add the one ShadowPlay records to — usually your Videos folder."
-        variant="subtle"
-        size="sm"
-        :actions="[{ label: 'Add folder', icon: 'i-lucide-folder-plus', onClick: () => addFolder() }]"
-      />
-      <ul v-else class="rows">
-        <SettingsRow
-          v-for="f in libraryFolders"
-          :key="f.id"
-          tag="li"
-          :icon="f.available ? 'hard-drive' : 'alert'"
-          :tone="f.available ? 'default' : 'warning'"
-          :title="f.name"
-        >
-          <template #title>
-            <div class="folder-name">
-              <span class="truncate">{{ f.name }}</span>
-              <UBadge v-if="!f.available" color="warning" variant="subtle" size="sm" label="Not reachable" />
-              <UBadge
-                v-else-if="scan.active && scan.folder === f.name"
-                color="primary"
-                variant="subtle"
-                size="sm"
-                icon="i-lucide-loader-circle"
-                label="Scanning"
-                :ui="{ leadingIcon: 'animate-spin' }"
-              />
-            </div>
-          </template>
+      <div class="slot">
+        <Transition name="dissolve">
+          <UEmpty
+            v-if="!libraryFolders.length"
+            key="empty"
+            class="panel-empty"
+            icon="i-lucide-folder"
+            title="No folders yet"
+            description="Add the one ShadowPlay records to — usually your Videos folder."
+            variant="subtle"
+            size="sm"
+            :actions="[{ label: 'Add folder', icon: 'i-lucide-folder-plus', onClick: () => addFolder() }]"
+          />
+          <ul v-else key="rows" class="rows">
+            <SettingsRow
+              v-for="f in libraryFolders"
+              :key="f.id"
+              tag="li"
+              :icon="f.available ? 'hard-drive' : 'alert'"
+              :tone="f.available ? 'default' : 'warning'"
+              :title="f.name"
+            >
+              <template #title>
+                <div class="folder-name">
+                  <span class="truncate">{{ f.name }}</span>
+                  <UBadge v-if="!f.available" color="warning" variant="subtle" size="sm" label="Not reachable" />
+                  <UBadge
+                    v-else-if="scan.active && scan.folder === f.name"
+                    color="primary"
+                    variant="subtle"
+                    size="sm"
+                    icon="i-lucide-loader-circle"
+                    label="Scanning"
+                    :ui="{ leadingIcon: 'animate-spin' }"
+                  />
+                </div>
+              </template>
 
-          <p class="folder-path truncate" :title="f.path">{{ f.path }}</p>
+              <p class="folder-path truncate" :title="f.path">{{ f.path }}</p>
 
-          <template #trailing>
-            <UBadge color="neutral" variant="soft" size="sm" :label="`${f.clipCount} clips`" class="mono count" />
-            <UTooltip text="Rescan this folder">
-              <UButton
-                icon="i-lucide-refresh-cw"
-                color="neutral"
-                variant="ghost"
-                square
-                aria-label="Rescan folder"
-                :disabled="!f.available"
-                @click="rescan(f.id)"
-              />
-            </UTooltip>
-            <UTooltip text="Remove from library">
-              <UButton
-                class="danger"
-                icon="i-lucide-trash-2"
-                color="error"
-                variant="ghost"
-                square
-                aria-label="Remove folder"
-                @click="remove(f)"
-              />
-            </UTooltip>
-          </template>
-        </SettingsRow>
-      </ul>
+              <template #trailing>
+                <UBadge color="neutral" variant="soft" size="sm" :label="`${f.clipCount} clips`" class="mono count" />
+                <UTooltip text="Rescan this folder">
+                  <UButton
+                    icon="i-lucide-refresh-cw"
+                    color="neutral"
+                    variant="ghost"
+                    square
+                    aria-label="Rescan folder"
+                    :disabled="!f.available"
+                    @click="rescan(f.id)"
+                  />
+                </UTooltip>
+                <UTooltip text="Remove from library">
+                  <UButton
+                    class="danger"
+                    icon="i-lucide-trash-2"
+                    color="error"
+                    variant="ghost"
+                    square
+                    aria-label="Remove folder"
+                    @click="remove(f)"
+                  />
+                </UTooltip>
+              </template>
+            </SettingsRow>
+          </ul>
+        </Transition>
+      </div>
     </SettingsPanel>
 
     <SettingsPanel title="Rescan" description="Walks every reachable folder again and picks up anything the watcher missed.">
@@ -116,6 +121,11 @@ async function remove(folder: LibraryFolder): Promise<void> {
 </template>
 
 <style scoped>
+/* Holds the box the list and the empty state animate inside; without it the
+   leaving one, which goes absolute mid-transition, would anchor to the window. */
+.slot {
+  position: relative;
+}
 .rows {
   list-style: none;
   margin: 0;

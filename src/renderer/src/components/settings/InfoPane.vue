@@ -29,71 +29,76 @@ onMounted(() => {
         />
       </template>
 
-      <UAlert
-        v-if="statsError && !appStats"
-        class="panel-alert"
-        color="warning"
-        variant="subtle"
-        icon="i-lucide-triangle-alert"
-        title="Could not read the runtime details"
-        :description="statsError"
-        :actions="[{ label: 'Try again', color: 'neutral', variant: 'subtle', onClick: () => refreshStats() }]"
-      />
-      <div v-else-if="!appStats" class="skeletons">
-        <div v-for="i in 4" :key="i" class="skeleton-row">
-          <USkeleton class="size-9 rounded-lg" />
-          <div class="skeleton-text">
-            <USkeleton class="h-4 w-44" />
-            <USkeleton class="mt-2 h-3 w-72" />
+      <div class="slot">
+        <Transition name="dissolve">
+          <UAlert
+            v-if="statsError && !appStats"
+            key="error"
+            class="panel-alert"
+            color="warning"
+            variant="subtle"
+            icon="i-lucide-triangle-alert"
+            title="Could not read the runtime details"
+            :description="statsError"
+            :actions="[{ label: 'Try again', color: 'neutral', variant: 'subtle', onClick: () => refreshStats() }]"
+          />
+          <div v-else-if="!appStats" key="loading" class="skeletons">
+            <div v-for="i in 4" :key="i" class="skeleton-row">
+              <USkeleton class="size-9 rounded-lg" />
+              <div class="skeleton-text">
+                <USkeleton class="h-4 w-44" />
+                <USkeleton class="mt-2 h-3 w-72" />
+              </div>
+              <USkeleton class="h-5 w-14" />
+            </div>
           </div>
-          <USkeleton class="h-5 w-14" />
-        </div>
-      </div>
-      <template v-else>
-        <SettingsRow
-          icon="package"
-          :title="`Sift ${appStats.runtime.appVersion}`"
-          :description="`Electron ${appStats.runtime.electron} · Chromium ${appStats.runtime.chrome} · Node ${appStats.runtime.node}`"
-        >
-          <template #trailing>
-            <UBadge color="neutral" variant="subtle" size="sm" :label="appStats.runtime.platform" class="mono" />
-          </template>
-        </SettingsRow>
+          <div v-else key="rows">
+            <SettingsRow
+              icon="package"
+              :title="`Sift ${appStats.runtime.appVersion}`"
+              :description="`Electron ${appStats.runtime.electron} · Chromium ${appStats.runtime.chrome} · Node ${appStats.runtime.node}`"
+            >
+              <template #trailing>
+                <UBadge color="neutral" variant="subtle" size="sm" :label="appStats.runtime.platform" class="mono" />
+              </template>
+            </SettingsRow>
 
-        <SettingsRow
-          icon="memory"
-          title="Memory in use"
-          :description="`Working set across ${appStats.runtime.processCount} process${appStats.runtime.processCount === 1 ? '' : 'es'}.`"
-          :value="formatBytes(appStats.runtime.memoryBytes)"
-        />
-
-        <SettingsRow
-          icon="activity"
-          title="Running for"
-          :description="measuredLabel"
-          :value="formatSpan(appStats.runtime.uptimeMs / 1000)"
-        />
-
-        <SettingsRow
-          :icon="appStats.runtime.ffmpeg ? 'zap' : 'alert'"
-          :tone="appStats.runtime.ffmpeg ? 'default' : 'warning'"
-          title="Bundled ffmpeg"
-          :description="
-            appStats.runtime.ffmpeg
-              ? 'Probing and preview generation are available.'
-              : 'Not found — durations and previews cannot be generated.'
-          "
-        >
-          <template #trailing>
-            <UBadge
-              :color="appStats.runtime.ffmpeg ? 'primary' : 'warning'"
-              variant="subtle"
-              size="sm"
-              :label="appStats.runtime.ffmpeg ? 'Ready' : 'Missing'"
+            <SettingsRow
+              icon="memory"
+              title="Memory in use"
+              :description="`Working set across ${appStats.runtime.processCount} process${appStats.runtime.processCount === 1 ? '' : 'es'}.`"
+              :value="formatBytes(appStats.runtime.memoryBytes)"
             />
-          </template>
-        </SettingsRow>
-      </template>
+
+            <SettingsRow
+              icon="activity"
+              title="Running for"
+              :description="measuredLabel"
+              :value="formatSpan(appStats.runtime.uptimeMs / 1000)"
+            />
+
+            <SettingsRow
+              :icon="appStats.runtime.ffmpeg ? 'zap' : 'alert'"
+              :tone="appStats.runtime.ffmpeg ? 'default' : 'warning'"
+              title="Bundled ffmpeg"
+              :description="
+                appStats.runtime.ffmpeg
+                  ? 'Probing and preview generation are available.'
+                  : 'Not found — durations and previews cannot be generated.'
+              "
+            >
+              <template #trailing>
+                <UBadge
+                  :color="appStats.runtime.ffmpeg ? 'primary' : 'warning'"
+                  variant="subtle"
+                  size="sm"
+                  :label="appStats.runtime.ffmpeg ? 'Ready' : 'Missing'"
+                />
+              </template>
+            </SettingsRow>
+          </div>
+        </Transition>
+      </div>
     </SettingsPanel>
 
     <SettingsPanel title="Local-first" description="What Sift does and does not do with your recordings." flush>
@@ -114,6 +119,10 @@ onMounted(() => {
 </template>
 
 <style scoped>
+/* Holds the box the skeletons and the loaded rows animate inside. */
+.slot {
+  position: relative;
+}
 .panel-alert {
   margin: var(--s-5) var(--s-6);
 }

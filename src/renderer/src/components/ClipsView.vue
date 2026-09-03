@@ -99,17 +99,21 @@ const resetKey = computed(() => settings.value.gridSize)
         />
         <h1 v-else class="title">Clips</h1>
 
-        <p v-if="clipsStats.count" class="stats">
-          <span>
-            <CountUp v-if="motionEnabled" :to="clipsStats.count" :duration="0.9" /><template v-else>{{ clipsStats.count }}</template>
-            clip{{ clipsStats.count === 1 ? '' : 's' }}
-          </span>
-          <span class="dot">·</span>
-          <span class="mono">{{ formatDuration(clipsStats.duration) }}</span>
-          <span class="dot">·</span>
-          <span>{{ formatBytes(clipsStats.size) }}</span>
-        </p>
-        <p v-else class="stats">Nothing exported yet</p>
+        <div class="stats-slot">
+          <Transition name="dissolve">
+            <p v-if="clipsStats.count" key="totals" class="stats">
+              <span>
+                <CountUp v-if="motionEnabled" :to="clipsStats.count" :duration="0.9" /><template v-else>{{ clipsStats.count }}</template>
+                clip{{ clipsStats.count === 1 ? '' : 's' }}
+              </span>
+              <span class="dot">·</span>
+              <span class="mono">{{ formatDuration(clipsStats.duration) }}</span>
+              <span class="dot">·</span>
+              <span>{{ formatBytes(clipsStats.size) }}</span>
+            </p>
+            <p v-else key="none" class="stats">Nothing exported yet</p>
+          </Transition>
+        </div>
       </div>
 
       <div class="toolbar">
@@ -140,30 +144,49 @@ const resetKey = computed(() => settings.value.gridSize)
       </div>
     </header>
 
-    <UAlert
-      v-if="unreachable"
-      class="warn"
-      icon="i-lucide-triangle-alert"
-      color="warning"
-      variant="subtle"
-      title="Clips folder not reachable"
-      :description="`${clipsFolder?.path} is not available right now. Clips are kept in the list, but they cannot be played or exported to until it is back.`"
-      :actions="[{ label: 'Change folder…', icon: 'i-lucide-folder-search', color: 'neutral', variant: 'subtle', onClick: () => chooseClipsDir() }]"
-    />
+    <Transition name="collapse">
+      <div v-if="unreachable">
+        <div class="collapse-body">
+          <UAlert
+            class="warn"
+            icon="i-lucide-triangle-alert"
+            color="warning"
+            variant="subtle"
+            title="Clips folder not reachable"
+            :description="`${clipsFolder?.path} is not available right now. Clips are kept in the list, but they cannot be played or exported to until it is back.`"
+            :actions="[{ label: 'Change folder…', icon: 'i-lucide-folder-search', color: 'neutral', variant: 'subtle', onClick: () => chooseClipsDir() }]"
+          />
+        </div>
+      </div>
+    </Transition>
 
-    <ClipGrid v-if="hasContent" :sections="sectionsWithJobs" variant="export" :jobs-by-id="jobsById" :reset-key="resetKey" />
+    <!-- Grid and empty state occupy the same box and cross-fade, so exporting the
+         first clip (or deleting the last one) is a dissolve, not a snap. -->
+    <div class="stage">
+      <Transition name="crossfade">
+        <ClipGrid
+          v-if="hasContent"
+          key="grid"
+          :sections="sectionsWithJobs"
+          variant="export"
+          :jobs-by-id="jobsById"
+          :reset-key="resetKey"
+        />
 
-    <UEmpty
-      v-else
-      class="empty"
-      icon="i-lucide-scissors"
-      title="No clips yet"
-      :description="`Open a recording, press E to trim it, and export. Clips land in ${clipsFolder?.path ?? 'your clips folder'} and show up here, grouped by game.`"
-    >
-      <template #actions>
-        <UButton icon="i-lucide-gamepad-2" label="Browse games" color="primary" size="lg" @click="goGames()" />
-      </template>
-    </UEmpty>
+        <UEmpty
+          v-else
+          key="empty"
+          class="empty"
+          icon="i-lucide-scissors"
+          title="No clips yet"
+          :description="`Open a recording, press E to trim it, and export. Clips land in ${clipsFolder?.path ?? 'your clips folder'} and show up here, grouped by game.`"
+        >
+          <template #actions>
+            <UButton icon="i-lucide-gamepad-2" label="Browse games" color="primary" size="lg" @click="goGames()" />
+          </template>
+        </UEmpty>
+      </Transition>
+    </div>
   </section>
 </template>
 
@@ -193,13 +216,19 @@ const resetKey = computed(() => settings.value.gridSize)
   white-space: nowrap;
   max-width: 100%;
 }
+/* The gap lives on the slot, not on the line: the leaving line goes absolute
+   mid-transition, where a margin would be dropped and shift it a few pixels. */
+.stats-slot {
+  position: relative;
+  margin-top: 4px;
+}
 .stats {
   display: flex;
   gap: 6px;
-  margin-top: 4px;
   font-size: var(--text-sm);
   color: var(--fg-muted);
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 .dot {
   color: var(--fg-dim);
@@ -213,6 +242,15 @@ const resetKey = computed(() => settings.value.gridSize)
 }
 .warn {
   margin: 0 28px var(--s-4);
+}
+/* Holds the box both branches animate inside; without it the leaving one, which
+   goes absolute mid-transition, would anchor to the window. */
+.stage {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
 }
 /* No colour here: it would cascade into the actions, and Nuxt UI's own text
    utilities cannot override an inherited colour on a button (see base.css).

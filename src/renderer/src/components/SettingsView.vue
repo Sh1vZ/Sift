@@ -88,28 +88,35 @@ function onSearchKey(e: KeyboardEvent): void {
       </div>
 
       <div class="rail-scroll">
-        <template v-for="g in railGroups" :key="g.label">
-          <div class="group-title">{{ g.label }}</div>
-          <UNavigationMenu
-            orientation="vertical"
-            color="primary"
-            variant="pill"
-            highlight
-            highlight-color="primary"
-            :items="g.items"
-            :ui="navUi"
-          />
-        </template>
+        <div class="rail-slot">
+          <Transition name="dissolve">
+            <div v-if="railGroups.length" key="groups">
+              <template v-for="g in railGroups" :key="g.label">
+                <div class="group-title">{{ g.label }}</div>
+                <UNavigationMenu
+                  orientation="vertical"
+                  color="primary"
+                  variant="pill"
+                  highlight
+                  highlight-color="primary"
+                  :items="g.items"
+                  :ui="navUi"
+                />
+              </template>
+            </div>
 
-        <UEmpty
-          v-if="!railGroups.length"
-          class="rail-empty"
-          icon="i-lucide-search-x"
-          title="No match"
-          :description="`Nothing in settings matches “${settingsQuery}”.`"
-          variant="subtle"
-          size="sm"
-        />
+            <UEmpty
+              v-else
+              key="empty"
+              class="rail-empty"
+              icon="i-lucide-search-x"
+              title="No match"
+              :description="`Nothing in settings matches “${settingsQuery}”.`"
+              variant="subtle"
+              size="sm"
+            />
+          </Transition>
+        </div>
       </div>
     </nav>
 
@@ -170,6 +177,9 @@ function onSearchKey(e: KeyboardEvent): void {
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--fg-dim);
+}
+.rail-slot {
+  position: relative;
 }
 .rail-empty {
   padding: var(--s-6) var(--s-2);

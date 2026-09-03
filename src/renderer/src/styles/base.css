@@ -201,3 +201,66 @@ img {
   opacity: 0;
   transform: translateY(-6px);
 }
+
+/* Content ⇄ empty state, in place. The leaving branch is lifted out of flow so
+   the incoming one lands in the same frame instead of waiting for a collapse:
+   the two dissolve past each other and nothing below them jumps. Both need a
+   `position: relative` container.
+
+   `crossfade` fills that container (`inset: 0`) and belongs on a screen-sized
+   stage where both branches already stretch. `dissolve` pins only the top edge,
+   so the leaving branch keeps its own height — use it inside a panel or on a
+   single line, where stretching it to the incoming height would re-centre its
+   content while it fades. */
+.crossfade-enter-active,
+.crossfade-leave-active,
+.dissolve-enter-active,
+.dissolve-leave-active {
+  transition:
+    opacity var(--dur) var(--ease-out),
+    transform var(--dur) var(--ease-out);
+}
+.crossfade-leave-active,
+.dissolve-leave-active {
+  position: absolute;
+  pointer-events: none;
+}
+.crossfade-leave-active {
+  inset: 0;
+}
+.dissolve-leave-active {
+  top: 0;
+  left: 0;
+  right: 0;
+}
+.crossfade-enter-from,
+.dissolve-enter-from {
+  opacity: 0;
+  transform: translateY(8px);
+}
+.crossfade-leave-to,
+.dissolve-leave-to {
+  opacity: 0;
+  transform: translateY(-6px);
+}
+
+/* A banner that opens and closes without shoving the page. Wrap the content in
+   a single child — `grid-template-rows` animates from 0fr to 1fr, so the child
+   needs `min-height: 0; overflow: hidden` (see `.collapse-body`). */
+.collapse-enter-active,
+.collapse-leave-active {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition:
+    grid-template-rows var(--dur) var(--ease-out),
+    opacity var(--dur) var(--ease-out);
+}
+.collapse-enter-from,
+.collapse-leave-to {
+  grid-template-rows: 0fr;
+  opacity: 0;
+}
+.collapse-body {
+  min-height: 0;
+  overflow: hidden;
+}

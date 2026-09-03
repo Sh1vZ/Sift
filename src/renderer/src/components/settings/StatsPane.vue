@@ -55,186 +55,207 @@ const tierColor = (key: string): QualityTierDef['color'] =>
       </li>
     </ul>
 
-    <UAlert
-      v-if="scan.active || scan.pending"
-      color="primary"
-      variant="subtle"
-      icon="i-lucide-loader-circle"
-      title="Numbers are still moving"
-      :description="
-        scan.active
-          ? `Scanning ${scan.folder} — totals grow as clips are found.`
-          : `${scan.pending} clip${scan.pending === 1 ? '' : 's'} still waiting for a preview.`
-      "
-      :ui="{ icon: 'animate-spin' }"
-    />
-
-    <template v-if="libraryTotals.clips">
-      <SettingsPanel
-        title="Library"
-        description="How much of the index has been processed, and what it spans."
-        flush
-      >
-        <SettingsRow
-          icon="image"
-          title="Previews built"
-          :description="`${n.format(libraryTotals.withPreviews)} of ${n.format(libraryTotals.clips)} clips have a poster frame.`"
-          :value="`${previewPct}%`"
-        >
-          <UProgress
-            class="row-progress"
-            size="xs"
+    <Transition name="collapse">
+      <div v-if="scan.active || scan.pending">
+        <div class="collapse-body">
+          <UAlert
             color="primary"
-            :model-value="previewPct"
-            :aria-label="`${previewPct}% of clips have previews`"
+            variant="subtle"
+            icon="i-lucide-loader-circle"
+            title="Numbers are still moving"
+            :description="
+              scan.active
+                ? `Scanning ${scan.folder} — totals grow as clips are found.`
+                : `${scan.pending} clip${scan.pending === 1 ? '' : 's'} still waiting for a preview.`
+            "
+            :ui="{ icon: 'animate-spin' }"
           />
-        </SettingsRow>
-
-        <SettingsRow
-          v-if="libraryTotals.failed"
-          icon="alert"
-          tone="warning"
-          title="Could not be read"
-          description="ffprobe failed on these files. They stay in the library; the card shows a placeholder."
-        >
-          <template #trailing>
-            <UBadge
-              color="warning"
-              variant="subtle"
-              size="sm"
-              :label="`${libraryTotals.failed} clips`"
-              class="mono"
-            />
-          </template>
-        </SettingsRow>
-
-        <SettingsRow
-          icon="calendar"
-          title="Spans"
-          :description="`${formatFull(libraryTotals.oldestMs)} → ${formatFull(libraryTotals.newestMs)}`"
-          :value="formatRelative(libraryTotals.newestMs, now)"
-        />
-
-        <SettingsRow
-          icon="gauge"
-          title="Average clip"
-          description="Across every indexed recording."
-          :value="`${formatBytes(libraryTotals.avgBytes)} · ${formatSpan(libraryTotals.avgDuration)}`"
-        />
-
-        <SettingsRow
-          v-if="libraryTotals.largest"
-          icon="trending"
-          title="Biggest clip"
-          :value="formatBytes(libraryTotals.largest.size)"
-        >
-          <p class="row-detail truncate" :title="libraryTotals.largest.path">
-            {{ libraryTotals.largest.title }}
-          </p>
-        </SettingsRow>
-
-        <SettingsRow
-          v-if="libraryTotals.longest"
-          icon="timer"
-          title="Longest clip"
-          :value="formatSpan(libraryTotals.longest.duration)"
-        >
-          <p class="row-detail truncate" :title="libraryTotals.longest.path">
-            {{ libraryTotals.longest.title }}
-          </p>
-        </SettingsRow>
-      </SettingsPanel>
-
-      <SettingsPanel title="Recording activity" description="Clips recorded per month over the last year.">
-        <ul class="months" aria-label="Clips recorded per month">
-          <li v-for="m in monthlyActivity" :key="m.key" class="month" :title="`${m.title}: ${m.count} clips`">
-            <span class="month-track">
-              <span class="month-fill" :class="{ 'is-empty': !m.count }" :style="bar(m.share)" />
-            </span>
-            <span class="month-count mono">{{ m.count }}</span>
-            <span class="month-label">{{ m.label }}</span>
-            <span class="sr-only">{{ m.title }}: {{ m.count }} clips, {{ formatBytes(m.bytes) }}</span>
-          </li>
-        </ul>
-      </SettingsPanel>
-
-      <SettingsPanel title="Biggest games" description="Where your disk space actually goes.">
-        <ul class="bars" aria-label="Games by disk space">
-          <li v-for="g in topGames" :key="g.key" class="bar-row">
-            <span class="bar-label truncate" :title="g.label">{{ g.label }}</span>
-            <span class="bar-track">
-              <span class="bar-fill" :style="bar(g.share)" />
-            </span>
-            <span class="bar-value mono">{{ formatBytes(g.bytes) }}</span>
-            <span class="bar-sub mono">{{ g.count }}</span>
-          </li>
-        </ul>
-      </SettingsPanel>
-
-      <SettingsPanel
-        title="Formats"
-        description="Resolutions, codecs and bitrate density. Density is measured per pixel, so clips of different sizes compare fairly."
-      >
-        <div class="chips">
-          <div class="chip-group">
-            <span class="chip-title">Resolution</span>
-            <div class="chip-list">
-              <UBadge
-                v-for="r in resolutions"
-                :key="r.key"
-                color="primary"
-                variant="subtle"
-                size="md"
-                :label="`${r.label} · ${n.format(r.count)}`"
-                class="mono"
-              />
-            </div>
-          </div>
-          <div class="chip-group">
-            <span class="chip-title">Codec</span>
-            <div class="chip-list">
-              <UBadge
-                v-for="c in codecs"
-                :key="c.key"
-                color="neutral"
-                variant="subtle"
-                size="md"
-                :label="`${c.label} · ${n.format(c.count)}`"
-                class="mono"
-              />
-            </div>
-          </div>
-          <div class="chip-group">
-            <span class="chip-title">Bitrate</span>
-            <div class="chip-list">
-              <UBadge
-                v-for="b in bitrateTiers"
-                :key="b.key"
-                :color="tierColor(b.key)"
-                variant="subtle"
-                size="md"
-                :label="`${b.label} · ${n.format(b.count)}`"
-                class="mono"
-              />
-            </div>
-          </div>
         </div>
-      </SettingsPanel>
-    </template>
+      </div>
+    </Transition>
 
-    <UEmpty
-      v-else
-      class="empty"
-      icon="i-lucide-chart-column"
-      title="Nothing to measure yet"
-      description="Add a folder of recordings and these numbers fill in as it scans."
-      variant="subtle"
-      :actions="[{ label: 'Go to Folders', icon: 'i-lucide-folder-plus', onClick: () => openSettings('folders') }]"
-    />
+    <div class="slot">
+      <Transition name="dissolve">
+        <div v-if="libraryTotals.clips" key="panels" class="panels">
+          <SettingsPanel
+            title="Library"
+            description="How much of the index has been processed, and what it spans."
+            flush
+          >
+            <SettingsRow
+              icon="image"
+              title="Previews built"
+              :description="`${n.format(libraryTotals.withPreviews)} of ${n.format(libraryTotals.clips)} clips have a poster frame.`"
+              :value="`${previewPct}%`"
+            >
+              <UProgress
+                class="row-progress"
+                size="xs"
+                color="primary"
+                :model-value="previewPct"
+                :aria-label="`${previewPct}% of clips have previews`"
+              />
+            </SettingsRow>
+
+            <SettingsRow
+              v-if="libraryTotals.failed"
+              icon="alert"
+              tone="warning"
+              title="Could not be read"
+              description="ffprobe failed on these files. They stay in the library; the card shows a placeholder."
+            >
+              <template #trailing>
+                <UBadge
+                  color="warning"
+                  variant="subtle"
+                  size="sm"
+                  :label="`${libraryTotals.failed} clips`"
+                  class="mono"
+                />
+              </template>
+            </SettingsRow>
+
+            <SettingsRow
+              icon="calendar"
+              title="Spans"
+              :description="`${formatFull(libraryTotals.oldestMs)} → ${formatFull(libraryTotals.newestMs)}`"
+              :value="formatRelative(libraryTotals.newestMs, now)"
+            />
+
+            <SettingsRow
+              icon="gauge"
+              title="Average clip"
+              description="Across every indexed recording."
+              :value="`${formatBytes(libraryTotals.avgBytes)} · ${formatSpan(libraryTotals.avgDuration)}`"
+            />
+
+            <SettingsRow
+              v-if="libraryTotals.largest"
+              icon="trending"
+              title="Biggest clip"
+              :value="formatBytes(libraryTotals.largest.size)"
+            >
+              <p class="row-detail truncate" :title="libraryTotals.largest.path">
+                {{ libraryTotals.largest.title }}
+              </p>
+            </SettingsRow>
+
+            <SettingsRow
+              v-if="libraryTotals.longest"
+              icon="timer"
+              title="Longest clip"
+              :value="formatSpan(libraryTotals.longest.duration)"
+            >
+              <p class="row-detail truncate" :title="libraryTotals.longest.path">
+                {{ libraryTotals.longest.title }}
+              </p>
+            </SettingsRow>
+          </SettingsPanel>
+
+          <SettingsPanel title="Recording activity" description="Clips recorded per month over the last year.">
+            <ul class="months" aria-label="Clips recorded per month">
+              <li v-for="m in monthlyActivity" :key="m.key" class="month" :title="`${m.title}: ${m.count} clips`">
+                <span class="month-track">
+                  <span class="month-fill" :class="{ 'is-empty': !m.count }" :style="bar(m.share)" />
+                </span>
+                <span class="month-count mono">{{ m.count }}</span>
+                <span class="month-label">{{ m.label }}</span>
+                <span class="sr-only">{{ m.title }}: {{ m.count }} clips, {{ formatBytes(m.bytes) }}</span>
+              </li>
+            </ul>
+          </SettingsPanel>
+
+          <SettingsPanel title="Biggest games" description="Where your disk space actually goes.">
+            <ul class="bars" aria-label="Games by disk space">
+              <li v-for="g in topGames" :key="g.key" class="bar-row">
+                <span class="bar-label truncate" :title="g.label">{{ g.label }}</span>
+                <span class="bar-track">
+                  <span class="bar-fill" :style="bar(g.share)" />
+                </span>
+                <span class="bar-value mono">{{ formatBytes(g.bytes) }}</span>
+                <span class="bar-sub mono">{{ g.count }}</span>
+              </li>
+            </ul>
+          </SettingsPanel>
+
+          <SettingsPanel
+            title="Formats"
+            description="Resolutions, codecs and bitrate density. Density is measured per pixel, so clips of different sizes compare fairly."
+          >
+            <div class="chips">
+              <div class="chip-group">
+                <span class="chip-title">Resolution</span>
+                <div class="chip-list">
+                  <UBadge
+                    v-for="r in resolutions"
+                    :key="r.key"
+                    color="primary"
+                    variant="subtle"
+                    size="md"
+                    :label="`${r.label} · ${n.format(r.count)}`"
+                    class="mono"
+                  />
+                </div>
+              </div>
+              <div class="chip-group">
+                <span class="chip-title">Codec</span>
+                <div class="chip-list">
+                  <UBadge
+                    v-for="c in codecs"
+                    :key="c.key"
+                    color="neutral"
+                    variant="subtle"
+                    size="md"
+                    :label="`${c.label} · ${n.format(c.count)}`"
+                    class="mono"
+                  />
+                </div>
+              </div>
+              <div class="chip-group">
+                <span class="chip-title">Bitrate</span>
+                <div class="chip-list">
+                  <UBadge
+                    v-for="b in bitrateTiers"
+                    :key="b.key"
+                    :color="tierColor(b.key)"
+                    variant="subtle"
+                    size="md"
+                    :label="`${b.label} · ${n.format(b.count)}`"
+                    class="mono"
+                  />
+                </div>
+              </div>
+            </div>
+          </SettingsPanel>
+        </div>
+
+        <UEmpty
+          v-else
+          key="empty"
+          class="empty"
+          icon="i-lucide-chart-column"
+          title="Nothing to measure yet"
+          description="Add a folder of recordings and these numbers fill in as it scans."
+          variant="subtle"
+          :actions="[{ label: 'Go to Folders', icon: 'i-lucide-folder-plus', onClick: () => openSettings('folders') }]"
+        />
+      </Transition>
+    </div>
   </div>
 </template>
 
 <style scoped>
+/* Holds the box the panels and the empty state animate inside. `.panels` keeps
+   the stack's own rhythm, which the wrapper would otherwise flatten. */
+.slot {
+  position: relative;
+}
+.panels {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-5);
+}
+
 /* Headline figures: four equal tiles that drop to two columns when narrow. */
 .tiles {
   display: grid;

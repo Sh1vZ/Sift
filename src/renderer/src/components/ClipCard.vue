@@ -97,10 +97,12 @@ function open(): void {
           decoding="async"
           @load="posterLoaded = true"
         />
-        <div v-else class="placeholder">
-          <USkeleton v-if="clip.probeState === 'pending'" class="placeholder-skeleton" />
-          <Icon :name="clip.probeState === 'failed' ? 'video-off' : 'film'" :size="26" :stroke="1.6" />
-        </div>
+        <Transition name="fade">
+          <div v-if="!poster || !posterLoaded" class="placeholder">
+            <USkeleton v-if="clip.probeState === 'pending'" class="placeholder-skeleton" />
+            <Icon :name="clip.probeState === 'failed' ? 'video-off' : 'film'" :size="26" :stroke="1.6" />
+          </div>
+        </Transition>
 
         <div v-if="hovering && canScrub" class="scrub" :class="{ 'is-loaded': spriteLoaded }">
           <img

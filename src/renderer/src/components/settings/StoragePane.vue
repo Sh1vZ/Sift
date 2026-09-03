@@ -50,89 +50,94 @@ onMounted(() => {
         />
       </template>
 
-      <UAlert
-        v-if="statsError"
-        class="panel-alert"
-        color="warning"
-        variant="subtle"
-        icon="i-lucide-triangle-alert"
-        title="Could not measure the app data folder"
-        :description="statsError"
-        :actions="[{ label: 'Try again', color: 'neutral', variant: 'subtle', onClick: () => refreshStats() }]"
-      />
-      <div v-else-if="!appStats" class="skeletons">
-        <div v-for="i in 4" :key="i" class="skeleton-row">
-          <USkeleton class="size-9 rounded-lg" />
-          <div class="skeleton-text">
-            <USkeleton class="h-4 w-40" />
-            <USkeleton class="mt-2 h-3 w-64" />
-          </div>
-          <USkeleton class="h-5 w-16" />
-        </div>
-      </div>
-      <template v-else>
-        <SettingsRow
-          icon="film"
-          title="Clips on disk"
-          :description="`Across ${libraryTotals.folders} watched folder${libraryTotals.folders === 1 ? '' : 's'}. Indexed in place — never copied, moved or re-encoded.`"
-          :value="formatBytes(libraryTotals.bytes)"
-        />
-
-        <SettingsRow
-          v-if="libraryTotals.avgBitrate"
-          icon="activity"
-          title="Average bitrate"
-          description="Size against duration across every probed clip. A high figure means a generous capture setting — it is what makes the library big, not what makes a clip look good."
-          :value="formatBitrate(libraryTotals.avgBitrate)"
-        />
-
-        <SettingsRow
-          icon="image"
-          title="Preview cache"
-          :description="`${n.format(appStats.storage.cacheFiles)} poster frames and hover-scrub strips, generated once and reused.`"
-          :value="formatBytes(appStats.storage.cacheBytes)"
-        />
-
-        <SettingsRow
-          icon="database"
-          title="Index database"
-          :description="`SQLite record of ${n.format(libraryTotals.clips)} clip${libraryTotals.clips === 1 ? '' : 's'}, including the write-ahead log.`"
-          :value="formatBytes(appStats.storage.databaseBytes)"
-        />
-
-        <SettingsRow icon="box" title="App data" :value="formatBytes(appDataBytes)">
-          <p class="path truncate" :title="appStats.storage.userDataPath">
-            {{ appStats.storage.userDataPath }}
-          </p>
-          <template #trailing>
-            <UTooltip text="Open in File Explorer">
-              <UButton
-                icon="i-lucide-folder-open"
-                color="neutral"
-                variant="ghost"
-                square
-                aria-label="Open app data folder"
-                @click="revealAppData()"
-              />
-            </UTooltip>
-          </template>
-        </SettingsRow>
-
-        <SettingsRow
-          v-if="appStats.storage.diskTotalBytes"
-          icon="gauge"
-          title="Free on this drive"
-          :description="`${formatBytes(appStats.storage.diskFreeBytes)} free of ${formatBytes(appStats.storage.diskTotalBytes)} · ${diskUsedPct}% used`"
-        >
-          <UProgress
-            class="row-progress"
-            size="xs"
-            :model-value="diskUsedPct"
-            :color="diskUsedPct >= 90 ? 'warning' : 'primary'"
-            :aria-label="`Drive ${diskUsedPct}% full`"
+      <div class="slot">
+        <Transition name="dissolve">
+          <UAlert
+            v-if="statsError"
+            key="error"
+            class="panel-alert"
+            color="warning"
+            variant="subtle"
+            icon="i-lucide-triangle-alert"
+            title="Could not measure the app data folder"
+            :description="statsError"
+            :actions="[{ label: 'Try again', color: 'neutral', variant: 'subtle', onClick: () => refreshStats() }]"
           />
-        </SettingsRow>
-      </template>
+          <div v-else-if="!appStats" key="loading" class="skeletons">
+            <div v-for="i in 4" :key="i" class="skeleton-row">
+              <USkeleton class="size-9 rounded-lg" />
+              <div class="skeleton-text">
+                <USkeleton class="h-4 w-40" />
+                <USkeleton class="mt-2 h-3 w-64" />
+              </div>
+              <USkeleton class="h-5 w-16" />
+            </div>
+          </div>
+          <div v-else key="rows">
+            <SettingsRow
+              icon="film"
+              title="Clips on disk"
+              :description="`Across ${libraryTotals.folders} watched folder${libraryTotals.folders === 1 ? '' : 's'}. Indexed in place — never copied, moved or re-encoded.`"
+              :value="formatBytes(libraryTotals.bytes)"
+            />
+
+            <SettingsRow
+              v-if="libraryTotals.avgBitrate"
+              icon="activity"
+              title="Average bitrate"
+              description="Size against duration across every probed clip. A high figure means a generous capture setting — it is what makes the library big, not what makes a clip look good."
+              :value="formatBitrate(libraryTotals.avgBitrate)"
+            />
+
+            <SettingsRow
+              icon="image"
+              title="Preview cache"
+              :description="`${n.format(appStats.storage.cacheFiles)} poster frames and hover-scrub strips, generated once and reused.`"
+              :value="formatBytes(appStats.storage.cacheBytes)"
+            />
+
+            <SettingsRow
+              icon="database"
+              title="Index database"
+              :description="`SQLite record of ${n.format(libraryTotals.clips)} clip${libraryTotals.clips === 1 ? '' : 's'}, including the write-ahead log.`"
+              :value="formatBytes(appStats.storage.databaseBytes)"
+            />
+
+            <SettingsRow icon="box" title="App data" :value="formatBytes(appDataBytes)">
+              <p class="path truncate" :title="appStats.storage.userDataPath">
+                {{ appStats.storage.userDataPath }}
+              </p>
+              <template #trailing>
+                <UTooltip text="Open in File Explorer">
+                  <UButton
+                    icon="i-lucide-folder-open"
+                    color="neutral"
+                    variant="ghost"
+                    square
+                    aria-label="Open app data folder"
+                    @click="revealAppData()"
+                  />
+                </UTooltip>
+              </template>
+            </SettingsRow>
+
+            <SettingsRow
+              v-if="appStats.storage.diskTotalBytes"
+              icon="gauge"
+              title="Free on this drive"
+              :description="`${formatBytes(appStats.storage.diskFreeBytes)} free of ${formatBytes(appStats.storage.diskTotalBytes)} · ${diskUsedPct}% used`"
+            >
+              <UProgress
+                class="row-progress"
+                size="xs"
+                :model-value="diskUsedPct"
+                :color="diskUsedPct >= 90 ? 'warning' : 'primary'"
+                :aria-label="`Drive ${diskUsedPct}% full`"
+              />
+            </SettingsRow>
+          </div>
+        </Transition>
+      </div>
     </SettingsPanel>
 
     <p class="about">Measured locally. Nothing on this screen leaves your PC.</p>
@@ -140,6 +145,10 @@ onMounted(() => {
 </template>
 
 <style scoped>
+/* Holds the box the skeletons and the loaded rows animate inside. */
+.slot {
+  position: relative;
+}
 .panel-alert {
   margin: var(--s-5) var(--s-6);
 }
