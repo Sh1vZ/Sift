@@ -28,6 +28,7 @@ const MINORS = 4
 const track = ref<HTMLElement | null>(null)
 const dragging = ref<Target | null>(null)
 const hoverPct = ref<number | null>(null)
+const headHover = ref(false)
 
 const pct = (s: number): number => (props.duration ? (clamp(s, 0, props.duration) / props.duration) * 100 : 0)
 const inPct = computed(() => pct(props.inSec))
@@ -93,9 +94,9 @@ function onLeave(): void {
   hoverPct.value = null
 }
 
-/** Focused handle: arrows nudge by a second, a tenth with Shift. Stops here so the player's keys stay out of it. */
-function onHandleKey(target: 'in' | 'out', e: KeyboardEvent): void {
-  const value = target === 'in' ? props.inSec : props.outSec
+/** Focused handle or playhead: arrows nudge by a second, a tenth with Shift. Stops here so the player's keys stay out of it. */
+function onHandleKey(target: Target, e: KeyboardEvent): void {
+  const value = target === 'in' ? props.inSec : target === 'out' ? props.outSec : props.time
   const step = e.shiftKey ? 0.1 : 1
   let next: number | null = null
   switch (e.key) {
@@ -118,14 +119,17 @@ function onHandleKey(target: 'in' | 'out', e: KeyboardEvent): void {
   apply(target, clamp(next, 0, props.duration))
 }
 
+const onHead = computed(() => dragging.value === 'head' || (headHover.value && !dragging.value))
 const tipTime = computed(() => {
   if (dragging.value === 'in') return props.inSec
   if (dragging.value === 'out') return props.outSec
+  if (onHead.value) return props.time
   return hoverPct.value === null ? null : hoverPct.value * props.duration
 })
 const tipPct = computed(() => {
   if (dragging.value === 'in') return inPct.value
   if (dragging.value === 'out') return outPct.value
+  if (onHead.value) return headPct.value
   return hoverPct.value === null ? 0 : hoverPct.value * 100
 })
 </script>
@@ -196,9 +200,26 @@ const tipPct = computed(() => {
         </div>
       </div>
 
-      <!-- Runs the full height, ruler included, so the marker sits above the timecodes. -->
-      <div class="playhead" :style="{ left: `${headPct}%` }" aria-hidden="true">
-        <span class="marker" />
+      <!-- Runs the full height; the tab above the ruler is where you take hold of it. -->
+      <div class="playhead" :class="{ 'is-grabbed': dragging === 'head' }" :style="{ left: `${headPct}%` }">
+        <span class="line" aria-hidden="true" />
+        <div
+          class="grab"
+          role="slider"
+          tabindex="0"
+          aria-label="Playhead"
+          :aria-valuemin="0"
+          :aria-valuemax="Math.round(duration * 10) / 10"
+          :aria-valuenow="Math.round(time * 10) / 10"
+          :aria-valuetext="formatTimecode(time)"
+          title="Drag to scrub"
+          @pointerdown="onHandleDown('head', $event)"
+          @pointerenter="headHover = true"
+          @pointerleave="headHover = false"
+          @keydown="onHandleKey('head', $event)"
+        >
+          <span class="marker" aria-hidden="true"><span class="grip-dots" /></span>
+        </div>
       </div>
 
       <div v-if="tipTime !== null" class="tip mono" :style="{ left: `${tipPct}%` }">
@@ -213,7 +234,7 @@ const tipPct = computed(() => {
   touch-action: none;
   user-select: none;
   --strip-h: 56px;
-  --ruler-h: 30px;
+  --ruler-h: 36px;
   --head: var(--success);
 }
 /* Everything positioned by percentage shares this box, so the ruler, the strip
@@ -336,26 +357,68 @@ const tipPct = computed(() => {
 }
 
 /* ---------------------------------------------------------- playhead */
+/* Zero-width anchor at the current time. The line over the strip does not take
+   pointer events, so a bracket sitting under it stays easy to grab; the tab
+   above the ruler is the playhead's own drag target. */
 .playhead {
   position: absolute;
-  top: 2px;
+  top: 0;
   bottom: 0;
+  width: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+.line {
+  position: absolute;
+  top: 8px;
+  bottom: 0;
+  left: -1px;
   width: 2px;
-  margin-left: -1px;
   background: var(--head);
   box-shadow: 0 0 8px color-mix(in srgb, var(--head) 70%, transparent);
-  pointer-events: none;
-  z-index: 2;
 }
-.marker {
+.grab {
   position: absolute;
   top: 0;
-  left: 50%;
-  width: 10px;
-  height: 12px;
-  margin-left: -5px;
-  border-radius: 3px;
+  left: -16px;
+  width: 32px;
+  height: var(--ruler-h);
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  pointer-events: auto;
+  cursor: grab;
+  outline: none;
+}
+.is-grabbed .grab {
+  cursor: grabbing;
+}
+.marker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 20px;
+  border-radius: 6px;
   background: var(--head);
+  box-shadow: 0 4px 12px -2px color-mix(in srgb, var(--head) 70%, transparent);
+  transition:
+    transform var(--dur-fast) var(--ease-spring),
+    box-shadow var(--dur-fast) var(--ease-out);
+}
+.grab:hover .marker,
+.grab:focus-visible .marker,
+.is-grabbed .marker {
+  transform: scale(1.15);
+}
+.grab:focus-visible .marker {
+  box-shadow: 0 0 0 2px var(--fg);
+}
+/* Grip dots: the same cue a draggable list row or a window splitter uses. */
+.grip-dots {
+  width: 8px;
+  height: 8px;
+  background: radial-gradient(circle, rgba(7, 7, 18, 0.65) 1px, transparent 1.3px) 0 0 / 4px 4px;
 }
 
 .tip {
