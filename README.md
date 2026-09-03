@@ -82,6 +82,6 @@ All of them respect the Animations toggle / reduced-motion (they render static o
 - The grid is windowed: only rows on screen (plus a small overscan) exist in the DOM, so a 5,000-clip library renders like a 50-clip one.
 - Clip state lives in a plain `Map`; a version counter drives Vue's computed lists instead of deep-proxying thousands of objects.
 - Main → renderer updates are batched every 150 ms.
-- ffmpeg jobs run with bounded concurrency (default 2, configurable), `-threads 1`, and below-normal process priority. Sprite strips use keyframe seeks stitched with `hstack` rather than decoding whole files.
+- ffmpeg jobs run with bounded concurrency (default 2, configurable), `-threads 1` on every input, and below-normal process priority. Poster and sprite strip come out of a single ffmpeg run of keyframe-only seeks (`-noaccurate_seek -skip_frame nokey`) stitched with `hstack`, so a clip costs about one decoded I-frame per strip frame rather than a full GOP per seek.
 - Video streams through a custom `clip://` protocol with HTTP range support; read streams are torn down the moment Chromium abandons a request.
 - All animation is transform/opacity only, and every transition collapses to instant when Windows asks for reduced motion or the setting is off.

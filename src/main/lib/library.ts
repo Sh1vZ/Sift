@@ -19,8 +19,7 @@ import { cleanTitle, clipId, deriveGame, parseRecordedAt } from './clips'
 import {
   MediaQueue,
   ffmpegAvailable,
-  makeSprite,
-  makeThumb,
+  makeArtifacts,
   probe,
   removeArtifacts,
   spriteName,
@@ -376,23 +375,15 @@ export class Library {
     this.applyPatch({ id: clip.id, ...info, probeState: 'ok' })
     if (!this.settings.generateThumbnails || info.duration <= 0) return { id: clip.id }
 
-    // Poster first so the card fills in as early as possible; the scrub strip
-    // is the nice-to-have and lands a moment later.
+    // Poster and scrub strip come out of one ffmpeg run; anything already
+    // cached on disk is skipped inside makeArtifacts.
     const current = this.store.data.clips[clip.id]
     if (!current) return { id: clip.id }
-    if (!current.thumb) {
+    if (!current.thumb || !current.sprite) {
       try {
-        this.applyPatch({ id: clip.id, thumb: await makeThumb(current, info.duration) })
+        this.applyPatch({ id: clip.id, ...(await makeArtifacts(current, info.duration)) })
       } catch {
-        /* keep going: the card falls back to a placeholder */
-      }
-    }
-    if (!current.sprite) {
-      try {
-        const s = await makeSprite(current, info.duration)
-        this.applyPatch({ id: clip.id, sprite: s.file, spriteFrames: s.frames })
-      } catch {
-        /* hover preview simply stays off for this clip */
+        /* the card falls back to a placeholder and hover preview stays off */
       }
     }
     return { id: clip.id }

@@ -213,6 +213,12 @@ authored in scoped CSS against the tokens.
 ### Hover, focus, press
 
 - Colour, border, shadow, opacity. `translateY(-2px)` at most on a genuinely interactive card.
+  Depth comes from the shadow, not the travel: a clip card pairs the lift with
+  `--glow-primary, --shadow-lg` and swaps its thumbnail ring to `--border-active`.
+- **Every hover treatment on a card must fire on `:focus-visible` too.** A keyboard user gets
+  the same ring, lift and play hint as a mouse user, or the grid is unreadable by keyboard.
+- A card may take a press state — settle the lift back to `translateY(0)` over `--dur-fast`.
+  That is the only press transform in the app.
 - Button hover/press feedback belongs to Nuxt UI's `UButton` — do not re-add a press transform
   on top of it, and do not reintroduce the deleted `.btn` / `.icon-btn` primitives to get one.
 - **Never `scale()` a card, a grid row, or a layout surface.** It resamples the thumbnail and

@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process'
+import { spawn, type ChildProcess } from 'node:child_process'
 import { access, unlink } from 'node:fs/promises'
 import { cpus, constants as osConstants, setPriority } from 'node:os'
 import { join } from 'node:path'
@@ -9,6 +9,13 @@ export const SPRITE_FRAMES = 10
 const THUMB_WIDTH = 480
 const SPRITE_FRAME_WIDTH = 320
 const JOB_TIMEOUT_MS = 60_000
+/**
+ * `area` is the cheapest swscale mode that still anti-aliases a 7x downscale;
+ * `fast_bilinear` is ~10% quicker but speckles the poster.
+ */
+const SCALE_FLAGS = 'area'
+/** Seeks landing within one GOP of the poster time reuse that frame instead of a second decode. */
+const POSTER_REUSE_WINDOW_S = 1
 
 export interface ProbeResult {
   duration: number
@@ -17,6 +24,12 @@ export interface ProbeResult {
   fps: number
   vcodec: string
   hasAudio: boolean
+}
+
+export interface Artifacts {
+  thumb: string
+  sprite: string
+  spriteFrames: number
 }
 
 function lowerPriority(pid: number | undefined): void {
@@ -28,9 +41,13 @@ function lowerPriority(pid: number | undefined): void {
   }
 }
 
+/** Every live ffmpeg/ffprobe child, so shutdown can kill them instead of orphaning them. */
+const active = new Set<ChildProcess>()
+
 function run(bin: string, args: string[]): Promise<{ code: number; stdout: string }> {
   return new Promise((resolve, reject) => {
     const child = spawn(bin, args, { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] })
+    active.add(child)
     lowerPriority(child.pid)
     let stdout = ''
     const timer = setTimeout(() => child.kill(), JOB_TIMEOUT_MS)
@@ -38,13 +55,20 @@ function run(bin: string, args: string[]): Promise<{ code: number; stdout: strin
     child.stderr.on('data', () => undefined)
     child.on('error', (err) => {
       clearTimeout(timer)
+      active.delete(child)
       reject(err)
     })
     child.on('close', (code) => {
       clearTimeout(timer)
+      active.delete(child)
       resolve({ code: code ?? -1, stdout })
     })
   })
+}
+
+export function killActiveJobs(): void {
+  for (const child of active) child.kill()
+  active.clear()
 }
 
 function parseFps(rate: string | undefined): number {
@@ -73,8 +97,10 @@ export async function probe(filePath: string): Promise<ProbeResult> {
     'error',
     '-print_format',
     'json',
-    '-show_format',
-    '-show_streams',
+    // Only the fields we read: keeps the JSON small and skips the per-stream
+    // disposition/tag dumps ffprobe would otherwise serialise.
+    '-show_entries',
+    'format=duration:stream=codec_type,codec_name,width,height,avg_frame_rate,r_frame_rate,duration',
     filePath
   ])
   if (code !== 0) throw new Error(`ffprobe exited with ${code}`)
@@ -109,70 +135,100 @@ async function exists(p: string): Promise<boolean> {
   }
 }
 
-/** Poster frame a little way in, skipping the black/loading frames ShadowPlay often starts with. */
-export async function makeThumb(clip: Clip, duration: number): Promise<string> {
-  const name = thumbName(clip)
-  const out = join(cacheDir(), name)
-  if (await exists(out)) return name
-  const at = Math.min(Math.max(duration * 0.15, 0.5), 8)
-  const { code } = await run(FFMPEG, [
-    '-y',
-    '-v',
-    'error',
-    '-threads',
-    '1',
-    '-ss',
-    at.toFixed(2),
-    '-i',
-    clip.path,
-    '-frames:v',
-    '1',
-    '-vf',
-    `scale=${THUMB_WIDTH}:-2`,
-    '-q:v',
-    '4',
-    out
-  ])
-  if (code !== 0) throw new Error(`ffmpeg thumb exited with ${code}`)
-  return name
+export function spriteFrameCount(duration: number): number {
+  return Math.max(4, Math.min(SPRITE_FRAMES, Math.floor(duration)))
+}
+
+/** Poster a little way in, skipping the black/loading frames ShadowPlay often starts with. */
+function posterTime(duration: number): number {
+  return Math.min(Math.max(duration * 0.15, 0.5), 8)
 }
 
 /**
- * Hover-scrub strip: N keyframe seeks stitched with hstack in one ffmpeg
- * process. Seeking is far cheaper than decoding the whole clip with `select`.
+ * One input per seek point. Every option here is per-input on purpose: ffmpeg
+ * applies `-threads`/seek flags only to the `-i` that follows them, so a
+ * single global `-threads 1` leaves inputs 2..N decoding on every core.
+ *
+ * `-noaccurate_seek` + `-skip_frame nokey` output the keyframe at or before
+ * the target instead of decoding the whole GOP up to the exact timestamp;
+ * on 60fps HEVC that is one intra frame instead of up to thirty.
+ * `-skip_loop_filter all` drops deblocking/SAO, invisible at thumbnail size.
  */
-export async function makeSprite(
-  clip: Clip,
-  duration: number
-): Promise<{ file: string; frames: number }> {
-  const name = spriteName(clip)
-  const out = join(cacheDir(), name)
-  const frames = Math.max(4, Math.min(SPRITE_FRAMES, Math.floor(duration)))
-  if (await exists(out)) return { file: name, frames }
-
-  const args = ['-y', '-v', 'error', '-threads', '1']
-  for (let i = 0; i < frames; i++) {
-    const t = (duration * (i + 0.5)) / frames
-    args.push('-ss', t.toFixed(2), '-i', clip.path)
-  }
-  const scaled: string[] = []
-  let inputs = ''
-  for (let i = 0; i < frames; i++) {
-    scaled.push(`[${i}:v]scale=${SPRITE_FRAME_WIDTH}:-2[f${i}]`)
-    inputs += `[f${i}]`
-  }
-  args.push(
-    '-filter_complex',
-    `${scaled.join(';')};${inputs}hstack=inputs=${frames}`,
-    '-frames:v',
+function seekInput(path: string, at: number): string[] {
+  return [
+    '-threads',
     '1',
-    '-q:v',
-    '5',
-    out
-  )
+    '-noaccurate_seek',
+    '-skip_frame',
+    'nokey',
+    '-skip_loop_filter',
+    'all',
+    '-ss',
+    at.toFixed(2),
+    '-i',
+    path
+  ]
+}
+
+function scaleTo(width: number, from: string, to: string): string {
+  return `[${from}]scale=${width}:-2:flags=${SCALE_FLAGS}[${to}]`
+}
+
+/**
+ * Poster + hover-scrub strip from a single ffmpeg process. Seeks are
+ * keyframe-only and stitched with `hstack`; the poster is split off the
+ * matching sprite seek when one is close enough, so the common case is
+ * exactly `SPRITE_FRAMES` decodes and one spawn per clip. Whichever
+ * artifact already exists on disk is skipped.
+ */
+export async function makeArtifacts(clip: Clip, duration: number): Promise<Artifacts> {
+  const thumb = thumbName(clip)
+  const sprite = spriteName(clip)
+  const thumbPath = join(cacheDir(), thumb)
+  const spritePath = join(cacheDir(), sprite)
+  const frames = spriteFrameCount(duration)
+  const needThumb = !(await exists(thumbPath))
+  const needSprite = !(await exists(spritePath))
+  if (!needThumb && !needSprite) return { thumb, sprite, spriteFrames: frames }
+
+  const times: number[] = []
+  if (needSprite) for (let i = 0; i < frames; i++) times.push((duration * (i + 0.5)) / frames)
+  let posterIdx = -1
+  if (needThumb) {
+    const at = posterTime(duration)
+    posterIdx = times.findIndex((t) => Math.abs(t - at) < POSTER_REUSE_WINDOW_S)
+    if (posterIdx < 0) posterIdx = times.push(at) - 1
+  }
+
+  const args = ['-y', '-v', 'error']
+  for (const t of times) args.push(...seekInput(clip.path, t))
+
+  const graph: string[] = []
+  let stacked = ''
+  for (let i = 0; i < times.length; i++) {
+    const inSprite = needSprite && i < frames
+    if (i === posterIdx && inSprite) {
+      graph.push(`[${i}:v]split[p][s]`, scaleTo(THUMB_WIDTH, 'p', 'poster'), scaleTo(SPRITE_FRAME_WIDTH, 's', `f${i}`))
+    } else if (i === posterIdx) {
+      graph.push(scaleTo(THUMB_WIDTH, `${i}:v`, 'poster'))
+    } else {
+      graph.push(scaleTo(SPRITE_FRAME_WIDTH, `${i}:v`, `f${i}`))
+    }
+    if (inSprite) stacked += `[f${i}]`
+  }
+  if (needSprite) graph.push(`${stacked}hstack=inputs=${frames}[sprite]`)
+  args.push('-filter_complex', graph.join(';'))
+  if (needThumb) args.push('-map', '[poster]', '-frames:v', '1', '-threads', '1', '-q:v', '4', thumbPath)
+  if (needSprite) args.push('-map', '[sprite]', '-frames:v', '1', '-threads', '1', '-q:v', '5', spritePath)
+
   const { code } = await run(FFMPEG, args)
-  if (code !== 0) throw new Error(`ffmpeg sprite exited with ${code}`)
-  return { file: name, frames }
+  if (code !== 0) {
+    // Never leave a half-written JPEG behind to be mistaken for a cache hit.
+    if (needThumb) await unlink(thumbPath).catch(() => undefined)
+    if (needSprite) await unlink(spritePath).catch(() => undefined)
+    throw new Error(`ffmpeg artifacts exited with ${code}`)
+  }
+  return { thumb, sprite, spriteFrames: frames }
 }
 
 export async function removeArtifacts(clip: Pick<Clip, 'thumb' | 'sprite'>): Promise<void> {
@@ -231,10 +287,12 @@ export class MediaQueue {
     this.queued.delete(id)
   }
 
+  /** Drops the backlog and kills in-flight children; their results are discarded, not recorded as failures. */
   stop(): void {
     this.stopped = true
     this.queue = []
     this.queued.clear()
+    killActiveJobs()
   }
 
   private pump(): void {
@@ -243,8 +301,12 @@ export class MediaQueue {
       this.running++
       this.onProgress(this.pending)
       this.runner(clip)
-        .then((patch) => this.onDone(patch))
-        .catch(() => this.onDone({ id: clip.id, probeState: 'failed' }))
+        .then((patch) => {
+          if (!this.stopped) this.onDone(patch)
+        })
+        .catch(() => {
+          if (!this.stopped) this.onDone({ id: clip.id, probeState: 'failed' })
+        })
         .finally(() => {
           this.queued.delete(clip.id)
           this.running--

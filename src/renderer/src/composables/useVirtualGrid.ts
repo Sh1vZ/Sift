@@ -25,7 +25,9 @@ export const GRID_PAD_X = 28
 const PAD_TOP = 8
 const PAD_BOTTOM = 48
 const GAP = 18
-const META_H = 60
+/** Height reserved under each thumbnail for the title + date line, including the
+ *  padding ClipCard's `.meta` sets. Change both together. */
+const META_H = 70
 const HEADER_H = 48
 const SECTION_GAP = 14
 const OVERSCAN = 420

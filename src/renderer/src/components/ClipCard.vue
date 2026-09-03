@@ -118,10 +118,17 @@ function open(): void {
     transform var(--dur) var(--ease-out),
     box-shadow var(--dur) var(--ease-out);
 }
+/* Hover and keyboard focus get the identical treatment - the ring lights up, the
+   card lifts a little and casts a real shadow under the violet bloom. */
 .clip-card:hover .inner,
 .clip-card:focus-visible .inner {
-  transform: translateY(-4px);
-  box-shadow: var(--glow-primary);
+  transform: translateY(-2px);
+  box-shadow: var(--glow-primary), var(--shadow-lg);
+}
+/* Press settles the card back down, so a click reads as pushing it. */
+.clip-card:active .inner {
+  transform: translateY(0);
+  transition-duration: var(--dur-fast);
 }
 .thumb {
   position: relative;
@@ -131,6 +138,11 @@ function open(): void {
   background: var(--bg-3);
   box-shadow: inset 0 0 0 1px var(--border);
   transform: translateZ(0);
+  transition: box-shadow var(--dur) var(--ease-out);
+}
+.clip-card:hover .thumb,
+.clip-card:focus-visible .thumb {
+  box-shadow: inset 0 0 0 1px var(--border-active);
 }
 .poster {
   width: 100%;
@@ -139,13 +151,16 @@ function open(): void {
   opacity: 0;
   transition:
     opacity var(--dur-slow) var(--ease-out),
-    transform 600ms var(--ease-out);
+    transform var(--dur-slow) var(--ease-out);
 }
 .poster.is-loaded {
   opacity: 1;
 }
-.clip-card:hover .poster {
-  transform: scale(1.04);
+/* The image inside the clipped thumb, never the card box - nothing reflows and
+   no neighbour moves. */
+.clip-card:hover .poster,
+.clip-card:focus-visible .poster {
+  transform: scale(1.03);
 }
 .placeholder {
   position: absolute;
@@ -235,13 +250,20 @@ function open(): void {
   opacity: 0;
   transform: scale(0.6);
 }
+/* Inset on every side: the hover ring sits on the card's edge, so the title and
+   the date line need room before it. Keep in step with META_H in useVirtualGrid. */
 .meta {
-  padding: 10px 4px 0;
+  padding: 12px 10px;
 }
 .title {
   font-size: var(--text-md);
   font-weight: 600;
   color: var(--fg);
+  transition: color var(--dur-fast) var(--ease-out);
+}
+.clip-card:hover .title,
+.clip-card:focus-visible .title {
+  color: var(--secondary);
 }
 .sub {
   display: flex;
