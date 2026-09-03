@@ -3,14 +3,16 @@ import { computed } from 'vue'
 import type { LibraryFolder } from '@shared/types'
 import SettingsPanel from './SettingsPanel.vue'
 import SettingsRow from './SettingsRow.vue'
-import { addFolder, allClips, folders, removeFolder, rescan, scan } from '@/composables/useLibrary'
+import { addFolder, folders, recordings, removeFolder, rescan, scan } from '@/composables/useLibrary'
 import { confirm } from '@/composables/useDialogs'
 
-const withThumbs = computed(() => allClips.value.filter((c) => c.thumb).length)
+/** The clips folder has its own pane; this list is the recording roots only. */
+const libraryFolders = computed(() => folders.value.filter((f) => f.kind === 'library'))
+const withThumbs = computed(() => recordings.value.filter((c) => c.thumb).length)
 
 const summary = computed(() => {
-  const f = folders.value.length
-  return `${allClips.value.length} clips indexed across ${f} folder${f === 1 ? '' : 's'} · ${withThumbs.value} with previews.`
+  const f = libraryFolders.value.length
+  return `${recordings.value.length} clips indexed across ${f} folder${f === 1 ? '' : 's'} · ${withThumbs.value} with previews.`
 })
 
 async function remove(folder: LibraryFolder): Promise<void> {
@@ -34,7 +36,7 @@ async function remove(folder: LibraryFolder): Promise<void> {
       </template>
 
       <UEmpty
-        v-if="!folders.length"
+        v-if="!libraryFolders.length"
         class="panel-empty"
         icon="i-lucide-folder"
         title="No folders yet"
@@ -45,7 +47,7 @@ async function remove(folder: LibraryFolder): Promise<void> {
       />
       <ul v-else class="rows">
         <SettingsRow
-          v-for="f in folders"
+          v-for="f in libraryFolders"
           :key="f.id"
           tag="li"
           :icon="f.available ? 'hard-drive' : 'alert'"
@@ -105,7 +107,7 @@ async function remove(folder: LibraryFolder): Promise<void> {
         label="Rescan all folders"
         color="neutral"
         variant="subtle"
-        :disabled="!folders.length || scan.active"
+        :disabled="!libraryFolders.length || scan.active"
         :loading="scan.active"
         @click="rescan()"
       />

@@ -6,7 +6,7 @@ import { view } from './useLibrary'
  * id; the rail, the pane hero and the title-bar breadcrumb all read the same
  * section table so a new pane only has to be described once.
  */
-export type SettingsTab = 'folders' | 'indexing' | 'playback' | 'themes' | 'stats' | 'storage' | 'info'
+export type SettingsTab = 'folders' | 'clips' | 'indexing' | 'playback' | 'themes' | 'stats' | 'storage' | 'info'
 
 export interface SettingsSection {
   id: SettingsTab
@@ -35,6 +35,13 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
         description:
           'Where Sift looks for recordings. Clips are indexed where they live — never copied, moved or renamed.',
         keywords: 'add folder path drive shadowplay videos rescan remove'
+      },
+      {
+        id: 'clips',
+        label: 'Clips',
+        icon: 'i-lucide-scissors',
+        description: 'Where trimmed clips are exported to, one sub-folder per game.',
+        keywords: 'export trim output folder cut mute clips directory save'
       },
       {
         id: 'indexing',

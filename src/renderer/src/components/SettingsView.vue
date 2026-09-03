@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import FoldersPane from './settings/FoldersPane.vue'
+import ClipsPane from './settings/ClipsPane.vue'
 import IndexingPane from './settings/IndexingPane.vue'
 import PlaybackPane from './settings/PlaybackPane.vue'
 import ThemesPane from './settings/ThemesPane.vue'
@@ -123,6 +124,7 @@ function onSearchKey(e: KeyboardEvent): void {
 
         <Transition name="fade" mode="out-in">
           <FoldersPane v-if="settingsTab === 'folders'" key="folders" />
+          <ClipsPane v-else-if="settingsTab === 'clips'" key="clips" />
           <IndexingPane v-else-if="settingsTab === 'indexing'" key="indexing" />
           <PlaybackPane v-else-if="settingsTab === 'playback'" key="playback" />
           <ThemesPane v-else-if="settingsTab === 'themes'" key="themes" />
