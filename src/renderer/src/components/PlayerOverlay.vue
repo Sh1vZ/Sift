@@ -14,6 +14,7 @@ import {
   prevClip
 } from '@/composables/usePlayer'
 import { fadeOut, flipFrom, flipTo } from '@/composables/useMotion'
+import { activeTheme } from '@/composables/useTheme'
 import { confirm, dialog, prompt } from '@/composables/useDialogs'
 import { clamp, formatBytes, formatDuration, formatFull, formatResolution } from '@/utils/format'
 
@@ -539,7 +540,7 @@ onBeforeUnmount(() => {
               class="vol-slider"
               :model-value="muted ? 0 : volume * 100"
               :max-value="100"
-              fill-color="#a78bfa"
+              :fill-color="activeTheme.colors.secondary"
               track-color="rgba(255, 255, 255, 0.22)"
               @update:model-value="(v: number) => setVolume(v / 100)"
             />
@@ -676,7 +677,7 @@ onBeforeUnmount(() => {
   box-shadow:
     0 0 0 1px rgba(255, 255, 255, 0.06),
     0 40px 100px -20px rgba(0, 0, 0, 0.9),
-    0 0 80px -20px rgba(124, 58, 237, 0.35);
+    0 0 80px -20px color-mix(in srgb, var(--primary) 35%, transparent);
   will-change: transform;
 }
 .is-fullscreen .stage {
@@ -815,7 +816,7 @@ onBeforeUnmount(() => {
   margin: -7px 0 0 -7px;
   border-radius: 50%;
   background: #fff;
-  box-shadow: 0 0 0 4px rgba(167, 139, 250, 0.35);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--secondary) 35%, transparent);
   transform: scale(0);
   transition: transform var(--dur-fast) var(--ease-spring);
 }
@@ -860,12 +861,12 @@ onBeforeUnmount(() => {
   justify-content: center;
   padding: 0;
   border-radius: 50%;
-  color: #fff;
+  color: var(--on-primary);
   background: linear-gradient(135deg, var(--primary-hover), var(--primary));
-  box-shadow: 0 8px 20px -6px rgba(124, 58, 237, 0.8);
+  box-shadow: 0 8px 20px -6px color-mix(in srgb, var(--primary) 80%, transparent);
 }
 .play:hover {
-  background: linear-gradient(135deg, #9d6cff, #8b5cf6);
+  background: linear-gradient(135deg, var(--secondary), var(--primary-hover));
 }
 .volume {
   display: flex;

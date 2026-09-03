@@ -6,7 +6,7 @@ import { view } from './useLibrary'
  * id; the rail, the pane hero and the title-bar breadcrumb all read the same
  * section table so a new pane only has to be described once.
  */
-export type SettingsTab = 'folders' | 'indexing' | 'playback' | 'stats' | 'storage' | 'info'
+export type SettingsTab = 'folders' | 'indexing' | 'playback' | 'themes' | 'stats' | 'storage' | 'info'
 
 export interface SettingsSection {
   id: SettingsTab
@@ -49,6 +49,18 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
         icon: 'i-lucide-list-video',
         description: 'What happens when you hover a card, and when a clip reaches its end.',
         keywords: 'hover scrub autoplay next animations motion transitions'
+      }
+    ]
+  },
+  {
+    label: 'Appearance',
+    sections: [
+      {
+        id: 'themes',
+        label: 'Themes',
+        icon: 'i-lucide-palette',
+        description: 'The colours the chrome is painted in. Thumbnails and clips are never tinted.',
+        keywords: 'theme colour color oled black dark amoled accent palette appearance look'
       }
     ]
   },

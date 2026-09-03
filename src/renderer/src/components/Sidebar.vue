@@ -58,12 +58,12 @@ const navUi = {
         <svg viewBox="0 0 32 32" width="28" height="28">
           <defs>
             <linearGradient id="mark-g" x1="0" y1="0" x2="1" y2="1">
-              <stop offset="0" stop-color="#a78bfa" />
-              <stop offset="1" stop-color="#7c3aed" />
+              <stop offset="0" style="stop-color: var(--secondary)" />
+              <stop offset="1" style="stop-color: var(--primary)" />
             </linearGradient>
           </defs>
           <rect x="2" y="2" width="28" height="28" rx="8" fill="url(#mark-g)" />
-          <path d="M12.5 10.5v11l9-5.5z" fill="#fff" />
+          <path d="M12.5 10.5v11l9-5.5z" style="fill: var(--on-primary)" />
         </svg>
       </span>
       <ShinyText
@@ -132,7 +132,7 @@ const navUi = {
 }
 .mark {
   display: inline-flex;
-  filter: drop-shadow(0 6px 14px rgba(124, 58, 237, 0.55));
+  filter: drop-shadow(0 6px 14px color-mix(in srgb, var(--primary) 55%, transparent));
 }
 /* Four characters is all the rail can hold, so the wordmark drops to --text-xs
    and keeps just enough tracking to still read as the logotype. */

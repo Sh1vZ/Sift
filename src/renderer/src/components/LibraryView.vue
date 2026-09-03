@@ -26,6 +26,7 @@ import {
   visibleClips
 } from '@/composables/useLibrary'
 import { motionEnabled } from '@/composables/useMotion'
+import { activeTheme } from '@/composables/useTheme'
 import { formatBytes, formatDuration } from '@/utils/format'
 
 // The WebGL aurora (and its ogl dependency) only loads when the empty state is actually shown.
@@ -168,11 +169,11 @@ const sortModel = computed({
 
     <div v-else-if="!hasFolders" class="empty hero">
       <div v-if="motionEnabled" class="hero-bg" aria-hidden="true">
-        <Aurora :color-stops="['#0f0f23', '#7c3aed', '#f43f5e']" :amplitude="1.1" :blend="0.6" :speed="0.6" />
+        <Aurora :color-stops="[activeTheme.colors.bg1, activeTheme.colors.primary, activeTheme.colors.accent]" :amplitude="1.1" :blend="0.6" :speed="0.6" />
       </div>
 
       <div class="hero-folder" role="button" tabindex="0" aria-label="Choose a folder" @click="addFolder()" @keydown.enter="addFolder()">
-        <Folder color="#7c3aed" :size="1.5" :items="['', '', '']">
+        <Folder :color="activeTheme.colors.primary" :size="1.5" :items="['', '', '']">
           <template #item-1><span class="paper p1" /></template>
           <template #item-2><span class="paper p2" /></template>
           <template #item-3><span class="paper p3" /></template>
@@ -294,7 +295,7 @@ const sortModel = computed({
   padding: 44px 0 34px;
   cursor: pointer;
   border-radius: var(--r-lg);
-  filter: drop-shadow(0 18px 30px rgba(124, 58, 237, 0.45));
+  filter: drop-shadow(0 18px 30px color-mix(in srgb, var(--primary) 45%, transparent));
 }
 .paper {
   display: block;
@@ -302,13 +303,13 @@ const sortModel = computed({
   height: 100%;
 }
 .p1 {
-  background: linear-gradient(135deg, #f43f5e, #fb7185);
+  background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 70%, white));
 }
 .p2 {
   background: linear-gradient(135deg, #34d399, #6ee7b7);
 }
 .p3 {
-  background: linear-gradient(135deg, #a78bfa, #c4b5fd);
+  background: linear-gradient(135deg, var(--secondary), color-mix(in srgb, var(--secondary) 70%, white));
 }
 .hero-title {
   position: relative;
@@ -344,8 +345,8 @@ const sortModel = computed({
   padding: 0 22px;
   border-radius: 18px;
   background: linear-gradient(135deg, var(--primary-hover), var(--primary));
-  border-color: rgba(196, 181, 253, 0.45);
-  color: #fff;
+  border-color: color-mix(in srgb, var(--secondary) 45%, transparent);
+  color: var(--on-primary);
   font-family: var(--font-heading);
   font-weight: 600;
   font-size: var(--text-sm);

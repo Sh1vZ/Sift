@@ -198,7 +198,7 @@ function open(): void {
   bottom: 0;
   height: 3px;
   background: linear-gradient(90deg, var(--secondary), var(--accent));
-  box-shadow: 0 0 10px rgba(244, 63, 94, 0.6);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--accent) 60%, transparent);
 }
 .badge {
   position: absolute;
@@ -232,9 +232,9 @@ function open(): void {
   justify-content: center;
   padding-left: 3px;
   border-radius: 50%;
-  color: #fff;
-  background: linear-gradient(135deg, rgba(139, 92, 246, 0.95), rgba(124, 58, 237, 0.95));
-  box-shadow: 0 10px 30px -6px rgba(124, 58, 237, 0.9);
+  color: var(--on-primary);
+  background: linear-gradient(135deg, var(--primary-hover), var(--primary));
+  box-shadow: 0 10px 30px -6px color-mix(in srgb, var(--primary) 90%, transparent);
   opacity: 0;
   transform: scale(0.6);
   transition:

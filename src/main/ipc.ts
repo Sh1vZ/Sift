@@ -1,5 +1,5 @@
 import { BrowserWindow, dialog, ipcMain } from 'electron'
-import type { Settings } from '@shared/types'
+import { THEME_IDS, type Settings } from '@shared/types'
 import type { Library } from './lib/library'
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : '')
@@ -21,9 +21,12 @@ export function registerIpc(library: Library, getWindow: () => BrowserWindow | n
   ipcMain.handle('library:add-folder-path', (_e, p) => library.addFolder(str(p)))
   ipcMain.handle('library:remove-folder', (_e, id) => library.removeFolder(str(id)))
   ipcMain.handle('library:rescan', (_e, id) => library.rescan(str(id) || undefined))
-  ipcMain.handle('library:set-settings', (_e, patch) =>
-    library.setSettings((patch ?? {}) as Partial<Settings>)
-  )
+  ipcMain.handle('library:set-settings', (_e, patch) => {
+    const p = { ...((patch ?? {}) as Partial<Settings>) }
+    // Unknown theme ids would leave the renderer on no theme block at all.
+    if (p.theme !== undefined && !THEME_IDS.includes(p.theme)) delete p.theme
+    return library.setSettings(p)
+  })
 
   ipcMain.handle('library:stats', () => library.stats())
   ipcMain.handle('library:reveal-data', () => library.revealData())

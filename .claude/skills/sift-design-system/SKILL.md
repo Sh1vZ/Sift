@@ -20,10 +20,27 @@ description: Use for Sift UI, layout, components, styling, loading and empty sta
 
 ## Overview
 
-Sift is a **dark-only Electron desktop app**. There is no light theme, no theme toggle, and
-no runtime theming. `<html class="dark">` is hardcoded, `color-scheme: dark` is set on `:root`,
-and Nuxt UI runs with `colorMode: false`. Do not add `dark:` variants,
-`prefers-color-scheme` branches, or a light palette — they are dead weight here.
+Sift is a **dark-only Electron desktop app**. There is no light theme. `<html class="dark">`
+is hardcoded, `color-scheme: dark` is set on `:root`, and Nuxt UI runs with `colorMode: false`.
+Do not add `dark:` variants, `prefers-color-scheme` branches, or a light palette — they are
+dead weight here.
+
+There **is** a small set of dark **themes** (`Settings.theme`, picked in Settings → Themes):
+`sift` (default), `ember`, `arctic`, `synthwave`, `verdant`, `crimson`, `solar`, and the
+true-black `oled`, `oled-mint`, `oled-frost`. A theme is one `html[data-theme]`
+block in `tokens.css` that re-points only the surface, text and brand tokens (plus the
+`--ui-color-primary-*` shades so Nuxt UI follows). Typography, spacing, radius and motion never
+change with the theme. `composables/useTheme.ts` sets the attribute and carries a `THEMES`
+table whose hexes mirror the CSS for previews and for Vue Bits props that take a colour
+string. **This is why raw brand hexes are banned in components**: anything that must look
+purple in the default theme must read `var(--primary)` / `var(--secondary)` / `var(--accent)`
+(use `color-mix(in srgb, var(--primary) 45%, transparent)` for alpha variants), or take its
+colour from `activeTheme.colors`. Text or glyphs on a `--primary` fill use `--on-primary`, not
+`#fff` — the golden `solar` theme flips it dark. The token values quoted below are the default
+theme's.
+
+Icons named in `.ts` files (the settings rail table) are only bundled because
+`electron.vite.config.ts` widens the Nuxt UI icon scan to include `.ts`; keep that glob.
 
 The visual language is a gaming-adjacent dark chrome: deep indigo-black surfaces, a neon purple
 identity, a rose accent held in reserve, uppercase Chakra Petch for controls, Inter for reading
@@ -407,7 +424,7 @@ When creating or changing a renderer surface:
 
 ## Design Specifications Summary
 
-- **Color mode:** Dark only (`<html class="dark">`, `colorMode: false`)
+- **Color mode:** Dark only (`<html class="dark">`, `colorMode: false`); ten dark themes via `html[data-theme]`
 - **Foundation:** Five-step indigo-black surface ramp (`--bg-0` … `--bg-4`)
 - **Identity:** `#7c3aed` violet; `#f43f5e` rose held in reserve
 - **Display / heading / body:** Russo One · Chakra Petch · Inter Variable

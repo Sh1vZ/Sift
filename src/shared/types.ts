@@ -45,6 +45,24 @@ export type GroupBy = 'date' | 'none'
 export type SortBy = 'newest' | 'oldest' | 'name' | 'duration' | 'size'
 export type GridSize = 'compact' | 'comfortable' | 'large'
 
+/**
+ * Colour theme for the renderer chrome. Every id is a `html[data-theme]` block
+ * in `tokens.css`; the renderer's `useTheme` composable carries the labels.
+ */
+export const THEME_IDS = [
+  'sift',
+  'ember',
+  'arctic',
+  'synthwave',
+  'verdant',
+  'crimson',
+  'solar',
+  'oled',
+  'oled-mint',
+  'oled-frost'
+] as const
+export type ThemeId = (typeof THEME_IDS)[number]
+
 export interface Settings {
   watchFolders: boolean
   generateThumbnails: boolean
@@ -56,6 +74,7 @@ export interface Settings {
   gridSize: GridSize
   sort: SortBy
   groupBy: GroupBy
+  theme: ThemeId
   /** Parallel ffmpeg jobs. Kept low so the app never fights a game for CPU. */
   concurrency: number
 }
@@ -161,5 +180,6 @@ export const DEFAULT_SETTINGS: Settings = {
   gridSize: 'large',
   sort: 'newest',
   groupBy: 'date',
+  theme: 'sift',
   concurrency: 2
 }

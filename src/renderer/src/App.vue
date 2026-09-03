@@ -9,6 +9,8 @@ import DialogHost from './components/DialogHost.vue'
 import ToastBridge from './components/ToastBridge.vue'
 import { initLibrary, ready, view } from '@/composables/useLibrary'
 import { isOpen } from '@/composables/usePlayer'
+// Side-effect import: applies the persisted theme to <html> before first paint.
+import '@/composables/useTheme'
 
 onMounted(() => void initLibrary())
 </script>
@@ -42,10 +44,8 @@ onMounted(() => void initLibrary())
   display: flex;
   flex-direction: column;
   height: 100%;
-  background:
-    radial-gradient(1200px 600px at 80% -10%, rgba(124, 58, 237, 0.14), transparent 60%),
-    radial-gradient(800px 500px at -10% 110%, rgba(244, 63, 94, 0.07), transparent 60%),
-    var(--bg-1);
+  /* The washes live in tokens.css so each theme can recolour or drop them. */
+  background: var(--app-wash), var(--bg-1);
 }
 .body {
   display: flex;

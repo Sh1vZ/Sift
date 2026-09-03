@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import FoldersPane from './settings/FoldersPane.vue'
 import IndexingPane from './settings/IndexingPane.vue'
 import PlaybackPane from './settings/PlaybackPane.vue'
+import ThemesPane from './settings/ThemesPane.vue'
 import StatsPane from './settings/StatsPane.vue'
 import StoragePane from './settings/StoragePane.vue'
 import InfoPane from './settings/InfoPane.vue'
@@ -124,6 +125,7 @@ function onSearchKey(e: KeyboardEvent): void {
           <FoldersPane v-if="settingsTab === 'folders'" key="folders" />
           <IndexingPane v-else-if="settingsTab === 'indexing'" key="indexing" />
           <PlaybackPane v-else-if="settingsTab === 'playback'" key="playback" />
+          <ThemesPane v-else-if="settingsTab === 'themes'" key="themes" />
           <StatsPane v-else-if="settingsTab === 'stats'" key="stats" />
           <StoragePane v-else-if="settingsTab === 'storage'" key="storage" />
           <InfoPane v-else key="info" />
@@ -197,7 +199,7 @@ function onSearchKey(e: KeyboardEvent): void {
   height: 34px;
   margin-bottom: var(--s-3);
   color: var(--secondary);
-  filter: drop-shadow(0 6px 16px rgba(124, 58, 237, 0.45));
+  filter: drop-shadow(0 6px 16px color-mix(in srgb, var(--primary) 45%, transparent));
 }
 .hero h1 {
   font-size: var(--text-xl);

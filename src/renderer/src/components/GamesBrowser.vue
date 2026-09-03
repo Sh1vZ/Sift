@@ -13,6 +13,7 @@ import {
   type GameSummary
 } from '@/composables/useLibrary'
 import { motionEnabled } from '@/composables/useMotion'
+import { activeTheme } from '@/composables/useTheme'
 import { isOpen as playerOpen } from '@/composables/usePlayer'
 import { formatBytes, formatDuration, formatRelative } from '@/utils/format'
 
@@ -74,7 +75,7 @@ const open = (g: GameSummary): void => openGame(g.name)
       :item-key="keyOf"
       :active="!playerOpen"
       :animated="motionEnabled"
-      gradient-color="#0f0f23"
+      :gradient-color="activeTheme.colors.bg1"
       class-name="games-list"
       @item-selected="open"
     >
@@ -83,7 +84,7 @@ const open = (g: GameSummary): void => openGame(g.name)
           as="button"
           class="game"
           :class="{ 'is-selected': selected }"
-          spotlight-color="rgba(167, 139, 250, 0.28)"
+          :spotlight-color="activeTheme.spotlight"
           :title="g.name"
         >
           <span class="cover">

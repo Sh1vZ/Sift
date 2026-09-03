@@ -40,6 +40,7 @@ declare module 'vue' {
     StarBorder: typeof import('./src/components/bits/StarBorder.vue')['default']
     StatsPane: typeof import('./src/components/settings/StatsPane.vue')['default']
     StoragePane: typeof import('./src/components/settings/StoragePane.vue')['default']
+    ThemesPane: typeof import('./src/components/settings/ThemesPane.vue')['default']
     TitleBar: typeof import('./src/components/TitleBar.vue')['default']
     ToastBridge: typeof import('./src/components/ToastBridge.vue')['default']
     UAlert: typeof import('./../../node_modules/@nuxt/ui/dist/runtime/components/Alert.vue')['default']

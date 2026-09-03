@@ -58,7 +58,14 @@ export default defineConfig({
             slots: { base: 'font-heading font-semibold uppercase tracking-wider cursor-pointer' }
           }
         },
-        icon: { mode: 'svg', clientBundle: { scan: true, sizeLimitKb: 512 } }
+        icon: {
+          mode: 'svg',
+          clientBundle: {
+            // The default scan skips .ts, but the settings rail names its icons in a composable.
+            scan: { globInclude: ['**/*.{vue,ts,jsx,tsx,md,mdc,mdx,yml,yaml}'] },
+            sizeLimitKb: 512
+          }
+        }
       })
     ]
   }

@@ -2,6 +2,12 @@
  * Design tokens — derived from design-system/sift/MASTER.md
  * (ui-ux-pro-max: "Neon purple + rose action", Russo One / Chakra Petch).
  * Dark-only by design; the app never renders a light theme.
+ *
+ * Themes: `:root` is the default "Sift" theme. Each `html[data-theme]` block
+ * below re-points only the surface and brand tokens; typography, spacing,
+ * radius and motion never change with the theme. `useTheme` sets the
+ * attribute, and its THEMES table mirrors these hexes for previews and for
+ * the few JS-driven colours (WebGL hero, sliders).
  */
 :root {
   color-scheme: dark;
@@ -28,6 +34,8 @@
   --warning: #fbbf24;
   --destructive: #ef4444;
   --destructive-soft: rgba(239, 68, 68, 0.14);
+  /* Glyphs and text sitting on a --primary fill (play buttons, the logo mark). */
+  --on-primary: #ffffff;
 
   --border: rgba(255, 255, 255, 0.07);
   --border-hover: rgba(255, 255, 255, 0.13);
@@ -38,6 +46,12 @@
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
   --shadow-md: 0 8px 24px -6px rgba(0, 0, 0, 0.55);
   --shadow-lg: 0 24px 60px -12px rgba(0, 0, 0, 0.7);
+
+  /* The two static radial washes App.vue paints over --bg-1. Owned here so a
+     theme can recolour or drop them (OLED wants a flat black ground). */
+  --app-wash:
+    radial-gradient(1200px 600px at 80% -10%, rgba(124, 58, 237, 0.14), transparent 60%),
+    radial-gradient(800px 500px at -10% 110%, rgba(244, 63, 94, 0.07), transparent 60%);
 
   --font-display: 'Russo One', 'Chakra Petch', system-ui, sans-serif;
   --font-heading: 'Chakra Petch', 'Inter Variable', system-ui, sans-serif;
@@ -105,6 +119,318 @@
   --ui-text-inverted: var(--fg-inverse);
   --ui-primary: var(--ui-color-primary-500);
   --ui-radius: 0.5rem;
+}
+
+/* ------------------------------------------------------------------ themes */
+
+/* OLED: true-black surfaces so unlit pixels stay off. The ramp keeps its five
+   steps but starts at #000, and the borders come up a notch because there is
+   no blue cast left for a 7% hairline to read against. Every OLED variant
+   shares this surface block and adds only its own brand colours below. */
+html[data-theme='oled'],
+html[data-theme='oled-mint'],
+html[data-theme='oled-frost'] {
+  --bg-0: #000000;
+  --bg-1: #000000;
+  --bg-2: #090909;
+  --bg-3: #121212;
+  --bg-4: #1b1b1b;
+  --border: rgba(255, 255, 255, 0.1);
+  --border-hover: rgba(255, 255, 255, 0.18);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.7);
+  --shadow-md: 0 8px 24px -6px rgba(0, 0, 0, 0.85);
+  --shadow-lg: 0 24px 60px -12px rgba(0, 0, 0, 0.95);
+  --app-wash: none;
+}
+
+/* Ember: warm charcoal ground, orange identity, gold punctuation. */
+html[data-theme='ember'] {
+  --bg-0: #0b0807;
+  --bg-1: #110e0c;
+  --bg-2: #181412;
+  --bg-3: #221c19;
+  --bg-4: #2b2420;
+  --fg: #f2ebe6;
+  --fg-muted: #a99f98;
+  --fg-dim: #766c66;
+  --fg-inverse: #1c1210;
+  --primary: #f97316;
+  --primary-hover: #fb923c;
+  --primary-soft: rgba(249, 115, 22, 0.16);
+  --secondary: #fdba74;
+  --accent: #facc15;
+  --accent-soft: rgba(250, 204, 21, 0.16);
+  --border-active: rgba(253, 186, 116, 0.45);
+  --ring: #fdba74;
+  --glow-primary: 0 0 0 1px rgba(253, 186, 116, 0.35), 0 12px 32px -8px rgba(249, 115, 22, 0.55);
+  --app-wash:
+    radial-gradient(1200px 600px at 80% -10%, rgba(249, 115, 22, 0.13), transparent 60%),
+    radial-gradient(800px 500px at -10% 110%, rgba(250, 204, 21, 0.06), transparent 60%);
+  --ui-text-toned: #cfc4bc;
+  --ui-text-highlighted: #fbf7f4;
+  --ui-color-primary-50: #fff7ed;
+  --ui-color-primary-100: #ffedd5;
+  --ui-color-primary-200: #fed7aa;
+  --ui-color-primary-300: #fdba74;
+  --ui-color-primary-400: #fb923c;
+  --ui-color-primary-500: #f97316;
+  --ui-color-primary-600: #ea580c;
+  --ui-color-primary-700: #c2410c;
+  --ui-color-primary-800: #9a3412;
+  --ui-color-primary-900: #7c2d12;
+  --ui-color-primary-950: #431407;
+}
+
+/* Arctic: blue-black ground, sky identity, teal punctuation. */
+html[data-theme='arctic'] {
+  --bg-0: #060a13;
+  --bg-1: #0a101b;
+  --bg-2: #101826;
+  --bg-3: #172033;
+  --bg-4: #1f2a3f;
+  --fg: #e6eef8;
+  --fg-muted: #97a9bf;
+  --fg-dim: #687c94;
+  --fg-inverse: #0b1220;
+  --primary: #0ea5e9;
+  --primary-hover: #38bdf8;
+  --primary-soft: rgba(14, 165, 233, 0.16);
+  --secondary: #7dd3fc;
+  --accent: #2dd4bf;
+  --accent-soft: rgba(45, 212, 191, 0.16);
+  --border-active: rgba(125, 211, 252, 0.45);
+  --ring: #7dd3fc;
+  --glow-primary: 0 0 0 1px rgba(125, 211, 252, 0.35), 0 12px 32px -8px rgba(14, 165, 233, 0.55);
+  --app-wash:
+    radial-gradient(1200px 600px at 80% -10%, rgba(14, 165, 233, 0.13), transparent 60%),
+    radial-gradient(800px 500px at -10% 110%, rgba(45, 212, 191, 0.06), transparent 60%);
+  --ui-text-toned: #b7c6d8;
+  --ui-text-highlighted: #f4f8fc;
+  --ui-color-primary-50: #f0f9ff;
+  --ui-color-primary-100: #e0f2fe;
+  --ui-color-primary-200: #bae6fd;
+  --ui-color-primary-300: #7dd3fc;
+  --ui-color-primary-400: #38bdf8;
+  --ui-color-primary-500: #0ea5e9;
+  --ui-color-primary-600: #0284c7;
+  --ui-color-primary-700: #0369a1;
+  --ui-color-primary-800: #075985;
+  --ui-color-primary-900: #0c4a6e;
+  --ui-color-primary-950: #082f49;
+}
+
+/* Synthwave: deep purple ground, hot pink identity, cyan punctuation. */
+html[data-theme='synthwave'] {
+  --bg-0: #0b0516;
+  --bg-1: #10081d;
+  --bg-2: #180c2a;
+  --bg-3: #22123a;
+  --bg-4: #2d1a49;
+  --fg: #f3e8ff;
+  --fg-muted: #b49cc9;
+  --fg-dim: #806a99;
+  --fg-inverse: #1a0b2e;
+  --primary: #ec4899;
+  --primary-hover: #f472b6;
+  --primary-soft: rgba(236, 72, 153, 0.16);
+  --secondary: #f9a8d4;
+  --accent: #22d3ee;
+  --accent-soft: rgba(34, 211, 238, 0.16);
+  --border-active: rgba(249, 168, 212, 0.45);
+  --ring: #f9a8d4;
+  --glow-primary: 0 0 0 1px rgba(249, 168, 212, 0.35), 0 12px 32px -8px rgba(236, 72, 153, 0.55);
+  --app-wash:
+    radial-gradient(1200px 600px at 80% -10%, rgba(236, 72, 153, 0.14), transparent 60%),
+    radial-gradient(800px 500px at -10% 110%, rgba(34, 211, 238, 0.07), transparent 60%);
+  --ui-text-toned: #cdb8e0;
+  --ui-text-highlighted: #faf5ff;
+  --ui-color-primary-50: #fdf2f8;
+  --ui-color-primary-100: #fce7f3;
+  --ui-color-primary-200: #fbcfe8;
+  --ui-color-primary-300: #f9a8d4;
+  --ui-color-primary-400: #f472b6;
+  --ui-color-primary-500: #ec4899;
+  --ui-color-primary-600: #db2777;
+  --ui-color-primary-700: #be185d;
+  --ui-color-primary-800: #9d174d;
+  --ui-color-primary-900: #831843;
+  --ui-color-primary-950: #500724;
+}
+
+/* Verdant: green-black ground, leaf-green identity, gold punctuation. */
+html[data-theme='verdant'] {
+  --bg-0: #070c09;
+  --bg-1: #0b120e;
+  --bg-2: #101a14;
+  --bg-3: #162219;
+  --bg-4: #1e2c22;
+  --fg: #e8f1ea;
+  --fg-muted: #9bb0a2;
+  --fg-dim: #6b8072;
+  --fg-inverse: #08140c;
+  --primary: #16a34a;
+  --primary-hover: #22c55e;
+  --primary-soft: rgba(34, 197, 94, 0.16);
+  --secondary: #86efac;
+  --accent: #facc15;
+  --accent-soft: rgba(250, 204, 21, 0.16);
+  --border-active: rgba(134, 239, 172, 0.45);
+  --ring: #86efac;
+  --glow-primary: 0 0 0 1px rgba(134, 239, 172, 0.35), 0 12px 32px -8px rgba(22, 163, 74, 0.55);
+  --app-wash:
+    radial-gradient(1200px 600px at 80% -10%, rgba(34, 197, 94, 0.12), transparent 60%),
+    radial-gradient(800px 500px at -10% 110%, rgba(250, 204, 21, 0.06), transparent 60%);
+  --ui-text-toned: #bccdc2;
+  --ui-text-highlighted: #f4faf6;
+  --ui-color-primary-50: #f0fdf4;
+  --ui-color-primary-100: #dcfce7;
+  --ui-color-primary-200: #bbf7d0;
+  --ui-color-primary-300: #86efac;
+  --ui-color-primary-400: #4ade80;
+  --ui-color-primary-500: #22c55e;
+  --ui-color-primary-600: #16a34a;
+  --ui-color-primary-700: #15803d;
+  --ui-color-primary-800: #166534;
+  --ui-color-primary-900: #14532d;
+  --ui-color-primary-950: #052e16;
+}
+
+/* Crimson: red-black ground, crimson identity, amber punctuation. */
+html[data-theme='crimson'] {
+  --bg-0: #0f0708;
+  --bg-1: #150a0c;
+  --bg-2: #1d0f12;
+  --bg-3: #271418;
+  --bg-4: #311b20;
+  --fg: #f5e9eb;
+  --fg-muted: #b09aa0;
+  --fg-dim: #7f6a70;
+  --fg-inverse: #1a0709;
+  --primary: #dc2626;
+  --primary-hover: #ef4444;
+  --primary-soft: rgba(239, 68, 68, 0.16);
+  --secondary: #fca5a5;
+  --accent: #fbbf24;
+  --accent-soft: rgba(251, 191, 36, 0.16);
+  --border-active: rgba(252, 165, 165, 0.45);
+  --ring: #fca5a5;
+  --glow-primary: 0 0 0 1px rgba(252, 165, 165, 0.35), 0 12px 32px -8px rgba(220, 38, 38, 0.55);
+  --app-wash:
+    radial-gradient(1200px 600px at 80% -10%, rgba(220, 38, 38, 0.13), transparent 60%),
+    radial-gradient(800px 500px at -10% 110%, rgba(251, 191, 36, 0.06), transparent 60%);
+  --ui-text-toned: #d2bfc4;
+  --ui-text-highlighted: #fcf5f6;
+  --ui-color-primary-50: #fef2f2;
+  --ui-color-primary-100: #fee2e2;
+  --ui-color-primary-200: #fecaca;
+  --ui-color-primary-300: #fca5a5;
+  --ui-color-primary-400: #f87171;
+  --ui-color-primary-500: #ef4444;
+  --ui-color-primary-600: #dc2626;
+  --ui-color-primary-700: #b91c1c;
+  --ui-color-primary-800: #991b1b;
+  --ui-color-primary-900: #7f1d1d;
+  --ui-color-primary-950: #450a0a;
+}
+
+/* Solar: warm graphite ground, golden identity, sky punctuation. Yellow is
+   too light for white glyphs, so text on a primary fill goes dark here. */
+html[data-theme='solar'] {
+  --bg-0: #0a0a08;
+  --bg-1: #10100d;
+  --bg-2: #171713;
+  --bg-3: #21211b;
+  --bg-4: #2a2a23;
+  --fg: #f0efe8;
+  --fg-muted: #a8a79b;
+  --fg-dim: #75746a;
+  --fg-inverse: #1c1a0e;
+  --on-primary: #1c1a0e;
+  --primary: #eab308;
+  --primary-hover: #facc15;
+  --primary-soft: rgba(234, 179, 8, 0.16);
+  --secondary: #fde047;
+  --accent: #38bdf8;
+  --accent-soft: rgba(56, 189, 248, 0.16);
+  --border-active: rgba(253, 224, 71, 0.45);
+  --ring: #fde047;
+  --glow-primary: 0 0 0 1px rgba(253, 224, 71, 0.35), 0 12px 32px -8px rgba(234, 179, 8, 0.55);
+  --app-wash:
+    radial-gradient(1200px 600px at 80% -10%, rgba(234, 179, 8, 0.12), transparent 60%),
+    radial-gradient(800px 500px at -10% 110%, rgba(56, 189, 248, 0.06), transparent 60%);
+  --ui-text-toned: #cfcec2;
+  --ui-text-highlighted: #fbfaf5;
+  --ui-color-primary-50: #fefce8;
+  --ui-color-primary-100: #fef9c3;
+  --ui-color-primary-200: #fef08a;
+  --ui-color-primary-300: #fde047;
+  --ui-color-primary-400: #facc15;
+  --ui-color-primary-500: #eab308;
+  --ui-color-primary-600: #ca8a04;
+  --ui-color-primary-700: #a16207;
+  --ui-color-primary-800: #854d0e;
+  --ui-color-primary-900: #713f12;
+  --ui-color-primary-950: #422006;
+}
+
+/* OLED Mint: true black, emerald identity, pink punctuation. */
+html[data-theme='oled-mint'] {
+  --fg: #e6f0ea;
+  --fg-muted: #9ab3a6;
+  --fg-dim: #6a8375;
+  --fg-inverse: #06110c;
+  --primary: #10b981;
+  --primary-hover: #34d399;
+  --primary-soft: rgba(16, 185, 129, 0.16);
+  --secondary: #6ee7b7;
+  --accent: #f472b6;
+  --accent-soft: rgba(244, 114, 182, 0.16);
+  --border-active: rgba(110, 231, 183, 0.45);
+  --ring: #6ee7b7;
+  --glow-primary: 0 0 0 1px rgba(110, 231, 183, 0.35), 0 12px 32px -8px rgba(16, 185, 129, 0.55);
+  --ui-text-toned: #bad0c4;
+  --ui-text-highlighted: #f3faf6;
+  --ui-color-primary-50: #ecfdf5;
+  --ui-color-primary-100: #d1fae5;
+  --ui-color-primary-200: #a7f3d0;
+  --ui-color-primary-300: #6ee7b7;
+  --ui-color-primary-400: #34d399;
+  --ui-color-primary-500: #10b981;
+  --ui-color-primary-600: #059669;
+  --ui-color-primary-700: #047857;
+  --ui-color-primary-800: #065f46;
+  --ui-color-primary-900: #064e3b;
+  --ui-color-primary-950: #022c22;
+}
+
+/* OLED Frost: true black, cyan identity, violet punctuation. */
+html[data-theme='oled-frost'] {
+  --fg: #e4f0f4;
+  --fg-muted: #97b0b9;
+  --fg-dim: #678089;
+  --fg-inverse: #06131a;
+  --primary: #06b6d4;
+  --primary-hover: #22d3ee;
+  --primary-soft: rgba(6, 182, 212, 0.16);
+  --secondary: #67e8f9;
+  --accent: #a78bfa;
+  --accent-soft: rgba(167, 139, 250, 0.16);
+  --border-active: rgba(103, 232, 249, 0.45);
+  --ring: #67e8f9;
+  --glow-primary: 0 0 0 1px rgba(103, 232, 249, 0.35), 0 12px 32px -8px rgba(6, 182, 212, 0.55);
+  --ui-text-toned: #b8ccd4;
+  --ui-text-highlighted: #f2f9fb;
+  --ui-color-primary-50: #ecfeff;
+  --ui-color-primary-100: #cffafe;
+  --ui-color-primary-200: #a5f3fc;
+  --ui-color-primary-300: #67e8f9;
+  --ui-color-primary-400: #22d3ee;
+  --ui-color-primary-500: #06b6d4;
+  --ui-color-primary-600: #0891b2;
+  --ui-color-primary-700: #0e7490;
+  --ui-color-primary-800: #155e75;
+  --ui-color-primary-900: #164e63;
+  --ui-color-primary-950: #083344;
 }
 
 /* Motion off: user setting or OS preference. Transitions collapse to instant. */

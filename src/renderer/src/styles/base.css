@@ -70,7 +70,7 @@ img {
 }
 
 ::selection {
-  background: rgba(124, 58, 237, 0.5);
+  background: color-mix(in srgb, var(--primary) 50%, transparent);
 }
 
 /* Focus rings: visible for keyboard, silent for the mouse. */
