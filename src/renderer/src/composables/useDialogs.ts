@@ -1,5 +1,15 @@
 import { ref } from 'vue'
 
+/** A third footer button beside Cancel and the confirm button. */
+interface ConfirmAction {
+  label: string
+  icon?: string
+  danger?: boolean
+}
+
+/** What the confirm dialog was closed with. */
+export type ConfirmChoice = 'confirm' | 'alt' | 'cancel'
+
 interface ConfirmOptions {
   title: string
   message: string
@@ -8,6 +18,7 @@ interface ConfirmOptions {
   detailIcon?: string
   confirmLabel?: string
   danger?: boolean
+  alt?: ConfirmAction
 }
 
 interface PromptOptions {
@@ -19,7 +30,7 @@ interface PromptOptions {
 
 interface ConfirmState extends ConfirmOptions {
   kind: 'confirm'
-  resolve: (ok: boolean) => void
+  resolve: (choice: ConfirmChoice) => void
 }
 interface PromptState extends PromptOptions {
   kind: 'prompt'
@@ -28,10 +39,19 @@ interface PromptState extends PromptOptions {
 
 export const dialog = ref<ConfirmState | PromptState | null>(null)
 
-export function confirm(opts: ConfirmOptions): Promise<boolean> {
+function openConfirm(opts: ConfirmOptions): Promise<ConfirmChoice> {
   return new Promise((resolve) => {
     dialog.value = { kind: 'confirm', ...opts, resolve }
   })
+}
+
+export function confirm(opts: ConfirmOptions): Promise<boolean> {
+  return openConfirm(opts).then((choice) => choice === 'confirm')
+}
+
+/** Three-way confirm: the primary action, the `alt` action, or cancel. */
+export function confirmWithAlt(opts: ConfirmOptions & { alt: ConfirmAction }): Promise<ConfirmChoice> {
+  return openConfirm(opts)
 }
 
 export function prompt(opts: PromptOptions): Promise<string | null> {
@@ -44,6 +64,6 @@ export function closeDialog(): void {
   const d = dialog.value
   dialog.value = null
   if (!d) return
-  if (d.kind === 'confirm') d.resolve(false)
+  if (d.kind === 'confirm') d.resolve('cancel')
   else d.resolve(null)
 }

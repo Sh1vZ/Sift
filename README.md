@@ -7,7 +7,7 @@ A local-first clip library for NVIDIA ShadowPlay (and any other recorder) — El
 - **Watch folders.** New recordings appear seconds after they finish writing.
 - **Previews.** Poster frames plus hover-to-scrub strips, rendered once by a bundled ffmpeg at below-normal CPU priority and cached in `%APPDATA%\sift\thumbs`.
 - **Player.** Custom controls, keyboard shortcuts, prev/next through the grid, autoplay-next, loop, speed, fullscreen.
-- **Manage.** A details pane beside the video carries the file's video and file figures, its location, and the actions — show in Explorer, copy path, rename, delete (to Recycle Bin). The same actions are on every card's right-click menu.
+- **Manage.** A details pane beside the video carries the file's video and file figures, its location, and the actions — show in Explorer, copy path, rename, delete (to the Recycle Bin, or permanently from the confirm dialog). The same actions are on every card's right-click menu.
 - **Trim & export.** Press `E` in the player to drop in/out handles on the timeline, optionally mute, name the clip and export. Exports are an ffmpeg stream copy (seconds, original quality, the start snaps to the previous keyframe) into `Videos\Sift Clips\<Game>\` — the recording is never touched. The folder is changeable under Settings → Clips.
 - **Clips.** Everything you exported, grouped by game, with in-flight exports shown as progress cards. Each clip links back to the recording it was cut from.
 

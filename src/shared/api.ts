@@ -33,7 +33,8 @@ export interface Api {
   }
   clips: {
     rename(id: string, name: string): Promise<ActionResult & { clip?: Clip }>
-    delete(id: string): Promise<ActionResult>
+    /** Moves the file to the Recycle Bin; `permanent` erases it from disk instead. */
+    delete(id: string, permanent?: boolean): Promise<ActionResult>
     reveal(id: string): Promise<ActionResult>
     /** Puts the clip's absolute path on the system clipboard. */
     copyPath(id: string): Promise<ActionResult>

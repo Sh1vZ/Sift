@@ -34,7 +34,7 @@ import {
 } from '@/composables/useEditor'
 import { fadeOut, flipFrom, flipTo } from '@/composables/useMotion'
 import { activeTheme } from '@/composables/useTheme'
-import { confirm, dialog, prompt } from '@/composables/useDialogs'
+import { confirmWithAlt, dialog, prompt } from '@/composables/useDialogs'
 import { toast } from '@/composables/useToasts'
 import {
   clamp,
@@ -347,20 +347,21 @@ async function rename(): Promise<void> {
 
 async function remove(): Promise<void> {
   const c = clip.value
-  const ok = await confirm({
+  const choice = await confirmWithAlt({
     title: 'Delete this clip?',
-    message: 'It goes to the Recycle Bin, so you can still restore it from there.',
+    message: 'It goes to the Recycle Bin, so you can still restore it from there. Deleting permanently erases the file from disk right away.',
     detail: c.name + c.ext,
     detailIcon: 'i-lucide-file-video',
     confirmLabel: 'Delete',
-    danger: true
+    danger: true,
+    alt: { label: 'Delete permanently', danger: true }
   })
-  if (!ok) return
+  if (choice === 'cancel') return
   exitEdit()
   const target = neighbor()
   if (target) current.value = target
   else closePlayer()
-  await deleteClip(c)
+  await deleteClip(c, choice === 'alt')
 }
 
 // ------------------------------------------------------------- keyboard

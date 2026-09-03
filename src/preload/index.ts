@@ -18,7 +18,7 @@ const api: Api = {
   },
   clips: {
     rename: (id, name) => ipcRenderer.invoke('clip:rename', id, name),
-    delete: (id) => ipcRenderer.invoke('clip:delete', id),
+    delete: (id, permanent) => ipcRenderer.invoke('clip:delete', id, permanent === true),
     reveal: (id) => ipcRenderer.invoke('clip:reveal', id),
     copyPath: (id) => ipcRenderer.invoke('clip:copy-path', id),
     export: (req) => ipcRenderer.invoke('clip:export', req)

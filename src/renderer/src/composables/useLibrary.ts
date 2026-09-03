@@ -347,15 +347,15 @@ export async function renameClip(clip: Clip, name: string): Promise<Clip | null>
   return res.clip
 }
 
-export async function deleteClip(clip: Clip): Promise<boolean> {
-  const res = await api.clips.delete(clip.id)
+export async function deleteClip(clip: Clip, permanent = false): Promise<boolean> {
+  const res = await api.clips.delete(clip.id, permanent)
   if (!res.ok) {
     toast('error', 'Delete failed', res.error)
     return false
   }
   clipsById.delete(clip.id)
   version.value++
-  toast('success', 'Moved to Recycle Bin', clip.name + clip.ext)
+  toast('success', permanent ? 'Deleted permanently' : 'Moved to Recycle Bin', clip.name + clip.ext)
   return true
 }
 

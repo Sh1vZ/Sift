@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { closeDialog, dialog } from '@/composables/useDialogs'
+import { closeDialog, dialog, type ConfirmChoice } from '@/composables/useDialogs'
 
 const value = ref('')
 const open = computed({
@@ -13,6 +13,7 @@ const open = computed({
 const isPrompt = computed(() => dialog.value?.kind === 'prompt')
 const danger = computed(() => dialog.value?.kind === 'confirm' && dialog.value.danger)
 const detail = computed(() => (dialog.value?.kind === 'confirm' ? dialog.value.detail : undefined))
+const alt = computed(() => (dialog.value?.kind === 'confirm' ? dialog.value.alt : undefined))
 const detailIcon = computed(() =>
   dialog.value?.kind === 'confirm' ? (dialog.value.detailIcon ?? 'i-lucide-file') : 'i-lucide-file'
 )
@@ -22,11 +23,11 @@ watch(dialog, (d) => {
   value.value = d?.kind === 'prompt' ? d.value : ''
 })
 
-function submit(): void {
+function submit(choice: ConfirmChoice = 'confirm'): void {
   const d = dialog.value
   if (!d || !canSubmit.value) return
   dialog.value = null
-  if (d.kind === 'confirm') d.resolve(true)
+  if (d.kind === 'confirm') d.resolve(choice)
   else d.resolve(value.value)
 }
 
@@ -51,15 +52,15 @@ watch(open, (v) => {
     :title="dialog?.title"
     :description="dialog?.kind === 'confirm' ? dialog.message : undefined"
     :ui="{
-      content: 'max-w-md',
+      content: alt ? 'max-w-lg' : 'max-w-md',
       header: 'pe-12 sm:pe-12',
       title: 'font-heading text-base',
-      footer: 'justify-end'
+      footer: 'flex-nowrap justify-end gap-2'
     }"
   >
     <template v-if="isPrompt || detail" #body>
       <UFormField v-if="isPrompt" :label="dialog?.kind === 'prompt' ? dialog.label : ''">
-        <UInput v-model="value" class="w-full" size="lg" autofocus spellcheck="false" @keydown.enter.prevent="submit" />
+        <UInput v-model="value" class="w-full" size="lg" autofocus spellcheck="false" @keydown.enter.prevent="submit()" />
       </UFormField>
       <p v-else class="detail">
         <UIcon :name="detailIcon" class="detail-icon" />
@@ -67,13 +68,29 @@ watch(open, (v) => {
       </p>
     </template>
     <template #footer>
-      <UButton label="Cancel" color="neutral" variant="ghost" @click="closeDialog" />
       <UButton
+        label="Cancel"
+        :class="alt ? 'me-auto shrink-0' : 'shrink-0'"
+        color="neutral"
+        variant="ghost"
+        @click="closeDialog"
+      />
+      <UButton
+        v-if="alt"
+        class="shrink-0"
+        :label="alt.label"
+        :color="alt.danger ? 'error' : 'neutral'"
+        variant="subtle"
+        :icon="alt.icon"
+        @click="submit('alt')"
+      />
+      <UButton
+        class="shrink-0"
         :label="dialog?.confirmLabel ?? 'OK'"
         :color="danger ? 'error' : 'primary'"
         :icon="danger ? 'i-lucide-trash-2' : undefined"
         :disabled="!canSubmit"
-        @click="submit"
+        @click="submit()"
       />
     </template>
   </UModal>

@@ -387,11 +387,13 @@ export class Library {
     return { ok: true, clip: next }
   }
 
-  async deleteClip(id: string): Promise<ActionResult> {
+  /** Recycle Bin by default; `permanent` erases the file from disk with no way back. */
+  async deleteClip(id: string, permanent = false): Promise<ActionResult> {
     const clip = this.store.data.clips[id]
     if (!clip) return { ok: false, error: 'Clip not found.' }
     try {
-      await shell.trashItem(clip.path)
+      if (permanent) await unlink(clip.path)
+      else await shell.trashItem(clip.path)
     } catch (err) {
       return { ok: false, error: (err as Error).message }
     }

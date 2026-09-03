@@ -17,7 +17,7 @@ import {
 import { cancelExport, dismissExport } from '@/composables/useExports'
 import { staggerIn, type Rect } from '@/composables/useMotion'
 import { openClip, openSource } from '@/composables/usePlayer'
-import { confirm, prompt } from '@/composables/useDialogs'
+import { confirmWithAlt, prompt } from '@/composables/useDialogs'
 import { toast } from '@/composables/useToasts'
 
 const props = withDefaults(
@@ -75,15 +75,16 @@ async function rename(clip: Clip): Promise<void> {
 }
 
 async function remove(clip: Clip): Promise<void> {
-  const ok = await confirm({
+  const choice = await confirmWithAlt({
     title: 'Delete this clip?',
-    message: 'It goes to the Recycle Bin, so you can still restore it from there.',
+    message: 'It goes to the Recycle Bin, so you can still restore it from there. Deleting permanently erases the file from disk right away.',
     detail: clip.name + clip.ext,
     detailIcon: 'i-lucide-file-video',
     confirmLabel: 'Delete',
-    danger: true
+    danger: true,
+    alt: { label: 'Delete permanently', danger: true }
   })
-  if (ok) await deleteClip(clip)
+  if (choice !== 'cancel') await deleteClip(clip, choice === 'alt')
 }
 
 function showSource(clip: Clip): void {
