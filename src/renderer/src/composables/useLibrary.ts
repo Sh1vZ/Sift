@@ -260,3 +260,11 @@ export async function deleteClip(clip: Clip): Promise<boolean> {
 export function revealClip(clip: Clip): void {
   void api.clips.reveal(clip.id)
 }
+
+export async function copyClipPath(clip: Clip): Promise<void> {
+  // The main process owns the clipboard: the renderer only knows the path it
+  // was handed, and this keeps the write on the same side as the file itself.
+  const res = await api.clips.copyPath(clip.id)
+  if (res.ok) toast('success', 'Path copied', clip.path)
+  else toast('error', 'Could not copy path', res.error)
+}

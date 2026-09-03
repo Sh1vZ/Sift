@@ -1,4 +1,4 @@
-import { app, shell } from 'electron'
+import { app, clipboard, shell } from 'electron'
 import { existsSync, type Stats } from 'node:fs'
 import { rename as fsRename, stat } from 'node:fs/promises'
 import { basename, dirname, extname, join, normalize } from 'node:path'
@@ -265,6 +265,13 @@ export class Library {
     const clip = this.store.data.clips[id]
     if (!clip) return { ok: false, error: 'Clip not found.' }
     shell.showItemInFolder(clip.path)
+    return { ok: true }
+  }
+
+  copyPath(id: string): ActionResult {
+    const clip = this.store.data.clips[id]
+    if (!clip) return { ok: false, error: 'Clip not found.' }
+    clipboard.writeText(clip.path)
     return { ok: true }
   }
 

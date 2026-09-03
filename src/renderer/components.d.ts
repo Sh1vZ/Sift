@@ -29,6 +29,7 @@ declare module 'vue' {
     LibraryView: typeof import('./src/components/LibraryView.vue')['default']
     Magnet: typeof import('./src/components/bits/Magnet.vue')['default']
     PlaybackPane: typeof import('./src/components/settings/PlaybackPane.vue')['default']
+    PlayerDetails: typeof import('./src/components/PlayerDetails.vue')['default']
     PlayerOverlay: typeof import('./src/components/PlayerOverlay.vue')['default']
     SettingsPanel: typeof import('./src/components/settings/SettingsPanel.vue')['default']
     SettingsRow: typeof import('./src/components/settings/SettingsRow.vue')['default']

@@ -34,6 +34,7 @@ export function registerIpc(library: Library, getWindow: () => BrowserWindow | n
   ipcMain.handle('clip:rename', (_e, id, name) => library.renameClip(str(id), str(name)))
   ipcMain.handle('clip:delete', (_e, id) => library.deleteClip(str(id)))
   ipcMain.handle('clip:reveal', (_e, id) => library.reveal(str(id)))
+  ipcMain.handle('clip:copy-path', (_e, id) => library.copyPath(str(id)))
 
   ipcMain.handle('window:minimize', () => getWindow()?.minimize())
   ipcMain.handle('window:toggle-maximize', () => {

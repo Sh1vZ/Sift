@@ -16,7 +16,8 @@ const api: Api = {
   clips: {
     rename: (id, name) => ipcRenderer.invoke('clip:rename', id, name),
     delete: (id) => ipcRenderer.invoke('clip:delete', id),
-    reveal: (id) => ipcRenderer.invoke('clip:reveal', id)
+    reveal: (id) => ipcRenderer.invoke('clip:reveal', id),
+    copyPath: (id) => ipcRenderer.invoke('clip:copy-path', id)
   },
   window: {
     minimize: () => void ipcRenderer.invoke('window:minimize'),

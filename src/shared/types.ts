@@ -73,6 +73,8 @@ export interface Settings {
   volume: number
   muted: boolean
   gridSize: GridSize
+  /** Whether the player opens with its details pane showing. */
+  detailsPane: boolean
   sort: SortBy
   groupBy: GroupBy
   theme: ThemeId
@@ -179,6 +181,7 @@ export const DEFAULT_SETTINGS: Settings = {
   volume: 0.8,
   muted: false,
   gridSize: 'large',
+  detailsPane: true,
   sort: 'newest',
   groupBy: 'date',
   theme: 'sift',

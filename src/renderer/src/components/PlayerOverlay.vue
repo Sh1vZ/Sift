@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import ElasticSlider from './bits/ElasticSlider.vue'
+import PlayerDetails from './PlayerDetails.vue'
 import { deleteClip, renameClip, revealClip, settings, updateSettings } from '@/composables/useLibrary'
 import {
   closePlayer,
@@ -59,6 +60,7 @@ const controls = ref(true)
 const seeking = ref(false)
 const hoverPct = ref<number | null>(null)
 const closing = ref(false)
+const details = ref(settings.value.detailsPane)
 const flash = ref<{ icon: string; key: number } | null>(null)
 const stageSize = ref({ width: 0, height: 0 })
 
@@ -240,6 +242,11 @@ function onSeekLeave(): void {
 
 // ------------------------------------------------------------- actions
 
+function toggleDetails(): void {
+  details.value = !details.value
+  void updateSettings({ detailsPane: details.value })
+}
+
 function close(): void {
   if (closing.value) return
   closing.value = true
@@ -317,6 +324,9 @@ function onKey(e: KeyboardEvent): void {
     case 'f':
       void toggleFullscreen()
       break
+    case 'i':
+      toggleDetails()
+      break
     case 'n':
       nextClip()
       break
@@ -381,7 +391,12 @@ onBeforeUnmount(() => {
 <template>
   <div
     class="player"
-    :class="{ 'is-fullscreen': fullscreen, 'no-cursor': !controls && playing, 'controls-hidden': !controls }"
+    :class="{
+      'is-fullscreen': fullscreen,
+      'with-details': details && !fullscreen,
+      'no-cursor': !controls && playing,
+      'controls-hidden': !controls
+    }"
     @mousemove="poke"
     @mouseleave="controls = true"
   >
@@ -394,14 +409,17 @@ onBeforeUnmount(() => {
         <p class="truncate">{{ meta }}</p>
       </div>
       <div class="actions">
-        <UTooltip text="Show in Explorer">
-          <UButton icon="i-lucide-folder-open" color="neutral" variant="ghost" square size="lg" aria-label="Show in Explorer" @click="revealClip(clip)" />
-        </UTooltip>
-        <UTooltip text="Rename">
-          <UButton icon="i-lucide-pencil" color="neutral" variant="ghost" square size="lg" aria-label="Rename clip" @click="rename" />
-        </UTooltip>
-        <UTooltip text="Delete">
-          <UButton class="danger" icon="i-lucide-trash-2" color="error" variant="ghost" square size="lg" aria-label="Delete clip" @click="remove" />
+        <UTooltip :text="details ? 'Hide details' : 'Details'" :kbds="['I']">
+          <UButton
+            icon="i-lucide-panel-right"
+            :color="details ? 'primary' : 'neutral'"
+            :variant="details ? 'soft' : 'ghost'"
+            square
+            size="lg"
+            aria-label="Toggle details pane"
+            :aria-pressed="details"
+            @click="toggleDetails"
+          />
         </UTooltip>
       </div>
     </header>
@@ -494,6 +512,16 @@ onBeforeUnmount(() => {
         @click.stop="nextClip"
       />
     </div>
+
+    <Transition name="pane">
+      <PlayerDetails
+        v-if="details && !fullscreen"
+        :clip="clip"
+        @close="toggleDetails"
+        @rename="rename"
+        @remove="remove"
+      />
+    </Transition>
 
     <div class="controls" @click.stop>
       <div
@@ -592,6 +620,24 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   background: rgba(7, 7, 18, 0.97);
+  /* The overlay covers the frameless title bar, whose drag strip would
+     otherwise swallow every click in the top 40px - the back arrow and the
+     details toggle both sit inside it. */
+  -webkit-app-region: no-drag;
+  /* One width, one switch: everything that has to make room for the details
+     pane reads --pane-w, which is 0 whenever the pane is not showing. */
+  --details-w: 340px;
+  --pane-w: 0px;
+}
+.player.with-details {
+  --pane-w: var(--details-w);
+}
+/* Near the 980px minimum window the pane gives width back so the video keeps
+   the larger share of the screen. */
+@media (max-width: 1240px) {
+  .player {
+    --details-w: 296px;
+  }
 }
 .player.no-cursor {
   cursor: none;
@@ -600,11 +646,12 @@ onBeforeUnmount(() => {
 .controls {
   position: absolute;
   left: 0;
-  right: 0;
+  right: var(--pane-w);
   z-index: 2;
   transition:
     opacity var(--dur) var(--ease-out),
-    transform var(--dur) var(--ease-out);
+    transform var(--dur) var(--ease-out),
+    right var(--dur) var(--ease-out);
 }
 .top {
   top: 0;
@@ -645,9 +692,17 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: var(--s-1);
 }
-/* Hold the destructive action off the pair beside it so it is never a mis-click. */
-.actions .danger {
-  margin-left: var(--s-2);
+
+.pane-enter-active,
+.pane-leave-active {
+  transition:
+    transform var(--dur) var(--ease-out),
+    opacity var(--dur) var(--ease-out);
+}
+.pane-enter-from,
+.pane-leave-to {
+  transform: translateX(100%);
+  opacity: 0;
 }
 
 .stage-wrap {
@@ -658,6 +713,7 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   padding: 72px 88px 108px;
+  padding-right: calc(88px + var(--pane-w));
   transition: padding var(--dur) var(--ease-out);
 }
 .is-fullscreen .stage-wrap {
@@ -759,7 +815,8 @@ onBeforeUnmount(() => {
   transition:
     background var(--dur-fast) var(--ease-out),
     transform var(--dur) var(--ease-spring),
-    opacity var(--dur) var(--ease-out);
+    opacity var(--dur) var(--ease-out),
+    right var(--dur) var(--ease-out);
 }
 .arrow:hover {
   background: var(--primary);
@@ -770,7 +827,7 @@ onBeforeUnmount(() => {
   left: 22px;
 }
 .arrow.right {
-  right: 22px;
+  right: calc(22px + var(--pane-w));
 }
 .controls-hidden .arrow {
   opacity: 0;

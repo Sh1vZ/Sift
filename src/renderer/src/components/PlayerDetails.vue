@@ -1,0 +1,301 @@
+<script setup lang="ts">
+import { computed } from 'vue'
+import type { Clip } from '@shared/types'
+import { copyClipPath, revealClip } from '@/composables/useLibrary'
+import { formatBytes, formatDuration, formatFull, formatResolution } from '@/utils/format'
+import { bitrate, formatBitrate, qualityTier } from '@/utils/quality'
+
+const props = defineProps<{ clip: Clip }>()
+defineEmits<{ close: []; rename: []; remove: [] }>()
+
+interface Row {
+  label: string
+  value: string
+  /** Numbers get tabular figures so the column does not jitter between clips. */
+  mono?: boolean
+}
+
+/** ffprobe reports the stream name; these are how people write them. */
+const CODEC_LABELS: Record<string, string> = {
+  h264: 'H.264',
+  avc1: 'H.264',
+  hevc: 'HEVC',
+  h265: 'HEVC',
+  av1: 'AV1',
+  vp9: 'VP9',
+  vp8: 'VP8',
+  mpeg4: 'MPEG-4'
+}
+
+const pending = computed(() => props.clip.probeState === 'pending')
+const failed = computed(() => props.clip.probeState === 'failed')
+const tier = computed(() => qualityTier(props.clip))
+const codec = computed(() => {
+  const c = props.clip.vcodec
+  return c ? (CODEC_LABELS[c] ?? c.toUpperCase()) : ''
+})
+const resolution = computed(() => formatResolution(props.clip.width, props.clip.height, props.clip.fps))
+const folder = computed(() => {
+  const i = Math.max(props.clip.path.lastIndexOf('/'), props.clip.path.lastIndexOf('\\'))
+  return i > 0 ? props.clip.path.slice(0, i) : props.clip.path
+})
+
+const videoRows = computed<Row[]>(() => {
+  const c = props.clip
+  return [
+    { label: 'Duration', value: c.duration ? formatDuration(c.duration) : '', mono: true },
+    { label: 'Dimensions', value: c.width && c.height ? `${c.width} × ${c.height}` : '', mono: true },
+    { label: 'Frame rate', value: c.fps ? `${Math.round(c.fps)} fps` : '', mono: true },
+    { label: 'Codec', value: codec.value },
+    { label: 'Bitrate', value: formatBitrate(bitrate(c)), mono: true },
+    { label: 'Audio', value: c.probeState === 'ok' ? (c.hasAudio ? 'Included' : 'None') : '' }
+  ]
+})
+
+const fileRows = computed<Row[]>(() => {
+  const c = props.clip
+  return [
+    { label: 'Size', value: formatBytes(c.size), mono: true },
+    { label: 'Format', value: c.ext.replace('.', '').toUpperCase() },
+    { label: 'Game', value: c.game },
+    { label: 'Recorded', value: formatFull(c.recordedAtMs) },
+    { label: 'Modified', value: formatFull(c.mtimeMs) }
+  ]
+})
+</script>
+
+<template>
+  <aside class="details" aria-label="Clip details">
+    <header class="head">
+      <h3 class="truncate" :title="clip.title">{{ clip.title }}</h3>
+      <UTooltip text="Hide details" :kbds="['I']">
+        <UButton
+          icon="i-lucide-panel-right-close"
+          color="neutral"
+          variant="ghost"
+          square
+          size="md"
+          aria-label="Hide details"
+          @click="$emit('close')"
+        />
+      </UTooltip>
+    </header>
+
+    <div class="scroll">
+      <p class="filename" :title="clip.name + clip.ext">{{ clip.name + clip.ext }}</p>
+
+      <div class="chips">
+        <UBadge :color="tier.color" variant="soft" size="sm" icon="i-lucide-gauge" :label="tier.label" />
+        <UBadge v-if="resolution" color="neutral" variant="subtle" size="sm" :label="resolution" />
+        <UBadge v-if="codec" color="neutral" variant="subtle" size="sm" :label="codec" />
+      </div>
+
+      <UAlert
+        v-if="failed"
+        class="probe-alert"
+        icon="i-lucide-triangle-alert"
+        color="warning"
+        variant="soft"
+        title="Media info unavailable"
+        description="This file could not be probed, so some values below are missing."
+      />
+
+      <section>
+        <h4>Video</h4>
+        <dl class="rows">
+          <div v-for="row in videoRows" :key="row.label" class="row">
+            <dt>{{ row.label }}</dt>
+            <dd v-if="row.value" :class="{ mono: row.mono }">{{ row.value }}</dd>
+            <USkeleton v-else-if="pending" class="h-3 w-16" />
+            <dd v-else class="empty">—</dd>
+          </div>
+        </dl>
+      </section>
+
+      <section>
+        <h4>File</h4>
+        <dl class="rows">
+          <div v-for="row in fileRows" :key="row.label" class="row">
+            <dt>{{ row.label }}</dt>
+            <dd v-if="row.value" :class="{ mono: row.mono }" :title="row.value">{{ row.value }}</dd>
+            <dd v-else class="empty">—</dd>
+          </div>
+        </dl>
+      </section>
+
+      <section>
+        <h4>Location</h4>
+        <!-- Selectable: a path is something you copy out by hand as often as
+             you copy it with the button below. -->
+        <p class="path" :title="clip.path">{{ folder }}</p>
+      </section>
+    </div>
+
+    <footer class="actions">
+      <UButton
+        icon="i-lucide-folder-open"
+        label="Explorer"
+        color="neutral"
+        variant="subtle"
+        size="md"
+        block
+        @click="revealClip(clip)"
+      />
+      <UButton
+        icon="i-lucide-copy"
+        label="Copy path"
+        color="neutral"
+        variant="subtle"
+        size="md"
+        block
+        @click="copyClipPath(clip)"
+      />
+      <UButton
+        class="wide"
+        icon="i-lucide-pencil"
+        label="Rename"
+        color="neutral"
+        variant="subtle"
+        size="md"
+        block
+        @click="$emit('rename')"
+      />
+      <UButton
+        class="wide danger"
+        icon="i-lucide-trash-2"
+        label="Delete"
+        color="error"
+        variant="subtle"
+        size="md"
+        block
+        @click="$emit('remove')"
+      />
+    </footer>
+  </aside>
+</template>
+
+<style scoped>
+.details {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 3;
+  width: var(--details-w);
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-1);
+  border-left: 1px solid var(--border);
+  box-shadow: -30px 0 60px -40px rgba(0, 0, 0, 0.9);
+  cursor: default;
+}
+.head {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: var(--s-3) var(--s-3) var(--s-3) var(--s-5);
+  border-bottom: 1px solid var(--border);
+}
+.head h3 {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--text-md);
+}
+.scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--s-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-5);
+}
+.filename {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  color: var(--fg-muted);
+  word-break: break-all;
+  user-select: text;
+}
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+}
+.probe-alert {
+  /* Sits between the chips and the tables, so it needs no margin of its own. */
+  width: 100%;
+}
+h4 {
+  margin-bottom: var(--s-2);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+}
+.rows {
+  margin: 0;
+  border-radius: var(--r-md);
+  background: var(--bg-2);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-4);
+  min-height: 34px;
+  padding: var(--s-2) var(--s-3);
+}
+.row + .row {
+  border-top: 1px solid var(--border);
+}
+.row dt {
+  flex: none;
+  font-size: var(--text-sm);
+  color: var(--fg-muted);
+}
+.row dd {
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-sm);
+  color: var(--fg);
+  user-select: text;
+}
+.row dd.empty {
+  color: var(--fg-dim);
+}
+.path {
+  padding: var(--s-3);
+  border-radius: var(--r-md);
+  background: var(--bg-2);
+  box-shadow: inset 0 0 0 1px var(--border);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: 1.6;
+  color: var(--fg-muted);
+  word-break: break-all;
+  user-select: text;
+}
+.actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--s-2);
+  padding: var(--s-4) var(--s-5);
+  border-top: 1px solid var(--border);
+  background: var(--bg-1);
+}
+.actions .wide {
+  grid-column: 1 / -1;
+}
+/* The destructive action ends the list and keeps its distance, so it is never
+   the button you hit reaching for Rename. */
+.actions .danger {
+  margin-top: var(--s-2);
+}
+</style>

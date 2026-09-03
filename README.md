@@ -7,7 +7,7 @@ A local-first clip library for NVIDIA ShadowPlay (and any other recorder) — El
 - **Watch folders.** New recordings appear seconds after they finish writing.
 - **Previews.** Poster frames plus hover-to-scrub strips, rendered once by a bundled ffmpeg at below-normal CPU priority and cached in `%APPDATA%\sift\thumbs`.
 - **Player.** Custom controls, keyboard shortcuts, prev/next through the grid, autoplay-next, loop, speed, fullscreen.
-- **Manage.** Rename or delete (to Recycle Bin) from the grid or the player; show in Explorer.
+- **Manage.** A details pane beside the video carries the file's video and file figures, its location, and the actions — show in Explorer, copy path, rename, delete (to Recycle Bin). The same actions are on every card's right-click menu.
 
 ## Run
 
@@ -46,6 +46,7 @@ Output lands in `dist/`. `npm run build:unpack` produces an unpacked folder for 
 | 0–9 | Jump to 0–90 % |
 | N / P | Next / previous clip |
 | F | Fullscreen · Esc back |
+| I | Show / hide the details pane |
 
 ## Layout
 
