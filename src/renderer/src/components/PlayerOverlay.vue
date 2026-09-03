@@ -683,7 +683,8 @@ onBeforeUnmount(() => {
           :in-sec="inSec"
           :out-sec="outSec"
           :time="time"
-          :buffered="buffered"
+          :sprite="clip.sprite ? api.thumbUrl(clip.sprite) : ''"
+          :frames="clip.spriteFrames"
           @update:in="setIn"
           @update:out="setOut"
           @seek="seekTo"
@@ -890,7 +891,7 @@ onBeforeUnmount(() => {
   --pane-w: var(--details-w);
 }
 .player.is-editing {
-  --controls-h: 164px;
+  --controls-h: 236px;
 }
 /* Near the 980px minimum window the pane gives width back so the video keeps
    the larger share of the screen. */
@@ -899,7 +900,7 @@ onBeforeUnmount(() => {
     --details-w: 296px;
   }
   .player.is-editing {
-    --controls-h: 210px;
+    --controls-h: 282px;
   }
 }
 .player.no-cursor {

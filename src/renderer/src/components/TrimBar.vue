@@ -1,22 +1,29 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { clamp, formatTimecode, fractionAcross } from '@/utils/format'
+import { clamp, formatDuration, formatTimecode, fractionAcross } from '@/utils/format'
 
 /**
- * The player's seek bar in edit mode: the same track, plus in/out handles
- * that shade out what the export will drop. Dragging a handle scrubs the
- * video to it so you see the exact frame you are cutting on.
+ * The player's timeline in edit mode: a ruler with timecodes over a filmstrip
+ * of the clip, bracket handles at the in/out points, and a playhead running
+ * through both. The filmstrip is the hover-scrub sprite the indexer already
+ * rendered, so no extra ffmpeg work happens when you start trimming.
  */
 const props = defineProps<{
   duration: number
   inSec: number
   outSec: number
   time: number
-  buffered: number
+  /** `clip://thumb/...` URL of the sprite strip; empty when previews are off or still rendering. */
+  sprite: string
+  frames: number
 }>()
 const emit = defineEmits<{ 'update:in': [seconds: number]; 'update:out': [seconds: number]; seek: [seconds: number] }>()
 
 type Target = 'in' | 'out' | 'head'
+
+/** Labelled ticks across the ruler, and unlabelled ones between each pair. */
+const MAJORS = 10
+const MINORS = 4
 
 const track = ref<HTMLElement | null>(null)
 const dragging = ref<Target | null>(null)
@@ -26,7 +33,30 @@ const pct = (s: number): number => (props.duration ? (clamp(s, 0, props.duration
 const inPct = computed(() => pct(props.inSec))
 const outPct = computed(() => pct(props.outSec))
 const headPct = computed(() => pct(props.time))
-const bufferedPct = computed(() => pct(props.buffered))
+
+const ticks = computed(() => {
+  const out: Array<{ pct: number; label: string | null }> = []
+  const steps = (MAJORS - 1) * (MINORS + 1)
+  for (let i = 0; i <= steps; i++) {
+    const major = i % (MINORS + 1) === 0
+    const p = (i / steps) * 100
+    out.push({ pct: p, label: major ? formatDuration((props.duration * i) / steps) : null })
+  }
+  return out
+})
+
+/** One cell per sprite frame; each shows its slice of the strip, cropped to the cell. */
+const cells = computed(() => {
+  const n = Math.max(1, props.frames)
+  return Array.from({ length: n }, (_, i) => ({
+    key: i,
+    style: {
+      backgroundImage: `url("${props.sprite}")`,
+      backgroundSize: `${n * 100}% 100%`,
+      backgroundPosition: n > 1 ? `${(i / (n - 1)) * 100}% 0` : '0 0'
+    }
+  }))
+})
 
 function secondsAt(e: PointerEvent): number {
   return track.value ? fractionAcross(track.value, e.clientX) * props.duration : 0
@@ -61,7 +91,6 @@ function onUp(): void {
 
 function onLeave(): void {
   hoverPct.value = null
-  if (!dragging.value) return
 }
 
 /** Focused handle: arrows nudge by a second, a tenth with Shift. Stops here so the player's keys stay out of it. */
@@ -103,7 +132,7 @@ const tipPct = computed(() => {
 
 <template>
   <div
-    class="trim"
+    class="timeline"
     :class="{ 'is-dragging': dragging }"
     role="group"
     aria-label="Trim range"
@@ -112,136 +141,226 @@ const tipPct = computed(() => {
     @pointercancel="onUp"
     @pointerleave="onLeave"
   >
-    <div ref="track" class="track" @pointerdown="onTrackDown">
-      <div class="buffered" :style="{ width: `${bufferedPct}%` }" />
-      <div class="dim" :style="{ left: 0, width: `${inPct}%` }" />
-      <div class="dim" :style="{ left: `${outPct}%`, right: 0 }" />
-      <div class="selection" :style="{ left: `${inPct}%`, width: `${Math.max(0, outPct - inPct)}%` }" />
-      <div class="playhead" :style="{ left: `${headPct}%` }" />
-
-      <div
-        class="handle in"
-        :style="{ left: `${inPct}%` }"
-        role="slider"
-        tabindex="0"
-        aria-label="Start of clip"
-        :aria-valuemin="0"
-        :aria-valuemax="Math.round(duration * 10) / 10"
-        :aria-valuenow="Math.round(inSec * 10) / 10"
-        :aria-valuetext="formatTimecode(inSec)"
-        @pointerdown="onHandleDown('in', $event)"
-        @keydown="onHandleKey('in', $event)"
-      >
-        <span class="grip" aria-hidden="true" />
+    <div class="inner">
+      <div class="ruler" aria-hidden="true">
+        <span
+          v-for="t in ticks"
+          :key="t.pct"
+          class="tick"
+          :class="{ major: t.label !== null }"
+          :style="{ left: `${t.pct}%` }"
+        >
+          <span v-if="t.label !== null" class="label mono" :class="{ first: t.pct === 0, last: t.pct === 100 }">{{ t.label }}</span>
+        </span>
       </div>
-      <div
-        class="handle out"
-        :style="{ left: `${outPct}%` }"
-        role="slider"
-        tabindex="0"
-        aria-label="End of clip"
-        :aria-valuemin="0"
-        :aria-valuemax="Math.round(duration * 10) / 10"
-        :aria-valuenow="Math.round(outSec * 10) / 10"
-        :aria-valuetext="formatTimecode(outSec)"
-        @pointerdown="onHandleDown('out', $event)"
-        @keydown="onHandleKey('out', $event)"
-      >
-        <span class="grip" aria-hidden="true" />
-      </div>
-    </div>
 
-    <div v-if="tipTime !== null" class="tip mono" :style="{ left: `${tipPct}%` }">
-      {{ formatTimecode(tipTime) }}
+      <div ref="track" class="strip" @pointerdown="onTrackDown">
+        <div v-if="sprite" class="film">
+          <span v-for="c in cells" :key="c.key" class="cell" :style="c.style" />
+        </div>
+        <div v-else class="film blank" />
+
+        <div class="dim" :style="{ left: 0, width: `${inPct}%` }" />
+        <div class="dim" :style="{ left: `${outPct}%`, right: 0 }" />
+        <div class="frame" :style="{ left: `${inPct}%`, width: `${Math.max(0, outPct - inPct)}%` }" />
+
+        <div
+          class="handle in"
+          :style="{ left: `${inPct}%` }"
+          role="slider"
+          tabindex="0"
+          aria-label="Start of clip"
+          :aria-valuemin="0"
+          :aria-valuemax="Math.round(duration * 10) / 10"
+          :aria-valuenow="Math.round(inSec * 10) / 10"
+          :aria-valuetext="formatTimecode(inSec)"
+          @pointerdown="onHandleDown('in', $event)"
+          @keydown="onHandleKey('in', $event)"
+        >
+          <span class="grip" aria-hidden="true" />
+        </div>
+        <div
+          class="handle out"
+          :style="{ left: `${outPct}%` }"
+          role="slider"
+          tabindex="0"
+          aria-label="End of clip"
+          :aria-valuemin="0"
+          :aria-valuemax="Math.round(duration * 10) / 10"
+          :aria-valuenow="Math.round(outSec * 10) / 10"
+          :aria-valuetext="formatTimecode(outSec)"
+          @pointerdown="onHandleDown('out', $event)"
+          @keydown="onHandleKey('out', $event)"
+        >
+          <span class="grip" aria-hidden="true" />
+        </div>
+      </div>
+
+      <!-- Runs the full height, ruler included, so the marker sits above the timecodes. -->
+      <div class="playhead" :style="{ left: `${headPct}%` }" aria-hidden="true">
+        <span class="marker" />
+      </div>
+
+      <div v-if="tipTime !== null" class="tip mono" :style="{ left: `${tipPct}%` }">
+        {{ formatTimecode(tipTime) }}
+      </div>
     </div>
   </div>
 </template>
 
 <style scoped>
-.trim {
-  position: relative;
-  height: 28px;
-  display: flex;
-  align-items: center;
+.timeline {
   touch-action: none;
   user-select: none;
+  --strip-h: 56px;
+  --ruler-h: 30px;
+  --head: var(--success);
 }
-.track {
+/* Everything positioned by percentage shares this box, so the ruler, the strip
+   and the playhead agree on where a given second is. */
+.inner {
   position: relative;
-  width: 100%;
-  height: 6px;
-  border-radius: var(--r-full);
-  background: rgba(255, 255, 255, 0.16);
-  cursor: pointer;
+  margin: 0 6px;
 }
-.buffered,
-.dim,
-.selection {
+
+/* ------------------------------------------------------------- ruler */
+.ruler {
+  position: relative;
+  height: var(--ruler-h);
+}
+.tick {
   position: absolute;
-  top: 0;
   bottom: 0;
-  border-radius: var(--r-full);
+  width: 1px;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.28);
 }
-.buffered {
-  left: 0;
-  background: rgba(255, 255, 255, 0.2);
+.tick.major {
+  height: 10px;
+  background: rgba(255, 255, 255, 0.55);
+}
+.label {
+  position: absolute;
+  bottom: 13px;
+  transform: translateX(-50%);
+  font-size: var(--text-xs);
+  color: var(--fg-muted);
+  white-space: nowrap;
+}
+.label.first {
+  transform: none;
+}
+.label.last {
+  transform: translateX(-100%);
+}
+
+/* ------------------------------------------------------------- strip */
+.strip {
+  position: relative;
+  height: var(--strip-h);
+  border-radius: 6px;
+  background: var(--bg-3);
+  cursor: pointer;
+  overflow: visible;
+}
+.film {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  border-radius: 6px;
+  overflow: hidden;
+}
+.film.blank {
+  background:
+    repeating-linear-gradient(90deg, transparent 0 calc(10% - 1px), rgba(255, 255, 255, 0.08) calc(10% - 1px) 10%),
+    var(--bg-3);
+}
+.cell {
+  flex: 1 1 0;
+  min-width: 0;
+  background-repeat: no-repeat;
+  /* Each cell is one sprite frame, cropped by the cell's own width. */
+  background-clip: border-box;
 }
 /* What the export drops: darkened so the kept range reads as the bright part. */
 .dim {
-  background: rgba(7, 7, 18, 0.7);
-}
-.selection {
-  background: linear-gradient(90deg, var(--secondary), var(--primary));
-  box-shadow: 0 0 12px color-mix(in srgb, var(--primary) 55%, transparent);
-}
-.playhead {
   position: absolute;
-  top: -6px;
-  bottom: -6px;
-  width: 2px;
-  margin-left: -1px;
-  border-radius: 1px;
-  background: #fff;
-  box-shadow: 0 0 0 3px color-mix(in srgb, #fff 25%, transparent);
+  top: 0;
+  bottom: 0;
+  background: rgba(7, 7, 18, 0.72);
+  border-radius: 6px;
+  pointer-events: none;
+}
+/* The kept range: a white frame joining the two brackets. */
+.frame {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  box-shadow:
+    inset 0 2px 0 #fff,
+    inset 0 -2px 0 #fff;
   pointer-events: none;
 }
 .handle {
   position: absolute;
-  top: 50%;
-  width: 12px;
-  height: 24px;
-  margin: -12px 0 0 -6px;
+  top: -2px;
+  bottom: -2px;
+  width: 14px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 5px;
-  background: var(--secondary);
-  border: 1px solid color-mix(in srgb, #fff 45%, var(--secondary));
-  box-shadow: var(--shadow-md);
+  background: #fff;
   cursor: ew-resize;
   outline-offset: 2px;
-  transition:
-    transform var(--dur-fast) var(--ease-spring),
-    background var(--dur-fast) var(--ease-out);
+  box-shadow: var(--shadow-md);
+  transition: background var(--dur-fast) var(--ease-out);
+}
+/* Brackets sit just inside the kept range, so the frames between them are the export. */
+.handle.in {
+  border-radius: 7px 0 0 7px;
+}
+.handle.out {
+  margin-left: -14px;
+  border-radius: 0 7px 7px 0;
 }
 .handle:hover,
 .handle:focus-visible,
 .is-dragging .handle {
-  background: var(--primary-hover);
-}
-.handle:hover,
-.handle:focus-visible {
-  transform: scale(1.12);
+  background: var(--secondary);
 }
 .grip {
   width: 2px;
-  height: 10px;
+  height: 16px;
   border-radius: 1px;
-  background: rgba(255, 255, 255, 0.85);
+  background: rgba(7, 7, 18, 0.55);
 }
+
+/* ---------------------------------------------------------- playhead */
+.playhead {
+  position: absolute;
+  top: 2px;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--head);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--head) 70%, transparent);
+  pointer-events: none;
+  z-index: 2;
+}
+.marker {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 10px;
+  height: 12px;
+  margin-left: -5px;
+  border-radius: 3px;
+  background: var(--head);
+}
+
 .tip {
   position: absolute;
-  bottom: 30px;
+  bottom: calc(var(--strip-h) + 8px);
   transform: translateX(-50%);
   padding: 3px 7px;
   border-radius: 5px;
@@ -250,5 +369,6 @@ const tipPct = computed(() => {
   font-size: var(--text-xs);
   pointer-events: none;
   white-space: nowrap;
+  z-index: 3;
 }
 </style>
