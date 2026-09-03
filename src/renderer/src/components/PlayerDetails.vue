@@ -192,7 +192,7 @@ const sourceRows = computed<Row[]>(() => {
         icon="i-lucide-scissors"
         :label="editing ? 'Leave edit mode' : 'Trim & export'"
         :color="editing ? 'neutral' : 'primary'"
-        :variant="editing ? 'subtle' : 'soft'"
+        :variant="editing ? 'subtle' : 'solid'"
         size="md"
         block
         :disabled="!canEdit"

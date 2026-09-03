@@ -55,7 +55,12 @@ export default defineConfig({
             neutral: 'slate'
           },
           button: {
-            slots: { base: 'font-heading font-semibold uppercase tracking-wider cursor-pointer' }
+            slots: { base: 'font-heading font-semibold uppercase tracking-wider cursor-pointer' },
+            // Nuxt UI paints solid primary buttons with `text-inverted`, which the token
+            // bridge maps to the near-black --fg-inverse. Text on the primary colour is
+            // --on-primary; `.on-primary` in base.css applies it (app CSS is unlayered, so
+            // it beats the utility, and nothing depends on Tailwind scanning this file).
+            compoundVariants: [{ color: 'primary', variant: 'solid', class: 'on-primary' }]
           }
         },
         icon: {

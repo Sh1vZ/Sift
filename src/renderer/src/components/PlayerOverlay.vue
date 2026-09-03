@@ -688,49 +688,57 @@ onBeforeUnmount(() => {
     </Transition>
 
     <div class="controls" @click.stop>
-      <Transition name="fade" mode="out-in">
-        <TrimBar
-          v-if="editing"
-          key="trim"
-          :duration="duration"
-          :in-sec="inSec"
-          :out-sec="outSec"
-          :time="time"
-          :sprite="clip.sprite ? api.thumbUrl(clip.sprite) : ''"
-          :frames="clip.spriteFrames"
-          @update:in="setIn"
-          @update:out="setOut"
-          @seek="seekTo"
-        />
-        <div
-          v-else
-          key="seek"
-          ref="seekEl"
-          class="seek"
-          role="slider"
-          aria-label="Seek"
-          :aria-valuemin="0"
-          :aria-valuemax="Math.round(duration)"
-          :aria-valuenow="Math.round(time)"
-          @pointerdown="onSeekDown"
-          @pointermove="onSeekMove"
-          @pointerup="onSeekUp"
-          @pointercancel="onSeekUp"
-          @pointerleave="onSeekLeave"
-        >
-          <div class="track">
-            <div class="buffered" :style="{ width: bufferedPct }" />
-            <div class="played" :style="{ width: playedPct }" />
-            <div class="knob" :style="{ left: playedPct }" />
+      <!-- Both timelines share one box, anchored to the same baseline: its height
+           animates between them while they cross-fade in place, so entering and
+           leaving edit mode reads as one move rather than a swap. -->
+      <div class="timeline-slot">
+        <Transition name="swap">
+          <TrimBar
+            v-if="editing"
+            key="trim"
+            class="layer"
+            :duration="duration"
+            :in-sec="inSec"
+            :out-sec="outSec"
+            :time="time"
+            :sprite="clip.sprite ? api.thumbUrl(clip.sprite) : ''"
+            :frames="clip.spriteFrames"
+            @update:in="setIn"
+            @update:out="setOut"
+            @seek="seekTo"
+          />
+          <div
+            v-else
+            key="seek"
+            ref="seekEl"
+            class="seek layer"
+            role="slider"
+            aria-label="Seek"
+            :aria-valuemin="0"
+            :aria-valuemax="Math.round(duration)"
+            :aria-valuenow="Math.round(time)"
+            @pointerdown="onSeekDown"
+            @pointermove="onSeekMove"
+            @pointerup="onSeekUp"
+            @pointercancel="onSeekUp"
+            @pointerleave="onSeekLeave"
+          >
+            <div class="track">
+              <div class="buffered" :style="{ width: bufferedPct }" />
+              <div class="played" :style="{ width: playedPct }" />
+              <div class="knob" :style="{ left: playedPct }" />
+            </div>
+            <div v-if="hoverPct !== null" class="tip mono" :style="{ left: `${hoverPct * 100}%` }">
+              {{ formatDuration(hoverPct * duration) }}
+            </div>
           </div>
-          <div v-if="hoverPct !== null" class="tip mono" :style="{ left: `${hoverPct * 100}%` }">
-            {{ formatDuration(hoverPct * duration) }}
-          </div>
-        </div>
-      </Transition>
+        </Transition>
+      </div>
 
-      <Transition name="fade">
-        <div v-if="editing" class="edit-row">
+      <!-- Stays mounted and opens by height, so the row grows out of the
+           controls instead of snapping in and shoving everything upward. -->
+      <div class="edit-slot" :class="{ open: editing }" :inert="editing ? undefined : true">
+        <div class="edit-row">
           <div class="range">
             <UTooltip text="Set start to the playhead" :kbds="['[']">
               <UButton
@@ -807,7 +815,7 @@ onBeforeUnmount(() => {
             </UTooltip>
           </div>
         </div>
-      </Transition>
+      </div>
 
       <div class="row">
         <div class="group">
@@ -1111,8 +1119,42 @@ onBeforeUnmount(() => {
   pointer-events: none;
 }
 
-.seek {
+/* One box for both timelines. The layers are pinned to its bottom edge, so the
+   seek bar and the filmstrip's last row sit on the same line and the box simply
+   grows upward into the trim height while the two cross-fade. */
+.timeline-slot {
   position: relative;
+  height: 22px;
+  transition: height var(--dur) var(--ease-out);
+}
+.is-editing .timeline-slot {
+  /* TrimBar's own --ruler-h (36) + --strip-h (56). */
+  height: 92px;
+}
+.layer {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+}
+.swap-enter-active,
+.swap-leave-active {
+  transform-origin: bottom;
+  transition:
+    opacity var(--dur) var(--ease-out),
+    transform var(--dur) var(--ease-out);
+}
+/* The outgoing layer is still on top of the incoming one for a frame or two. */
+.swap-leave-active {
+  pointer-events: none;
+}
+.swap-enter-from,
+.swap-leave-to {
+  opacity: 0;
+  transform: scaleY(0.94);
+}
+
+.seek {
   height: 22px;
   display: flex;
   align-items: center;
@@ -1171,14 +1213,34 @@ onBeforeUnmount(() => {
   pointer-events: none;
 }
 
+/* Opens by row height rather than by mounting, so the controls above it drift
+   up at the same rate the timeline grows. */
+.edit-slot {
+  display: grid;
+  grid-template-rows: 0fr;
+  margin-top: 0;
+  opacity: 0;
+  transition:
+    grid-template-rows var(--dur) var(--ease-out),
+    margin-top var(--dur) var(--ease-out),
+    opacity var(--dur-fast) var(--ease-out);
+}
+.edit-slot.open {
+  grid-template-rows: 1fr;
+  margin-top: var(--s-3);
+  opacity: 1;
+}
+
 /* Edit row: range on the left, the export form on the right; wraps near the
    980px minimum instead of squeezing the name field. */
 .edit-row {
+  /* The clipped grid item: without these the 0fr row cannot collapse. */
+  min-height: 0;
+  overflow: hidden;
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: var(--s-3);
-  margin-top: var(--s-3);
   padding: var(--s-2) var(--s-3);
   border-radius: var(--r-md);
   background: rgba(30, 28, 53, 0.6);

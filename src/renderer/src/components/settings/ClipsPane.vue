@@ -1,7 +1,4 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import SettingsPanel from './SettingsPanel.vue'
-import SettingsRow from './SettingsRow.vue'
 import {
   chooseClipsDir,
   clipsFolder,
@@ -10,6 +7,9 @@ import {
   resetClipsDir,
   revealClipsDir
 } from '@/composables/useLibrary'
+import { computed } from 'vue'
+import SettingsPanel from './SettingsPanel.vue'
+import SettingsRow from './SettingsRow.vue'
 
 const isDefault = computed(
   () => !clipsFolder.value || clipsFolder.value.path.toLowerCase() === defaultClipsDir.value.toLowerCase()
@@ -19,23 +19,6 @@ const summary = computed(() => {
   return n ? `${n} clip${n === 1 ? '' : 's'} exported so far, one sub-folder per game.` : 'Nothing exported yet. The folder is created with your first export.'
 })
 
-const notes = [
-  {
-    icon: 'zap',
-    title: 'Stream copy, no re-encode',
-    text: 'The video and audio are copied out untouched, so an export takes seconds and keeps the original quality.'
-  },
-  {
-    icon: 'scissors',
-    title: 'The start snaps to a keyframe',
-    text: 'A cut can only begin on a keyframe, so a clip may start a fraction of a second before the point you chose. On ShadowPlay recordings that is about half a second at most; the end is exact.'
-  },
-  {
-    icon: 'folder-output',
-    title: 'One sub-folder per game',
-    text: 'Exports land in <clips folder>\\<Game>\\<name>.mp4. Recordings are never modified, moved or renamed.'
-  }
-]
 </script>
 
 <template>
@@ -99,10 +82,6 @@ const notes = [
           </UTooltip>
         </template>
       </SettingsRow>
-    </SettingsPanel>
-
-    <SettingsPanel title="How exporting works" description="What happens when you press Export in the player." flush>
-      <SettingsRow v-for="n in notes" :key="n.title" :icon="n.icon" :title="n.title" :description="n.text" />
     </SettingsPanel>
   </div>
 </template>

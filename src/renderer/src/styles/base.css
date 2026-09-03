@@ -18,6 +18,18 @@ body,
   overflow: hidden;
 }
 
+/*
+ * Nuxt UI teleports modals, menus, tooltips and toasts to <body>, and its theme
+ * gives them no z-index — they paint in DOM order. Without a stacking context
+ * here, any positioned layer inside the app (the player overlay at z-index 50,
+ * the title bar at 20) would out-paint them and swallow the dialogs opened from
+ * the player. Isolating #app keeps every app z-index local to it, so anything
+ * teleported to <body> lands on top.
+ */
+#app {
+  isolation: isolate;
+}
+
 body {
   background: var(--bg-1);
   color: var(--fg);
@@ -124,6 +136,13 @@ img {
 .mono {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
+}
+
+/* Text on the primary colour. Nuxt UI's solid buttons use `text-inverted`,
+   which the token bridge maps to the near-black --fg-inverse; the button config
+   adds this class to solid primary buttons so they read as --on-primary. */
+.on-primary {
+  color: var(--on-primary);
 }
 
 .sr-only {

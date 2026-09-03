@@ -1,9 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import type { Clip, ExportJob, GridSize } from '@shared/types'
-import ClipGrid from './ClipGrid.vue'
-import CountUp from './bits/CountUp.vue'
-import SplitText from './bits/SplitText.vue'
+import { exportJobs, jobsById } from '@/composables/useExports'
 import {
   chooseClipsDir,
   clipSections,
@@ -16,9 +12,13 @@ import {
   updateSettings,
   type Section
 } from '@/composables/useLibrary'
-import { exportJobs, jobsById } from '@/composables/useExports'
 import { motionEnabled } from '@/composables/useMotion'
 import { formatBytes, formatDuration } from '@/utils/format'
+import type { Clip, ExportJob, GridSize } from '@shared/types'
+import { computed } from 'vue'
+import ClipGrid from './ClipGrid.vue'
+import CountUp from './bits/CountUp.vue'
+import SplitText from './bits/SplitText.vue'
 
 const sizeOptions: Array<{ value: GridSize; icon: string; label: string }> = [
   { value: 'large', icon: 'i-lucide-grid-2x2', label: 'Large cards' },
@@ -131,8 +131,7 @@ const resetKey = computed(() => settings.value.gridSize)
           <UButton
             icon="i-lucide-folder-open"
             label="Open folder"
-            color="neutral"
-            variant="subtle"
+            color="primary"
             size="lg"
             :disabled="!clipsFolder?.available"
             @click="revealClipsDir()"
@@ -160,8 +159,11 @@ const resetKey = computed(() => settings.value.gridSize)
       icon="i-lucide-scissors"
       title="No clips yet"
       :description="`Open a recording, press E to trim it, and export. Clips land in ${clipsFolder?.path ?? 'your clips folder'} and show up here, grouped by game.`"
-      :actions="[{ label: 'Browse games', icon: 'i-lucide-gamepad-2', onClick: () => goGames() }]"
-    />
+    >
+      <template #actions>
+        <UButton icon="i-lucide-gamepad-2" label="Browse games" color="primary" size="lg" @click="goGames()" />
+      </template>
+    </UEmpty>
   </section>
 </template>
 
@@ -212,6 +214,9 @@ const resetKey = computed(() => settings.value.gridSize)
 .warn {
   margin: 0 28px var(--s-4);
 }
+/* No colour here: it would cascade into the actions, and Nuxt UI's own text
+   utilities cannot override an inherited colour on a button (see base.css).
+   UEmpty already dims its description on its own. */
 .empty {
   flex: 1;
   display: flex;
@@ -221,6 +226,5 @@ const resetKey = computed(() => settings.value.gridSize)
   gap: 10px;
   padding: 40px;
   text-align: center;
-  color: var(--fg-muted);
 }
 </style>
