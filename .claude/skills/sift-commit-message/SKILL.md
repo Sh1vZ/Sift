@@ -72,6 +72,7 @@ that owns the behaviour. Always provide one — never omit the parentheses.
 - `library` — `lib/library.ts`, the in-memory clip index and event fan-out
 - `scanner` — `lib/scanner.ts` folder walking
 - `media` — `lib/media.ts`, ffprobe/ffmpeg jobs, thumbnails, sprite strips, the job queue
+- `exports` — `lib/exports.ts` and the export chain in `library.ts` (stream-copy trims, the clips folder)
 - `watcher` — `lib/watcher.ts` chokidar watchers
 - `store` — `lib/store.ts` persisted settings and folder list
 - `protocol` — `lib/protocol.ts`, the `clip://` scheme and range streaming
@@ -89,7 +90,10 @@ Use the component, view, or composable that owns the change:
 
 - `app` — `App.vue`, `main.ts`, renderer bootstrap
 - `library-view`, `games`, `folders` — the three top-level screens
-- `player` — `PlayerOverlay.vue` and `usePlayer`
+- `clips` — `ClipsView.vue`, the recordings/exports partition in `useLibrary`, `useExports`
+- `player` — `PlayerOverlay.vue`, `PlayerDetails.vue` and `usePlayer`
+- `editor` — the player's trim/export edit mode: `useEditor.ts`, `TrimBar.vue`
+- `settings` — `SettingsView.vue`, `useSettings.ts` and the panes under `components/settings/`
 - `grid` — `ClipGrid.vue` and `useVirtualGrid`
 - `card` — `ClipCard.vue`
 - `sidebar`, `titlebar` — shared chrome

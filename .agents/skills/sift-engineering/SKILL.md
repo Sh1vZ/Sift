@@ -276,6 +276,12 @@ const props = withDefaults(defineProps<{ name: string; size?: number }>(), { siz
   - `stdio: ['ignore', 'pipe', 'pipe']` with stderr drained (never left to fill a pipe buffer)
 - Concurrency is bounded by `MediaQueue` and defaults to **2** (`Settings.concurrency`). Do not
   add a parallel spawn path outside the queue.
+- The one sanctioned exception is the export chain in `library.ts`: trims are ffmpeg stream
+  copies (disk-bound, seconds long) run **one at a time** through `runLong()` in `lib/media.ts`,
+  which keeps the same spawn contract but replaces the fixed timeout with a stall watchdog
+  (no stdout for 30s) plus a hard cap, and reads `-progress pipe:1` for the progress card.
+  Export planning (args, names, validation) lives in `lib/exports.ts` and is Electron-free so
+  `npm test` covers it.
 - Prefer cheap ffmpeg strategies: sprite strips use keyframe seeks stitched with `hstack`
   rather than decoding whole files. Do not replace one with a full decode.
 - Binaries resolve through `lib/paths.ts`, which must handle both dev and the ASAR-unpacked
@@ -292,6 +298,11 @@ const props = withDefaults(defineProps<{ name: string; size?: number }>(), { siz
 - **Never copy, move, or modify a user's video file** except for the two explicit actions:
   rename (`fs.rename` in place) and delete (`shell.trashItem` → Recycle Bin, never `unlink`).
   Removing a folder from the library must leave the files untouched.
+- Exports are the only files Sift *creates*: they go under the `kind: 'clips'` folder row
+  (`<Videos>\Sift Clips\<Game>\` by default), never next to the source. ffmpeg writes to a
+  `~`-prefixed temp name (invisible to the scanner and watcher) that is renamed into place on
+  success; a failed or cancelled export `unlink`s **that temp file only**. Library-kind scans
+  and watchers skip everything under the clips root, so an export can never appear in a game grid.
 
 ### Lifecycle
 
@@ -462,8 +473,8 @@ SIFT_USER_DATA=./.tmp-profile npm run dev
 - ❌ Do not make the clip `Map` reactive
 - ❌ Do not render the full clip list — the grid is windowed
 - ❌ Do not send per-item IPC messages; join the 150ms batch
-- ❌ Do not spawn ffmpeg outside `MediaQueue`, or at normal priority, or without a timeout
-- ❌ Do not `unlink` a user's file — use `shell.trashItem`
+- ❌ Do not spawn ffmpeg outside `MediaQueue` or the serial export chain, at normal priority, or without a timeout/watchdog
+- ❌ Do not `unlink` a user's file — use `shell.trashItem` (only an export's own `~` temp file may be unlinked)
 - ❌ Do not do blocking or sync I/O on the main process event loop
 - ❌ Do not relax `contextIsolation`, `nodeIntegration`, or `webSecurity`
 - ❌ Do not add a network request, remote font, or CDN asset
