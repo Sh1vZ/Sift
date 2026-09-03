@@ -115,3 +115,21 @@ export function dateBucket(ms: number, now = Date.now()): { key: string; title: 
 export function clamp(n: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, n))
 }
+
+/** Where a pointer sits along an element, 0 at its left edge and 1 at its right. */
+export function fractionAcross(el: HTMLElement, clientX: number): number {
+  const r = el.getBoundingClientRect()
+  return r.width ? clamp((clientX - r.left) / r.width, 0, 1) : 0
+}
+
+/** Timecode with tenths, for trim points where whole seconds are too coarse: `1:07.5`. */
+export function formatTimecode(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds < 0) return '0:00.0'
+  const whole = Math.floor(seconds)
+  const tenths = Math.floor((seconds - whole) * 10)
+  const h = Math.floor(whole / 3600)
+  const m = Math.floor((whole % 3600) / 60)
+  const s = whole % 60
+  const mm = h ? String(m).padStart(2, '0') : String(m)
+  return `${h ? `${h}:` : ''}${mm}:${String(s).padStart(2, '0')}.${tenths}`
+}

@@ -11,15 +11,16 @@ import SplitText from './bits/SplitText.vue'
 import StarBorder from './bits/StarBorder.vue'
 import {
   addFolder,
-  allClips,
   folders,
   games,
   goGames,
   gridGroupBy,
   libraryStats,
+  recordings,
   rescan,
   scan,
   screen,
+  sections,
   selectedGame,
   settings,
   updateSettings,
@@ -32,7 +33,11 @@ import { formatBytes, formatDuration } from '@/utils/format'
 // The WebGL aurora (and its ogl dependency) only loads when the empty state is actually shown.
 const Aurora = defineAsyncComponent(() => import('./bits/Aurora.vue'))
 
-const hasFolders = computed(() => folders.value.length > 0)
+const hasFolders = computed(() => folders.value.some((f) => f.kind === 'library'))
+// Filter/sort/group/size changes restart the grid from the top with a stagger.
+const gridResetKey = computed(
+  () => `${selectedGame.value}|${settings.value.sort}|${settings.value.groupBy}|${settings.value.gridSize}`
+)
 const inGame = computed(() => screen.value === 'game')
 const title = computed(() => (inGame.value ? (selectedGame.value ?? '') : 'Games'))
 
@@ -108,8 +113,8 @@ const sortModel = computed({
           </span>
           <span class="dot">·</span>
           <span>
-            <CountUp v-if="motionEnabled" :to="allClips.length" :duration="0.9" /><template v-else>{{ allClips.length }}</template>
-            clip{{ allClips.length === 1 ? '' : 's' }}
+            <CountUp v-if="motionEnabled" :to="recordings.length" :duration="0.9" /><template v-else>{{ recordings.length }}</template>
+            clip{{ recordings.length === 1 ? '' : 's' }}
           </span>
         </p>
         <p v-else class="stats">Nothing here yet</p>
@@ -163,7 +168,7 @@ const sortModel = computed({
       </div>
     </header>
 
-    <ClipGrid v-if="inGame && visibleClips.length" />
+    <ClipGrid v-if="inGame && visibleClips.length" :sections="sections" :reset-key="gridResetKey" />
 
     <GamesBrowser v-else-if="!inGame && games.length" />
 

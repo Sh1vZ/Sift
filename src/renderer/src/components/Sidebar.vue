@@ -2,7 +2,8 @@
 import { computed } from 'vue'
 import ShinyText from './bits/ShinyText.vue'
 import { motionEnabled } from '@/composables/useMotion'
-import { games, goGames, scan, screen, view } from '@/composables/useLibrary'
+import { exportedClips, games, goClips, goGames, scan, screen, view } from '@/composables/useLibrary'
+import { exportLabel } from '@/composables/useExports'
 import { openSettings, settingsTab } from '@/composables/useSettings'
 
 /**
@@ -25,6 +26,13 @@ const libraryItems = computed<NavItem[]>(() => [
     active: screen.value === 'games' || screen.value === 'game',
     tooltip: { text: `Games · ${games.value.length}` },
     onSelect: () => goGames()
+  },
+  {
+    label: 'Clips',
+    icon: 'i-lucide-scissors',
+    active: screen.value === 'clips',
+    tooltip: { text: `Clips · ${exportedClips.value.length}` },
+    onSelect: () => goClips()
   }
 ])
 
@@ -38,6 +46,7 @@ const footerItems = computed<NavItem[]>(() => [
 ])
 
 const scanLabel = computed(() => {
+  if (exportLabel.value) return exportLabel.value
   if (scan.value.active) return `Scanning ${scan.value.folder} · ${scan.value.found} new`
   if (scan.value.pending) return `Generating previews · ${scan.value.pending} queued`
   return ''

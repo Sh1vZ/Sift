@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { scan, screen, selectedGame } from '@/composables/useLibrary'
+import { exportLabel } from '@/composables/useExports'
 import { activeSection } from '@/composables/useSettings'
 
 const api = window.api
@@ -22,6 +23,9 @@ const crumbs = computed(() => {
     case 'game':
       trail.push('Games', selectedGame.value ?? '')
       break
+    case 'clips':
+      trail.push('Clips')
+      break
     default:
       trail.push('Games')
   }
@@ -29,6 +33,7 @@ const crumbs = computed(() => {
 })
 
 const status = computed(() => {
+  if (exportLabel.value) return exportLabel.value
   if (scan.value.active) return `Scanning ${scan.value.folder}…`
   if (scan.value.pending) return `Generating previews · ${scan.value.pending} left`
   return ''

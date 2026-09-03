@@ -63,7 +63,11 @@ const ICONS: Record<string, string> = {
   package: 'i-lucide-package',
   zap: 'i-lucide-zap',
   memory: 'i-lucide-memory-stick',
-  trending: 'i-lucide-trending-up'
+  trending: 'i-lucide-trending-up',
+  scissors: 'i-lucide-scissors',
+  'folder-output': 'i-lucide-folder-output',
+  download: 'i-lucide-download',
+  link: 'i-lucide-link'
 }
 
 const props = withDefaults(defineProps<{ name: string; size?: number; stroke?: number }>(), {

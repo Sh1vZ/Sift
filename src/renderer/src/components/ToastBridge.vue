@@ -20,7 +20,15 @@ const icon: Record<ToastKind, string> = {
 watch(pending, (list) => {
   if (!list.length) return
   for (const t of drain()) {
-    toaster.add({ title: t.title, description: t.message, color: color[t.kind], icon: icon[t.kind] })
+    toaster.add({
+      title: t.title,
+      description: t.message,
+      color: color[t.kind],
+      icon: icon[t.kind],
+      actions: t.action
+        ? [{ label: t.action.label, color: 'neutral', variant: 'outline', size: 'xs', onClick: t.action.onClick }]
+        : undefined
+    })
   }
 })
 </script>

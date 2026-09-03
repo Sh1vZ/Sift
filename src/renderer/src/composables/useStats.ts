@@ -2,7 +2,7 @@ import { computed, ref } from 'vue'
 import type { AppStats, Clip } from '@shared/types'
 import { formatResolution } from '@/utils/format'
 import { QUALITY_TIERS, qualityTier } from '@/utils/quality'
-import { allClips, folders, games, now } from './useLibrary'
+import { recordings, folders, games, now } from './useLibrary'
 import { toast } from './useToasts'
 
 const api = window.api
@@ -62,7 +62,7 @@ export interface LibraryTotals {
 }
 
 export const libraryTotals = computed<LibraryTotals>(() => {
-  const clips = allClips.value
+  const clips = recordings.value
   const t: LibraryTotals = {
     clips: clips.length,
     games: games.value.length,
@@ -135,7 +135,7 @@ export const topGames = computed<Breakdown[]>(() => {
 
 export const resolutions = computed<Breakdown[]>(() => {
   const rows = new Map<string, { label: string; count: number; bytes: number }>()
-  for (const c of allClips.value) {
+  for (const c of recordings.value) {
     const label = formatResolution(c.width, c.height, 0) || 'Unknown'
     const row = rows.get(label) ?? { label, count: 0, bytes: 0 }
     row.count++
@@ -147,7 +147,7 @@ export const resolutions = computed<Breakdown[]>(() => {
 
 export const codecs = computed<Breakdown[]>(() => {
   const rows = new Map<string, { label: string; count: number; bytes: number }>()
-  for (const c of allClips.value) {
+  for (const c of recordings.value) {
     const label = c.vcodec ? c.vcodec.toUpperCase() : 'Unknown'
     const row = rows.get(label) ?? { label, count: 0, bytes: 0 }
     row.count++
@@ -164,7 +164,7 @@ export const codecs = computed<Breakdown[]>(() => {
  */
 export const bitrateTiers = computed<Breakdown[]>(() => {
   const rows = new Map<string, { label: string; count: number; bytes: number }>()
-  for (const c of allClips.value) {
+  for (const c of recordings.value) {
     const tier = qualityTier(c)
     const row = rows.get(tier.id) ?? { label: tier.label, count: 0, bytes: 0 }
     row.count++
@@ -208,7 +208,7 @@ export const monthlyActivity = computed<MonthBar[]>(() => {
     bars.push(bar)
     index.set(key, bar)
   }
-  for (const c of allClips.value) {
+  for (const c of recordings.value) {
     const d = new Date(c.recordedAtMs)
     const bar = index.get(`${d.getFullYear()}-${d.getMonth()}`)
     if (!bar) continue

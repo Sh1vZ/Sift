@@ -1,23 +1,46 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
-import type { Clip } from '@shared/types'
+import { computed, nextTick, onMounted, ref, toRef, watch } from 'vue'
+import type { Clip, ExportJob } from '@shared/types'
 import ClipCard from './ClipCard.vue'
 import { GRID_PAD_X, useVirtualGrid } from '@/composables/useVirtualGrid'
-import { deleteClip, renameClip, revealClip, sections, selectedGame, settings } from '@/composables/useLibrary'
+import {
+  copyClipPath,
+  deleteClip,
+  games,
+  getClip,
+  openGame,
+  renameClip,
+  revealClip,
+  settings,
+  type Section
+} from '@/composables/useLibrary'
+import { cancelExport, dismissExport } from '@/composables/useExports'
 import { staggerIn, type Rect } from '@/composables/useMotion'
-import { openClip } from '@/composables/usePlayer'
+import { openClip, openSource } from '@/composables/usePlayer'
 import { confirm, prompt } from '@/composables/useDialogs'
+import { toast } from '@/composables/useToasts'
+
+const props = withDefaults(
+  defineProps<{
+    sections: Section[]
+    /** Anything that should restart the grid from the top with a fresh stagger. */
+    resetKey: string
+    /** `export` grids carry the Clips view's menu and card treatment. */
+    variant?: 'recording' | 'export'
+    /** Export jobs, keyed by id, for the `job:<id>` placeholder cards the Clips view mixes in. */
+    jobsById?: Record<string, ExportJob>
+  }>(),
+  { variant: 'recording', jobsById: () => ({}) }
+)
+
+const JOB_PREFIX = 'job:'
 
 const scroller = ref<HTMLElement | null>(null)
 const gridSize = computed(() => settings.value.gridSize)
-const { layout, visibleRows, scrollToTop } = useVirtualGrid(scroller, sections, gridSize)
+const { layout, visibleRows, scrollToTop } = useVirtualGrid(scroller, toRef(props, 'sections'), gridSize)
 
 const pad = `${GRID_PAD_X}px`
-
-// Filter/sort/group/size changes restart the view from the top with a stagger.
-const resetKey = computed(
-  () => `${selectedGame.value}|${settings.value.sort}|${settings.value.groupBy}|${settings.value.gridSize}`
-)
+const from = computed(() => (props.variant === 'export' ? 'clips' : 'library'))
 
 async function animateIn(): Promise<void> {
   await nextTick()
@@ -25,14 +48,20 @@ async function animateIn(): Promise<void> {
   staggerIn(cards)
 }
 
-watch(resetKey, () => {
-  scrollToTop()
-  void animateIn()
-})
+watch(
+  () => props.resetKey,
+  () => {
+    scrollToTop()
+    void animateIn()
+  }
+)
 onMounted(() => void animateIn())
 
+const jobOf = (clip: Clip): ExportJob | undefined =>
+  clip.id.startsWith(JOB_PREFIX) ? props.jobsById[clip.id.slice(JOB_PREFIX.length)] : undefined
+
 function onOpen(clip: Clip, rect: DOMRect): void {
-  openClip(clip, { left: rect.left, top: rect.top, width: rect.width, height: rect.height })
+  openClip(clip, { left: rect.left, top: rect.top, width: rect.width, height: rect.height }, from.value)
 }
 
 function rectOf(clip: Clip): Rect | null {
@@ -57,16 +86,55 @@ async function remove(clip: Clip): Promise<void> {
   if (ok) await deleteClip(clip)
 }
 
+function showSource(clip: Clip): void {
+  if (!openSource(clip)) toast('error', 'Source not found', 'The recording this clip was cut from is no longer in the library.')
+}
+
 /** Right-click menu per card, rendered by Nuxt UI's <UContextMenu>. */
 function menuItems(clip: Clip) {
-  return [
-    [
-      { label: 'Play', icon: 'i-lucide-play', onSelect: () => openClip(clip, rectOf(clip)) },
-      { label: 'Show in Explorer', icon: 'i-lucide-folder-open', onSelect: () => revealClip(clip) },
-      { label: 'Rename', icon: 'i-lucide-pencil', onSelect: () => void rename(clip) }
-    ],
-    [{ label: 'Delete', icon: 'i-lucide-trash-2', color: 'error' as const, onSelect: () => void remove(clip) }]
+  const job = jobOf(clip)
+  if (job) {
+    const active = job.state === 'queued' || job.state === 'running'
+    return [
+      [
+        active
+          ? { label: 'Cancel export', icon: 'i-lucide-x', color: 'error' as const, onSelect: () => void cancelExport(job.id) }
+          : { label: 'Dismiss', icon: 'i-lucide-x', onSelect: () => dismissExport(job.id) }
+      ]
+    ]
+  }
+  const trim = {
+    label: 'Trim & export',
+    icon: 'i-lucide-scissors',
+    disabled: clip.probeState !== 'ok' || !clip.duration,
+    onSelect: () => openClip(clip, rectOf(clip), from.value, true)
+  }
+  const main = [
+    { label: 'Play', icon: 'i-lucide-play', onSelect: () => openClip(clip, rectOf(clip), from.value) },
+    trim
   ]
+  if (props.variant === 'export') {
+    main.push(
+      {
+        label: 'Open source recording',
+        icon: 'i-lucide-link',
+        disabled: !clip.sourceId || !getClip(clip.sourceId),
+        onSelect: () => showSource(clip)
+      },
+      {
+        label: 'Go to game',
+        icon: 'i-lucide-gamepad-2',
+        disabled: !games.value.some((g) => g.name === clip.game),
+        onSelect: () => openGame(clip.game)
+      }
+    )
+  }
+  main.push(
+    { label: 'Show in Explorer', icon: 'i-lucide-folder-open', onSelect: () => revealClip(clip) },
+    { label: 'Copy path', icon: 'i-lucide-copy', onSelect: () => void copyClipPath(clip) },
+    { label: 'Rename', icon: 'i-lucide-pencil', onSelect: () => void rename(clip) }
+  )
+  return [main, [{ label: 'Delete', icon: 'i-lucide-trash-2', color: 'error' as const, onSelect: () => void remove(clip) }]]
 }
 </script>
 
@@ -93,7 +161,7 @@ function menuItems(clip: Clip) {
           }"
         >
           <UContextMenu v-for="clip in row.clips" :key="clip.id" :items="menuItems(clip)" :ui="{ content: 'min-w-48' }">
-            <ClipCard :clip="clip" @open="onOpen" />
+            <ClipCard :clip="clip" :variant="variant" :job="jobOf(clip)" @open="onOpen" />
           </UContextMenu>
         </div>
       </template>

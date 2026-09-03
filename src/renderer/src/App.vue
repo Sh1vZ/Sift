@@ -3,16 +3,21 @@ import { onMounted } from 'vue'
 import TitleBar from './components/TitleBar.vue'
 import Sidebar from './components/Sidebar.vue'
 import LibraryView from './components/LibraryView.vue'
+import ClipsView from './components/ClipsView.vue'
 import SettingsView from './components/SettingsView.vue'
 import PlayerOverlay from './components/PlayerOverlay.vue'
 import DialogHost from './components/DialogHost.vue'
 import ToastBridge from './components/ToastBridge.vue'
-import { initLibrary, ready, view } from '@/composables/useLibrary'
+import { initLibrary, initialExports, ready, view } from '@/composables/useLibrary'
+import { initExports } from '@/composables/useExports'
 import { isOpen } from '@/composables/usePlayer'
 // Side-effect import: applies the persisted theme to <html> before first paint.
 import '@/composables/useTheme'
 
-onMounted(() => void initLibrary())
+onMounted(async () => {
+  await initLibrary()
+  initExports(initialExports.value)
+})
 </script>
 
 <template>
@@ -25,6 +30,7 @@ onMounted(() => void initLibrary())
           <main class="main">
             <Transition name="view" mode="out-in">
               <LibraryView v-if="view === 'library'" key="library" />
+              <ClipsView v-else-if="view === 'clips'" key="clips" />
               <SettingsView v-else key="settings" />
             </Transition>
           </main>

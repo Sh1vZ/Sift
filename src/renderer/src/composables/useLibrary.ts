@@ -1,7 +1,8 @@
 import { computed, ref, watch } from 'vue'
-import type { Clip, LibraryFolder, ScanState, Settings } from '@shared/types'
+import type { Clip, ExportJob, LibraryFolder, ScanState, Settings } from '@shared/types'
 import { DEFAULT_SETTINGS } from '@shared/types'
 import { dateBucket } from '@/utils/format'
+import { confirm } from './useDialogs'
 import { toast } from './useToasts'
 
 const api = window.api
@@ -21,16 +22,42 @@ export const settings = ref<Settings>({ ...DEFAULT_SETTINGS })
 export const scan = ref<ScanState>({ active: false, folder: '', found: 0, pending: 0, done: 0 })
 export const appVersion = ref('')
 export const suggestedFolders = ref<string[]>([])
+export const defaultClipsDir = ref('')
+/**
+ * Export jobs as of the snapshot. `useExports` owns them from there on; it is
+ * seeded by App.vue rather than imported here so the composable graph stays
+ * acyclic (useExports → usePlayer → useLibrary).
+ */
+export const initialExports = ref<ExportJob[]>([])
 export const selectedGame = ref<string | null>(null)
-export const view = ref<'library' | 'settings'>('library')
+export const view = ref<'library' | 'clips' | 'settings'>('library')
 
 /** Ticks once a minute so "2 minutes ago" labels stay honest. */
 export const now = ref(Date.now())
 window.setInterval(() => (now.value = Date.now()), 60_000)
 
+/** Every record in the index: recordings and exported clips alike. */
 export const allClips = computed<Clip[]>(() => {
   void version.value
   return Array.from(clipsById.values())
+})
+
+// ------------------------------------------------------ recordings vs clips
+
+/** The folder Sift exports into. Always present once the snapshot has loaded. */
+export const clipsFolder = computed<LibraryFolder | null>(() => folders.value.find((f) => f.kind === 'clips') ?? null)
+const exportFolderIds = computed(() => new Set(folders.value.filter((f) => f.kind === 'clips').map((f) => f.id)))
+
+/** Recordings only — what the Games screen and its grids are built from. */
+export const recordings = computed<Clip[]>(() => {
+  const ids = exportFolderIds.value
+  return ids.size ? allClips.value.filter((c) => !ids.has(c.folderId)) : allClips.value
+})
+
+/** Everything under the clips folder — the Clips view. */
+export const exportedClips = computed<Clip[]>(() => {
+  const ids = exportFolderIds.value
+  return ids.size ? allClips.value.filter((c) => ids.has(c.folderId)) : []
 })
 
 export interface GameSummary {
@@ -44,7 +71,7 @@ export interface GameSummary {
 
 export const games = computed<GameSummary[]>(() => {
   const map = new Map<string, GameSummary & { coverMs: number }>()
-  for (const c of allClips.value) {
+  for (const c of recordings.value) {
     let g = map.get(c.game)
     if (!g) {
       g = { name: c.game, count: 0, cover: '', latestMs: 0, totalDuration: 0, totalSize: 0, coverMs: -1 }
@@ -79,7 +106,7 @@ function compare(sort: Settings['sort']): (a: Clip, b: Clip) => number {
 
 export const visibleClips = computed<Clip[]>(() => {
   const game = selectedGame.value
-  const list = game ? allClips.value.filter((c) => c.game === game) : allClips.value.slice()
+  const list = game ? recordings.value.filter((c) => c.game === game) : recordings.value.slice()
   return list.sort(compare(settings.value.sort))
 })
 
@@ -128,12 +155,50 @@ export const libraryStats = computed(() => {
   return { count: visibleClips.value.length, duration, size }
 })
 
+/** When an export happened; hand-copied files fall back to their recording time. */
+const exportedAt = (c: Clip): number => c.createdAtMs || c.recordedAtMs
+
+/** The Clips view: one section per game, latest export first, games by their latest export. */
+export const clipSections = computed<Section[]>(() => {
+  const list = exportedClips.value
+  if (!list.length) return []
+  const byGame = new Map<string, { latest: number; clips: Clip[] }>()
+  for (const c of list) {
+    let g = byGame.get(c.game)
+    if (!g) {
+      g = { latest: 0, clips: [] }
+      byGame.set(c.game, g)
+    }
+    g.clips.push(c)
+    if (exportedAt(c) > g.latest) g.latest = exportedAt(c)
+  }
+  return [...byGame.entries()]
+    .sort((a, b) => b[1].latest - a[1].latest)
+    .map(([game, g]) => ({
+      key: `g:${game}`,
+      title: game,
+      clips: g.clips.sort((a, b) => exportedAt(b) - exportedAt(a) || a.name.localeCompare(b.name))
+    }))
+})
+
+export const orderedExports = computed<Clip[]>(() => clipSections.value.flatMap((s) => s.clips))
+
+export const clipsStats = computed(() => {
+  let duration = 0
+  let size = 0
+  for (const c of exportedClips.value) {
+    duration += c.duration
+    size += c.size
+  }
+  return { count: exportedClips.value.length, duration, size }
+})
+
 export function getClip(id: string): Clip | undefined {
   return clipsById.get(id)
 }
 
 /** Which screen the main area shows: the games browser is home, a game drills into its clips. */
-export const screen = computed<'games' | 'game' | 'settings'>(() => {
+export const screen = computed<'games' | 'game' | 'clips' | 'settings'>(() => {
   if (view.value !== 'library') return view.value
   return selectedGame.value ? 'game' : 'games'
 })
@@ -146,6 +211,10 @@ export function goGames(): void {
 export function openGame(name: string): void {
   selectedGame.value = name
   view.value = 'library'
+}
+
+export function goClips(): void {
+  view.value = 'clips'
 }
 
 // ---------------------------------------------------------- games browser
@@ -185,6 +254,8 @@ export async function initLibrary(): Promise<void> {
   scan.value = snap.scan
   appVersion.value = snap.appVersion
   suggestedFolders.value = snap.suggestedFolders
+  defaultClipsDir.value = snap.defaultClipsDir
+  initialExports.value = snap.exports
   version.value++
   ready.value = true
 
@@ -230,6 +301,37 @@ export async function removeFolder(folder: LibraryFolder): Promise<void> {
 
 export async function rescan(folderId?: string): Promise<void> {
   await api.library.rescan(folderId)
+}
+
+/** Moving the clips folder only moves the index; files stay where they were exported. */
+async function confirmClipsMove(): Promise<boolean> {
+  if (!exportedClips.value.length) return true
+  return confirm({
+    title: 'Change the clips folder?',
+    message: 'Clips already exported stay on disk where they are, but they leave the Clips list. New exports go to the folder you pick.',
+    detail: clipsFolder.value?.path,
+    detailIcon: 'i-lucide-folder-output',
+    confirmLabel: 'Choose folder'
+  })
+}
+
+export async function chooseClipsDir(): Promise<void> {
+  if (!(await confirmClipsMove())) return
+  const res = await api.library.chooseClipsDir()
+  if (!res.ok) toast('error', 'Could not change the clips folder', res.error)
+  else if (res.folder) toast('success', 'Clips folder changed', res.folder.path)
+}
+
+export async function resetClipsDir(): Promise<void> {
+  if (!(await confirmClipsMove())) return
+  const res = await api.library.setClipsDir('')
+  if (!res.ok) toast('error', 'Could not reset the clips folder', res.error)
+  else if (res.folder) toast('success', 'Clips folder reset', res.folder.path)
+}
+
+export async function revealClipsDir(): Promise<void> {
+  const res = await api.library.revealClipsDir()
+  if (!res.ok) toast('error', 'Could not open the clips folder', res.error)
 }
 
 export async function renameClip(clip: Clip, name: string): Promise<Clip | null> {
