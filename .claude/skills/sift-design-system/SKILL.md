@@ -27,7 +27,7 @@ dead weight here.
 
 There **is** a small set of dark **themes** (`Settings.theme`, picked in Settings → Themes):
 `sift` (default), `ember`, `arctic`, `synthwave`, `verdant`, `crimson`, `solar`, and the
-true-black `oled`, `oled-mint`, `oled-frost`. A theme is one `html[data-theme]`
+true-black `oled`, `oled-mint`, `oled-frost`, `oled-crimson`. A theme is one `html[data-theme]`
 block in `tokens.css` that re-points only the surface, text and brand tokens (plus the
 `--ui-color-primary-*` shades so Nuxt UI follows). Typography, spacing, radius and motion never
 change with the theme. `composables/useTheme.ts` sets the attribute and carries a `THEMES`
@@ -424,7 +424,7 @@ When creating or changing a renderer surface:
 
 ## Design Specifications Summary
 
-- **Color mode:** Dark only (`<html class="dark">`, `colorMode: false`); ten dark themes via `html[data-theme]`
+- **Color mode:** Dark only (`<html class="dark">`, `colorMode: false`); eleven dark themes via `html[data-theme]`
 - **Foundation:** Five-step indigo-black surface ramp (`--bg-0` … `--bg-4`)
 - **Identity:** `#7c3aed` violet; `#f43f5e` rose held in reserve
 - **Display / heading / body:** Russo One · Chakra Petch · Inter Variable

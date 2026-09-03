@@ -80,7 +80,7 @@ const isActive = (t: ThemeDef): boolean => t.id === activeTheme.value.id
 
     <SettingsPanel
       title="OLED themes"
-      description="Pure black surfaces, so an OLED panel switches those pixels off entirely. Background washes are dropped."
+      description="Pure black surfaces, so an OLED panel switches those pixels off. The brand glow stays, tinted to match."
     >
       <div class="themes" role="group" aria-label="OLED theme">
         <button

@@ -1,6 +1,7 @@
 import { computed, ref } from 'vue'
 import type { AppStats, Clip } from '@shared/types'
 import { formatResolution } from '@/utils/format'
+import { QUALITY_TIERS, qualityTier } from '@/utils/quality'
 import { allClips, folders, games, now } from './useLibrary'
 import { toast } from './useToasts'
 
@@ -54,6 +55,8 @@ export interface LibraryTotals {
   newestMs: number
   avgBytes: number
   avgDuration: number
+  /** Bits per second across every probed clip; 0 until something has been probed. */
+  avgBitrate: number
   largest: Clip | null
   longest: Clip | null
 }
@@ -74,12 +77,21 @@ export const libraryTotals = computed<LibraryTotals>(() => {
     newestMs: 0,
     avgBytes: 0,
     avgDuration: 0,
+    avgBitrate: 0,
     largest: null,
     longest: null
   }
+  // Unprobed clips carry no duration, so they sit out of the bitrate average
+  // rather than dragging it toward zero.
+  let ratedBytes = 0
+  let ratedDuration = 0
   for (const c of clips) {
     t.bytes += c.size
     t.duration += c.duration
+    if (c.duration > 0) {
+      ratedBytes += c.size
+      ratedDuration += c.duration
+    }
     if (c.thumb) t.withPreviews++
     if (c.probeState === 'pending') t.pending++
     else if (c.probeState === 'failed') t.failed++
@@ -92,6 +104,7 @@ export const libraryTotals = computed<LibraryTotals>(() => {
     t.avgBytes = t.bytes / clips.length
     t.avgDuration = t.duration / clips.length
   }
+  if (ratedDuration > 0) t.avgBitrate = (ratedBytes * 8) / ratedDuration
   return t
 })
 
@@ -142,6 +155,28 @@ export const codecs = computed<Breakdown[]>(() => {
     rows.set(label, row)
   }
   return ranked(rows, 'count')
+})
+
+/**
+ * Clips bucketed by bitrate density rather than raw bitrate, so a 4K clip and
+ * a 1080p one can share a bucket. Ordered along the quality scale instead of
+ * by size, with anything unprobed last.
+ */
+export const bitrateTiers = computed<Breakdown[]>(() => {
+  const rows = new Map<string, { label: string; count: number; bytes: number }>()
+  for (const c of allClips.value) {
+    const tier = qualityTier(c)
+    const row = rows.get(tier.id) ?? { label: tier.label, count: 0, bytes: 0 }
+    row.count++
+    row.bytes += c.size
+    rows.set(tier.id, row)
+  }
+  const order: string[] = QUALITY_TIERS.map((t) => t.id)
+  const rank = (key: string): number => {
+    const i = order.indexOf(key)
+    return i < 0 ? order.length : i
+  }
+  return ranked(rows, 'count').sort((a, b) => rank(a.key) - rank(b.key))
 })
 
 export interface MonthBar {

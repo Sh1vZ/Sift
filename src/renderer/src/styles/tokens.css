@@ -48,7 +48,7 @@
   --shadow-lg: 0 24px 60px -12px rgba(0, 0, 0, 0.7);
 
   /* The two static radial washes App.vue paints over --bg-1. Owned here so a
-     theme can recolour or drop them (OLED wants a flat black ground). */
+     theme can recolour them; the OLED themes keep them over a true-black ground. */
   --app-wash:
     radial-gradient(1200px 600px at 80% -10%, rgba(124, 58, 237, 0.14), transparent 60%),
     radial-gradient(800px 500px at -10% 110%, rgba(244, 63, 94, 0.07), transparent 60%);
@@ -125,11 +125,14 @@
 
 /* OLED: true-black surfaces so unlit pixels stay off. The ramp keeps its five
    steps but starts at #000, and the borders come up a notch because there is
-   no blue cast left for a 7% hairline to read against. Every OLED variant
-   shares this surface block and adds only its own brand colours below. */
+   no blue cast left for a 7% hairline to read against. The brand washes stay
+   (the default OLED inherits Sift's) so the ground still glows; only the pixels
+   outside the washes go fully off. Every OLED variant shares this surface block
+   and adds its own brand colours below. */
 html[data-theme='oled'],
 html[data-theme='oled-mint'],
-html[data-theme='oled-frost'] {
+html[data-theme='oled-frost'],
+html[data-theme='oled-crimson'] {
   --bg-0: #000000;
   --bg-1: #000000;
   --bg-2: #090909;
@@ -140,7 +143,6 @@ html[data-theme='oled-frost'] {
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.7);
   --shadow-md: 0 8px 24px -6px rgba(0, 0, 0, 0.85);
   --shadow-lg: 0 24px 60px -12px rgba(0, 0, 0, 0.95);
-  --app-wash: none;
 }
 
 /* Ember: warm charcoal ground, orange identity, gold punctuation. */
@@ -388,6 +390,9 @@ html[data-theme='oled-mint'] {
   --border-active: rgba(110, 231, 183, 0.45);
   --ring: #6ee7b7;
   --glow-primary: 0 0 0 1px rgba(110, 231, 183, 0.35), 0 12px 32px -8px rgba(16, 185, 129, 0.55);
+  --app-wash:
+    radial-gradient(1200px 600px at 80% -10%, rgba(16, 185, 129, 0.13), transparent 60%),
+    radial-gradient(800px 500px at -10% 110%, rgba(244, 114, 182, 0.07), transparent 60%);
   --ui-text-toned: #bad0c4;
   --ui-text-highlighted: #f3faf6;
   --ui-color-primary-50: #ecfdf5;
@@ -418,6 +423,9 @@ html[data-theme='oled-frost'] {
   --border-active: rgba(103, 232, 249, 0.45);
   --ring: #67e8f9;
   --glow-primary: 0 0 0 1px rgba(103, 232, 249, 0.35), 0 12px 32px -8px rgba(6, 182, 212, 0.55);
+  --app-wash:
+    radial-gradient(1200px 600px at 80% -10%, rgba(6, 182, 212, 0.13), transparent 60%),
+    radial-gradient(800px 500px at -10% 110%, rgba(167, 139, 250, 0.07), transparent 60%);
   --ui-text-toned: #b8ccd4;
   --ui-text-highlighted: #f2f9fb;
   --ui-color-primary-50: #ecfeff;
@@ -431,6 +439,39 @@ html[data-theme='oled-frost'] {
   --ui-color-primary-800: #155e75;
   --ui-color-primary-900: #164e63;
   --ui-color-primary-950: #083344;
+}
+
+/* OLED Crimson: true black, crimson identity, amber punctuation. */
+html[data-theme='oled-crimson'] {
+  --fg: #f5e9eb;
+  --fg-muted: #b09aa0;
+  --fg-dim: #7f6a70;
+  --fg-inverse: #1a0709;
+  --primary: #dc2626;
+  --primary-hover: #ef4444;
+  --primary-soft: rgba(239, 68, 68, 0.16);
+  --secondary: #fca5a5;
+  --accent: #fbbf24;
+  --accent-soft: rgba(251, 191, 36, 0.16);
+  --border-active: rgba(252, 165, 165, 0.45);
+  --ring: #fca5a5;
+  --glow-primary: 0 0 0 1px rgba(252, 165, 165, 0.35), 0 12px 32px -8px rgba(220, 38, 38, 0.55);
+  --app-wash:
+    radial-gradient(1200px 600px at 80% -10%, rgba(220, 38, 38, 0.14), transparent 60%),
+    radial-gradient(800px 500px at -10% 110%, rgba(251, 191, 36, 0.06), transparent 60%);
+  --ui-text-toned: #d2bfc4;
+  --ui-text-highlighted: #fcf5f6;
+  --ui-color-primary-50: #fef2f2;
+  --ui-color-primary-100: #fee2e2;
+  --ui-color-primary-200: #fecaca;
+  --ui-color-primary-300: #fca5a5;
+  --ui-color-primary-400: #f87171;
+  --ui-color-primary-500: #ef4444;
+  --ui-color-primary-600: #dc2626;
+  --ui-color-primary-700: #b91c1c;
+  --ui-color-primary-800: #991b1b;
+  --ui-color-primary-900: #7f1d1d;
+  --ui-color-primary-950: #450a0a;
 }
 
 /* Motion off: user setting or OS preference. Transitions collapse to instant. */

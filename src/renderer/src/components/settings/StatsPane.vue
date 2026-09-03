@@ -7,8 +7,9 @@ import SettingsRow from './SettingsRow.vue'
 import { motionEnabled } from '@/composables/useMotion'
 import { now, scan } from '@/composables/useLibrary'
 import { openSettings } from '@/composables/useSettings'
-import { codecs, libraryTotals, monthlyActivity, resolutions, topGames } from '@/composables/useStats'
+import { bitrateTiers, codecs, libraryTotals, monthlyActivity, resolutions, topGames } from '@/composables/useStats'
 import { formatBytes, formatFull, formatRelative, formatSpan } from '@/utils/format'
+import { QUALITY_TIERS, type QualityTierDef } from '@/utils/quality'
 
 const n = new Intl.NumberFormat()
 
@@ -36,6 +37,9 @@ const previewPct = computed(() => {
 })
 
 const bar = (share: number): Record<string, string> => ({ '--share': String(share) })
+
+const tierColor = (key: string): QualityTierDef['color'] =>
+  QUALITY_TIERS.find((t) => t.id === key)?.color ?? 'neutral'
 </script>
 
 <template>
@@ -167,7 +171,10 @@ const bar = (share: number): Record<string, string> => ({ '--share': String(shar
         </ul>
       </SettingsPanel>
 
-      <SettingsPanel title="Formats" description="Resolutions and video codecs found across the library.">
+      <SettingsPanel
+        title="Formats"
+        description="Resolutions, codecs and bitrate density. Density is measured per pixel, so clips of different sizes compare fairly."
+      >
         <div class="chips">
           <div class="chip-group">
             <span class="chip-title">Resolution</span>
@@ -193,6 +200,20 @@ const bar = (share: number): Record<string, string> => ({ '--share': String(shar
                 variant="subtle"
                 size="md"
                 :label="`${c.label} · ${n.format(c.count)}`"
+                class="mono"
+              />
+            </div>
+          </div>
+          <div class="chip-group">
+            <span class="chip-title">Bitrate</span>
+            <div class="chip-list">
+              <UBadge
+                v-for="b in bitrateTiers"
+                :key="b.key"
+                :color="tierColor(b.key)"
+                variant="subtle"
+                size="md"
+                :label="`${b.label} · ${n.format(b.count)}`"
                 class="mono"
               />
             </div>

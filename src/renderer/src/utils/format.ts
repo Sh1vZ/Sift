@@ -32,9 +32,28 @@ export function formatBytes(bytes: number): string {
   return `${v >= 100 || i === 0 ? Math.round(v) : v.toFixed(1)} ${units[i]}`
 }
 
+/**
+ * Standard classes, tallest first. A capture rarely matches one exactly — a
+ * borderless window loses a title bar, an ultrawide grab is its own shape — so
+ * a clip claims a tier once it is within `TIER_SLACK` of it. Without that
+ * slack a 2560x1070 ShadowPlay grab sits 1% under 1080 and falls two whole
+ * tiers, reading as "720p".
+ */
+const RES_TIERS: Array<{ min: number; label: string }> = [
+  { min: 2160, label: '4K' },
+  { min: 1440, label: '1440p' },
+  { min: 1080, label: '1080p' },
+  { min: 720, label: '720p' }
+]
+const TIER_SLACK = 0.9
+
 export function formatResolution(width: number, height: number, fps: number): string {
   if (!height) return ''
-  const label = height >= 2160 ? '4K' : height >= 1440 ? '1440p' : height >= 1080 ? '1080p' : height >= 720 ? '720p' : `${height}p`
+  // The shorter side is what the "p" number names, which keeps both ultrawide
+  // and portrait captures in the class they belong to.
+  const side = width ? Math.min(width, height) : height
+  const tier = RES_TIERS.find((t) => side >= t.min * TIER_SLACK)
+  const label = tier ? tier.label : `${side}p`
   const rate = fps ? Math.round(fps) : 0
   return rate ? `${label}${rate}` : label
 }

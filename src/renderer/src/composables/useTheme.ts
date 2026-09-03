@@ -146,7 +146,7 @@ export const THEMES: ThemeDef[] = [
   {
     id: 'oled',
     name: 'OLED',
-    description: 'True black surfaces so unlit pixels stay off. Same violet, no background washes.',
+    description: 'True black surfaces so unlit pixels stay off, with the violet and rose glow kept.',
     oled: true,
     colors: {
       ...OLED_SURFACES,
@@ -160,7 +160,7 @@ export const THEMES: ThemeDef[] = [
   {
     id: 'oled-mint',
     name: 'OLED Mint',
-    description: 'True black with an emerald identity and pink punctuation.',
+    description: 'True black with an emerald identity, pink punctuation and a matching glow.',
     oled: true,
     colors: {
       ...OLED_SURFACES,
@@ -174,7 +174,7 @@ export const THEMES: ThemeDef[] = [
   {
     id: 'oled-frost',
     name: 'OLED Frost',
-    description: 'True black with a cyan identity and violet punctuation.',
+    description: 'True black with a cyan identity, violet punctuation and a matching glow.',
     oled: true,
     colors: {
       ...OLED_SURFACES,
@@ -184,6 +184,20 @@ export const THEMES: ThemeDef[] = [
       accent: '#a78bfa'
     },
     spotlight: 'rgba(103, 232, 249, 0.24)'
+  },
+  {
+    id: 'oled-crimson',
+    name: 'OLED Crimson',
+    description: 'True black with a crimson identity, amber punctuation and a matching glow.',
+    oled: true,
+    colors: {
+      ...OLED_SURFACES,
+      fg: '#f5e9eb',
+      primary: '#dc2626',
+      secondary: '#fca5a5',
+      accent: '#fbbf24'
+    },
+    spotlight: 'rgba(252, 165, 165, 0.24)'
   }
 ]
 

@@ -17,6 +17,7 @@ import { fadeOut, flipFrom, flipTo } from '@/composables/useMotion'
 import { activeTheme } from '@/composables/useTheme'
 import { confirm, dialog, prompt } from '@/composables/useDialogs'
 import { clamp, formatBytes, formatDuration, formatFull, formatResolution } from '@/utils/format'
+import { bitrate, formatBitrate } from '@/utils/quality'
 
 const api = window.api
 const RATES = [1, 1.25, 1.5, 2, 0.5]
@@ -35,6 +36,7 @@ const meta = computed(() =>
     clip.value.game,
     formatFull(clip.value.recordedAtMs),
     formatResolution(clip.value.width, clip.value.height, clip.value.fps),
+    formatBitrate(bitrate(clip.value)),
     formatBytes(clip.value.size)
   ]
     .filter(Boolean)

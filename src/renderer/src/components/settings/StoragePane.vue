@@ -5,6 +5,7 @@ import SettingsRow from './SettingsRow.vue'
 import { now } from '@/composables/useLibrary'
 import { appStats, libraryTotals, refreshStats, revealAppData, statsError, statsLoading } from '@/composables/useStats'
 import { formatBytes, formatRelative } from '@/utils/format'
+import { formatBitrate } from '@/utils/quality'
 
 const n = new Intl.NumberFormat()
 
@@ -75,6 +76,14 @@ onMounted(() => {
           title="Clips on disk"
           :description="`Across ${libraryTotals.folders} watched folder${libraryTotals.folders === 1 ? '' : 's'}. Indexed in place — never copied, moved or re-encoded.`"
           :value="formatBytes(libraryTotals.bytes)"
+        />
+
+        <SettingsRow
+          v-if="libraryTotals.avgBitrate"
+          icon="activity"
+          title="Average bitrate"
+          description="Size against duration across every probed clip. A high figure means a generous capture setting — it is what makes the library big, not what makes a clip look good."
+          :value="formatBitrate(libraryTotals.avgBitrate)"
         />
 
         <SettingsRow
