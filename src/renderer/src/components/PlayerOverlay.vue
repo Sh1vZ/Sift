@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import ElasticSlider from './bits/ElasticSlider.vue'
 import PlayerDetails from './PlayerDetails.vue'
+import TrimBar from './TrimBar.vue'
 import { deleteClip, renameClip, revealClip, settings, updateSettings } from '@/composables/useLibrary'
 import {
   closePlayer,
@@ -10,18 +11,46 @@ import {
   hasPrev,
   neighbor,
   nextClip,
-  openClip,
+  openSource,
   originRect,
+  pendingEdit,
   prevClip
 } from '@/composables/usePlayer'
+import {
+  canExport,
+  editing,
+  enterEdit,
+  exitEdit,
+  exportMuted,
+  exportName,
+  inSec,
+  outSec,
+  resetRange,
+  selectionLength,
+  setIn,
+  setOut,
+  submit,
+  submitting
+} from '@/composables/useEditor'
 import { fadeOut, flipFrom, flipTo } from '@/composables/useMotion'
 import { activeTheme } from '@/composables/useTheme'
 import { confirm, dialog, prompt } from '@/composables/useDialogs'
-import { clamp, formatBytes, formatDuration, formatFull, formatResolution } from '@/utils/format'
+import { toast } from '@/composables/useToasts'
+import {
+  clamp,
+  formatBytes,
+  formatDuration,
+  formatFull,
+  formatResolution,
+  formatTimecode,
+  fractionAcross
+} from '@/utils/format'
 import { bitrate, formatBitrate } from '@/utils/quality'
 
 const api = window.api
 const RATES = [1, 1.25, 1.5, 2, 0.5]
+/** Containers stream copy keeps as they are; everything else exports as mp4. */
+const KEEP_EXT = new Set(['.webm', '.avi', '.wmv', '.flv'])
 
 const stageArea = ref<HTMLElement | null>(null)
 const stage = ref<HTMLElement | null>(null)
@@ -74,6 +103,13 @@ const volumeIcon = computed(() =>
       : 'i-lucide-volume-2'
 )
 
+/** Trimming needs the probed duration; without it the handles have nothing to measure against. */
+const canEdit = computed(() => clip.value.probeState === 'ok' && clip.value.duration > 0 && !failed.value)
+const outExt = computed(() => (KEEP_EXT.has(clip.value.ext.toLowerCase()) ? clip.value.ext.toLowerCase() : '.mp4'))
+const editHint = computed(() =>
+  canEdit.value ? (editing.value ? 'Leave edit mode' : 'Trim & export') : 'Media info still loading'
+)
+
 const failedActions = computed(() => [
   {
     label: 'Show in Explorer',
@@ -104,10 +140,13 @@ let hideTimer = 0
 function poke(): void {
   controls.value = true
   window.clearTimeout(hideTimer)
+  // Edit mode keeps the chrome up: you are working in it, not watching.
+  if (editing.value) return
   hideTimer = window.setTimeout(() => {
     if (playing.value && !seeking.value && hoverPct.value === null) controls.value = false
   }, 2600)
 }
+watch(editing, poke)
 
 // ------------------------------------------------------------- playback
 
@@ -139,9 +178,16 @@ function seekTo(seconds: number): void {
   const t = clamp(seconds, 0, duration.value || 0)
   v.currentTime = t
   time.value = t
+  lastTime = t
   ended.value = false
 }
 const seekBy = (delta: number): void => seekTo(time.value + delta)
+
+/** One frame at the clip's rate, paused so the frame you land on stays put. */
+function stepFrame(direction: -1 | 1): void {
+  video.value?.pause()
+  seekBy(direction / (clip.value.fps || 30))
+}
 
 let volumeTimer = 0
 function persistVolume(): void {
@@ -188,8 +234,20 @@ function onLoadedMetadata(): void {
   v.muted = muted.value
   v.playbackRate = rate.value
 }
+let lastTime = 0
 function onTimeUpdate(): void {
-  if (!seeking.value && video.value) time.value = video.value.currentTime
+  const v = video.value
+  if (!v) return
+  if (!seeking.value) time.value = v.currentTime
+  // Edit mode previews the selection on a loop: crossing the out-point (or
+  // having been dragged past it) wraps back to the in-point.
+  if (editing.value && !v.paused && v.currentTime >= outSec.value) {
+    if (lastTime < outSec.value || v.currentTime - outSec.value > 0.3) {
+      seekTo(inSec.value)
+      return
+    }
+  }
+  lastTime = v.currentTime
 }
 function onProgress(): void {
   const v = video.value
@@ -203,6 +261,12 @@ function onProgress(): void {
   buffered.value = v.buffered.end(v.buffered.length - 1)
 }
 function onEnded(): void {
+  if (editing.value) {
+    // The out-point sits at the very end: keep the preview loop going.
+    seekTo(inSec.value)
+    void video.value?.play().catch(() => undefined)
+    return
+  }
   playing.value = false
   if (settings.value.autoplayNext && hasNext.value) {
     nextClip()
@@ -219,17 +283,13 @@ function onError(): void {
 
 // ------------------------------------------------------------- seek bar
 
-function pctFromEvent(e: PointerEvent): number {
-  const r = seekEl.value!.getBoundingClientRect()
-  return clamp((e.clientX - r.left) / r.width, 0, 1)
-}
 function onSeekDown(e: PointerEvent): void {
   seeking.value = true
   ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
-  seekTo(pctFromEvent(e) * duration.value)
+  seekTo(fractionAcross(seekEl.value!, e.clientX) * duration.value)
 }
 function onSeekMove(e: PointerEvent): void {
-  hoverPct.value = pctFromEvent(e)
+  hoverPct.value = fractionAcross(seekEl.value!, e.clientX)
   if (seeking.value) seekTo(hoverPct.value * duration.value)
 }
 function onSeekUp(): void {
@@ -238,6 +298,23 @@ function onSeekUp(): void {
 function onSeekLeave(): void {
   hoverPct.value = null
   seeking.value = false
+}
+
+// ------------------------------------------------------------- editing
+
+function toggleEdit(): void {
+  if (editing.value) exitEdit()
+  else if (canEdit.value) enterEdit(clip.value)
+  poke()
+}
+
+async function exportNow(): Promise<void> {
+  if (!canExport.value) return
+  await submit(clip.value)
+}
+
+function goToSource(): void {
+  if (!openSource(clip.value)) toast('error', 'Source not found', 'The recording this clip was cut from is no longer in the library.')
 }
 
 // ------------------------------------------------------------- actions
@@ -264,7 +341,8 @@ async function rename(): Promise<void> {
   const name = await prompt({ title: 'Rename clip', label: 'File name', value: c.name, confirmLabel: 'Rename' })
   if (name === null || !name.trim() || name === c.name) return
   const next = await renameClip(c, name)
-  if (next) openClip(next)
+  // Swap in place so prev/next keep walking the same list.
+  if (next) current.value = next
 }
 
 async function remove(): Promise<void> {
@@ -278,6 +356,7 @@ async function remove(): Promise<void> {
     danger: true
   })
   if (!ok) return
+  exitEdit()
   const target = neighbor()
   if (target) current.value = target
   else closePlayer()
@@ -298,6 +377,7 @@ function onKey(e: KeyboardEvent): void {
       break
     case 'Escape':
       if (document.fullscreenElement) void document.exitFullscreen()
+      else if (editing.value) exitEdit()
       else close()
       break
     case 'ArrowLeft':
@@ -327,17 +407,54 @@ function onKey(e: KeyboardEvent): void {
     case 'i':
       toggleDetails()
       break
+    case 'e':
+      toggleEdit()
+      break
     case 'n':
-      nextClip()
+      if (!editing.value) nextClip()
       break
     case 'p':
-      prevClip()
+      if (!editing.value) prevClip()
       break
     case 'Home':
       seekTo(0)
       break
     case 'End':
       seekTo(duration.value)
+      break
+    case ',':
+      stepFrame(-1)
+      break
+    case '.':
+      stepFrame(1)
+      break
+    case '[':
+      if (editing.value) setIn(time.value)
+      else handled = false
+      break
+    case ']':
+      if (editing.value) setOut(time.value)
+      else handled = false
+      break
+    case '{':
+      if (editing.value) seekTo(inSec.value)
+      else handled = false
+      break
+    case '}':
+      if (editing.value) seekTo(outSec.value)
+      else handled = false
+      break
+    case 'M':
+      if (editing.value && clip.value.hasAudio) exportMuted.value = !exportMuted.value
+      else handled = false
+      break
+    case 'R':
+      if (editing.value) resetRange()
+      else handled = false
+      break
+    case 'Enter':
+      if (editing.value && e.ctrlKey) void exportNow()
+      else handled = false
       break
     default:
       if (/^[0-9]$/.test(e.key)) seekTo((duration.value * Number(e.key)) / 10)
@@ -351,18 +468,32 @@ function onKey(e: KeyboardEvent): void {
 
 // ------------------------------------------------------------- lifecycle
 
+function consumePendingEdit(): void {
+  if (!pendingEdit.value) return
+  pendingEdit.value = false
+  if (canEdit.value) enterEdit(clip.value)
+}
+
 watch(
   () => clip.value.id,
   () => {
+    exitEdit()
     time.value = 0
+    lastTime = 0
     duration.value = clip.value.duration
     buffered.value = 0
     ended.value = false
     failed.value = false
     buffering.value = false
+    consumePendingEdit()
     poke()
   }
 )
+
+// A clip opened straight into edit mode may still be probing; enter as soon as it can.
+watch(canEdit, (ok) => {
+  if (ok) consumePendingEdit()
+})
 
 onMounted(async () => {
   window.addEventListener('keydown', onKey)
@@ -374,10 +505,12 @@ onMounted(async () => {
   fitStage()
   await nextTick()
   if (stage.value) flipFrom(stage.value, originRect.value)
+  consumePendingEdit()
   poke()
 })
 
 onBeforeUnmount(() => {
+  exitEdit()
   window.removeEventListener('keydown', onKey)
   document.removeEventListener('fullscreenchange', onFullscreen)
   observer?.disconnect()
@@ -394,6 +527,7 @@ onBeforeUnmount(() => {
     :class="{
       'is-fullscreen': fullscreen,
       'with-details': details && !fullscreen,
+      'is-editing': editing,
       'no-cursor': !controls && playing,
       'controls-hidden': !controls
     }"
@@ -409,6 +543,19 @@ onBeforeUnmount(() => {
         <p class="truncate">{{ meta }}</p>
       </div>
       <div class="actions">
+        <UTooltip :text="editHint" :kbds="['E']">
+          <UButton
+            icon="i-lucide-scissors"
+            :color="editing ? 'primary' : 'neutral'"
+            :variant="editing ? 'soft' : 'ghost'"
+            square
+            size="lg"
+            aria-label="Trim and export"
+            :aria-pressed="editing"
+            :disabled="!canEdit"
+            @click="toggleEdit"
+          />
+        </UTooltip>
         <UTooltip :text="details ? 'Hide details' : 'Details'" :kbds="['I']">
           <UButton
             icon="i-lucide-panel-right"
@@ -428,7 +575,7 @@ onBeforeUnmount(() => {
          on the video, the arrows or the overlays are handled by those elements. -->
     <div class="stage-wrap" @click.self="close">
       <UButton
-        v-if="hasPrev"
+        v-if="hasPrev && !editing"
         class="arrow left"
         icon="i-lucide-chevron-left"
         color="neutral"
@@ -450,7 +597,7 @@ onBeforeUnmount(() => {
           <video
             ref="video"
             :src="src"
-            :loop="loop"
+            :loop="loop && !editing"
             autoplay
             preload="auto"
             @loadedmetadata="onLoadedMetadata"
@@ -478,7 +625,7 @@ onBeforeUnmount(() => {
           </Transition>
 
           <Transition name="pop">
-            <div v-if="ended && !loop && !failed" class="ended" @click.stop>
+            <div v-if="ended && !loop && !failed && !editing" class="ended" @click.stop>
               <UButton icon="i-lucide-rotate-ccw" label="Replay" color="neutral" variant="subtle" size="lg" @click="replay" />
               <UButton v-if="hasNext" icon="i-lucide-skip-forward" label="Next clip" color="primary" size="lg" @click="nextClip" />
             </div>
@@ -501,7 +648,7 @@ onBeforeUnmount(() => {
       </div>
 
       <UButton
-        v-if="hasNext"
+        v-if="hasNext && !editing"
         class="arrow right"
         icon="i-lucide-chevron-right"
         color="neutral"
@@ -517,48 +664,148 @@ onBeforeUnmount(() => {
       <PlayerDetails
         v-if="details && !fullscreen"
         :clip="clip"
+        :editing="editing"
+        :export-name="exportName + outExt"
         @close="toggleDetails"
         @rename="rename"
         @remove="remove"
+        @edit="toggleEdit"
+        @source="goToSource"
       />
     </Transition>
 
     <div class="controls" @click.stop>
-      <div
-        ref="seekEl"
-        class="seek"
-        role="slider"
-        aria-label="Seek"
-        :aria-valuemin="0"
-        :aria-valuemax="Math.round(duration)"
-        :aria-valuenow="Math.round(time)"
-        @pointerdown="onSeekDown"
-        @pointermove="onSeekMove"
-        @pointerup="onSeekUp"
-        @pointercancel="onSeekUp"
-        @pointerleave="onSeekLeave"
-      >
-        <div class="track">
-          <div class="buffered" :style="{ width: bufferedPct }" />
-          <div class="played" :style="{ width: playedPct }" />
-          <div class="knob" :style="{ left: playedPct }" />
+      <Transition name="fade" mode="out-in">
+        <TrimBar
+          v-if="editing"
+          key="trim"
+          :duration="duration"
+          :in-sec="inSec"
+          :out-sec="outSec"
+          :time="time"
+          :buffered="buffered"
+          @update:in="setIn"
+          @update:out="setOut"
+          @seek="seekTo"
+        />
+        <div
+          v-else
+          key="seek"
+          ref="seekEl"
+          class="seek"
+          role="slider"
+          aria-label="Seek"
+          :aria-valuemin="0"
+          :aria-valuemax="Math.round(duration)"
+          :aria-valuenow="Math.round(time)"
+          @pointerdown="onSeekDown"
+          @pointermove="onSeekMove"
+          @pointerup="onSeekUp"
+          @pointercancel="onSeekUp"
+          @pointerleave="onSeekLeave"
+        >
+          <div class="track">
+            <div class="buffered" :style="{ width: bufferedPct }" />
+            <div class="played" :style="{ width: playedPct }" />
+            <div class="knob" :style="{ left: playedPct }" />
+          </div>
+          <div v-if="hoverPct !== null" class="tip mono" :style="{ left: `${hoverPct * 100}%` }">
+            {{ formatDuration(hoverPct * duration) }}
+          </div>
         </div>
-        <div v-if="hoverPct !== null" class="tip mono" :style="{ left: `${hoverPct * 100}%` }">
-          {{ formatDuration(hoverPct * duration) }}
+      </Transition>
+
+      <Transition name="fade">
+        <div v-if="editing" class="edit-row">
+          <div class="range">
+            <UTooltip text="Set start to the playhead" :kbds="['[']">
+              <UButton
+                class="mono point"
+                icon="i-lucide-arrow-right-to-line"
+                :label="formatTimecode(inSec)"
+                color="neutral"
+                variant="subtle"
+                size="sm"
+                aria-label="Set start to the playhead"
+                @click="setIn(time)"
+              />
+            </UTooltip>
+            <span class="len mono" :title="'Selection length'">{{ formatTimecode(selectionLength) }}</span>
+            <UTooltip text="Set end to the playhead" :kbds="[']']">
+              <UButton
+                class="mono point"
+                icon="i-lucide-arrow-left-to-line"
+                :label="formatTimecode(outSec)"
+                color="neutral"
+                variant="subtle"
+                size="sm"
+                aria-label="Set end to the playhead"
+                @click="setOut(time)"
+              />
+            </UTooltip>
+            <UTooltip text="Reset range" :kbds="['Shift', 'R']">
+              <UButton icon="i-lucide-rotate-ccw" color="neutral" variant="ghost" square size="sm" aria-label="Reset range" @click="resetRange" />
+            </UTooltip>
+          </div>
+
+          <UTooltip :text="clip.hasAudio ? 'Drop the audio from the export' : 'Source has no audio'" :kbds="['Shift', 'M']">
+            <UButton
+              :icon="exportMuted ? 'i-lucide-volume-x' : 'i-lucide-volume-2'"
+              :label="exportMuted ? 'Muted' : 'Mute'"
+              :color="exportMuted ? 'primary' : 'neutral'"
+              :variant="exportMuted ? 'soft' : 'subtle'"
+              size="sm"
+              :aria-pressed="exportMuted"
+              :disabled="!clip.hasAudio"
+              @click="exportMuted = !exportMuted"
+            />
+          </UTooltip>
+
+          <UInput
+            v-model="exportName"
+            class="name"
+            size="md"
+            placeholder="Clip name"
+            spellcheck="false"
+            autocomplete="off"
+            aria-label="Clip name"
+            :ui="{ trailing: 'pe-2.5' }"
+            @keydown.enter.prevent="exportNow"
+            @keydown.esc.prevent="exitEdit"
+          >
+            <template #trailing>
+              <span class="ext mono">{{ outExt }}</span>
+            </template>
+          </UInput>
+
+          <div class="submit">
+            <UButton label="Cancel" color="neutral" variant="ghost" size="md" @click="exitEdit" />
+            <UTooltip text="Export the selection" :kbds="['Ctrl', 'Enter']">
+              <UButton
+                icon="i-lucide-download"
+                label="Export"
+                color="primary"
+                size="md"
+                :loading="submitting"
+                :disabled="!canExport"
+                @click="exportNow"
+              />
+            </UTooltip>
+          </div>
         </div>
-      </div>
+      </Transition>
 
       <div class="row">
         <div class="group">
           <div class="transport">
             <UTooltip text="Previous" :kbds="['P']">
-              <UButton icon="i-lucide-skip-back" color="neutral" variant="ghost" square size="lg" :disabled="!hasPrev" aria-label="Previous clip" @click="prevClip" />
+              <UButton icon="i-lucide-skip-back" color="neutral" variant="ghost" square size="lg" :disabled="!hasPrev || editing" aria-label="Previous clip" @click="prevClip" />
             </UTooltip>
             <UTooltip :text="playing ? 'Pause' : 'Play'" :kbds="['Space']">
               <UButton class="play" :icon="playing ? 'i-lucide-pause' : 'i-lucide-play'" color="primary" square size="xl" :aria-label="playing ? 'Pause' : 'Play'" @click="togglePlay" />
             </UTooltip>
             <UTooltip text="Next" :kbds="['N']">
-              <UButton icon="i-lucide-skip-forward" color="neutral" variant="ghost" square size="lg" :disabled="!hasNext" aria-label="Next clip" @click="nextClip" />
+              <UButton icon="i-lucide-skip-forward" color="neutral" variant="ghost" square size="lg" :disabled="!hasNext || editing" aria-label="Next clip" @click="nextClip" />
             </UTooltip>
           </div>
           <div class="volume">
@@ -576,14 +823,22 @@ onBeforeUnmount(() => {
             />
           </div>
           <span class="time mono">
-            {{ formatDuration(time) }}<span class="dim"> / {{ formatDuration(duration) }}</span>
+            {{ editing ? formatTimecode(time) : formatDuration(time) }}<span class="dim"> / {{ formatDuration(duration) }}</span>
           </span>
         </div>
         <div class="group">
+          <template v-if="editing">
+            <UTooltip text="Previous frame" :kbds="[',']">
+              <UButton icon="i-lucide-chevron-left" color="neutral" variant="ghost" square size="lg" aria-label="Previous frame" @click="stepFrame(-1)" />
+            </UTooltip>
+            <UTooltip text="Next frame" :kbds="['.']">
+              <UButton icon="i-lucide-chevron-right" color="neutral" variant="ghost" square size="lg" aria-label="Next frame" @click="stepFrame(1)" />
+            </UTooltip>
+          </template>
           <UTooltip text="Playback speed">
             <UButton class="rate mono" :label="`${rate}×`" color="neutral" variant="ghost" size="md" @click="cycleRate" />
           </UTooltip>
-          <UTooltip text="Loop">
+          <UTooltip v-if="!editing" text="Loop">
             <UButton
               icon="i-lucide-repeat"
               :color="loop ? 'primary' : 'neutral'"
@@ -628,15 +883,23 @@ onBeforeUnmount(() => {
      pane reads --pane-w, which is 0 whenever the pane is not showing. */
   --details-w: 340px;
   --pane-w: 0px;
+  /* The controls block grows a row in edit mode; the stage gives it the room. */
+  --controls-h: 108px;
 }
 .player.with-details {
   --pane-w: var(--details-w);
+}
+.player.is-editing {
+  --controls-h: 164px;
 }
 /* Near the 980px minimum window the pane gives width back so the video keeps
    the larger share of the screen. */
 @media (max-width: 1240px) {
   .player {
     --details-w: 296px;
+  }
+  .player.is-editing {
+    --controls-h: 210px;
   }
 }
 .player.no-cursor {
@@ -712,7 +975,7 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 72px 88px 108px;
+  padding: 72px 88px var(--controls-h);
   padding-right: calc(88px + var(--pane-w));
   transition: padding var(--dur) var(--ease-out);
 }
@@ -892,6 +1155,50 @@ onBeforeUnmount(() => {
   border: 1px solid var(--border-hover);
   font-size: var(--text-xs);
   pointer-events: none;
+}
+
+/* Edit row: range on the left, the export form on the right; wraps near the
+   980px minimum instead of squeezing the name field. */
+.edit-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--s-3);
+  margin-top: var(--s-3);
+  padding: var(--s-2) var(--s-3);
+  border-radius: var(--r-md);
+  background: rgba(30, 28, 53, 0.6);
+  border: 1px solid var(--border);
+}
+.range {
+  display: flex;
+  align-items: center;
+  gap: var(--s-1);
+}
+.point {
+  min-width: 108px;
+  justify-content: center;
+  text-transform: none;
+}
+.len {
+  min-width: 64px;
+  text-align: center;
+  font-size: var(--text-xs);
+  color: var(--fg-muted);
+}
+.name {
+  flex: 1;
+  min-width: 200px;
+}
+.ext {
+  font-size: var(--text-xs);
+  color: var(--fg-dim);
+}
+.submit {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  margin-left: auto;
 }
 
 .row {

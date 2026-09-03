@@ -1,12 +1,21 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { Clip } from '@shared/types'
-import { copyClipPath, revealClip } from '@/composables/useLibrary'
-import { formatBytes, formatDuration, formatFull, formatResolution } from '@/utils/format'
+import { clipsFolder, copyClipPath, getClip, revealClip } from '@/composables/useLibrary'
+import { formatBytes, formatDuration, formatFull, formatResolution, formatTimecode } from '@/utils/format'
 import { bitrate, formatBitrate, qualityTier } from '@/utils/quality'
 
-const props = defineProps<{ clip: Clip }>()
-defineEmits<{ close: []; rename: []; remove: [] }>()
+const props = withDefaults(
+  defineProps<{
+    clip: Clip
+    /** Edit mode shows where the export will land instead of the actions it would replace. */
+    editing?: boolean
+    /** File name the export will get, with extension. */
+    exportName?: string
+  }>(),
+  { editing: false, exportName: '' }
+)
+defineEmits<{ close: []; rename: []; remove: []; edit: []; source: [] }>()
 
 interface Row {
   label: string
@@ -29,6 +38,7 @@ const CODEC_LABELS: Record<string, string> = {
 
 const pending = computed(() => props.clip.probeState === 'pending')
 const failed = computed(() => props.clip.probeState === 'failed')
+const canEdit = computed(() => props.clip.probeState === 'ok' && props.clip.duration > 0)
 const tier = computed(() => qualityTier(props.clip))
 const codec = computed(() => {
   const c = props.clip.vcodec
@@ -40,6 +50,10 @@ const folder = computed(() => {
   return i > 0 ? props.clip.path.slice(0, i) : props.clip.path
 })
 
+const isExport = computed(() => Boolean(props.clip.sourceId))
+const sourceClip = computed(() => (props.clip.sourceId ? getClip(props.clip.sourceId) : undefined))
+const destination = computed(() => `${clipsFolder.value?.name ?? 'Sift Clips'}\\${props.clip.game}\\${props.exportName}`)
+
 const videoRows = computed<Row[]>(() => {
   const c = props.clip
   return [
@@ -48,7 +62,7 @@ const videoRows = computed<Row[]>(() => {
     { label: 'Frame rate', value: c.fps ? `${Math.round(c.fps)} fps` : '', mono: true },
     { label: 'Codec', value: codec.value },
     { label: 'Bitrate', value: formatBitrate(bitrate(c)), mono: true },
-    { label: 'Audio', value: c.probeState === 'ok' ? (c.hasAudio ? 'Included' : 'None') : '' }
+    { label: 'Audio', value: c.probeState === 'ok' ? (c.hasAudio ? 'Included' : c.muted ? 'Removed' : 'None') : '' }
   ]
 })
 
@@ -60,6 +74,15 @@ const fileRows = computed<Row[]>(() => {
     { label: 'Game', value: c.game },
     { label: 'Recorded', value: formatFull(c.recordedAtMs) },
     { label: 'Modified', value: formatFull(c.mtimeMs) }
+  ]
+})
+
+const sourceRows = computed<Row[]>(() => {
+  const c = props.clip
+  return [
+    { label: 'Cut from', value: sourceClip.value?.title ?? 'No longer in the library' },
+    { label: 'Trimmed', value: `${formatTimecode(c.trimStart)} – ${formatTimecode(c.trimEnd)}`, mono: true },
+    { label: 'Exported', value: c.createdAtMs ? formatFull(c.createdAtMs) : '' }
   ]
 })
 </script>
@@ -88,6 +111,7 @@ const fileRows = computed<Row[]>(() => {
         <UBadge :color="tier.color" variant="soft" size="sm" icon="i-lucide-gauge" :label="tier.label" />
         <UBadge v-if="resolution" color="neutral" variant="subtle" size="sm" :label="resolution" />
         <UBadge v-if="codec" color="neutral" variant="subtle" size="sm" :label="codec" />
+        <UBadge v-if="isExport" color="primary" variant="subtle" size="sm" icon="i-lucide-scissors" label="Clip" />
       </div>
 
       <UAlert
@@ -99,6 +123,15 @@ const fileRows = computed<Row[]>(() => {
         title="Media info unavailable"
         description="This file could not be probed, so some values below are missing."
       />
+
+      <section v-if="editing">
+        <h4>Export</h4>
+        <p class="path" :title="destination">{{ destination }}</p>
+        <p class="note">
+          Stream copy, no re-encode. The start snaps to the keyframe just before it, so the clip can begin a
+          fraction of a second early.
+        </p>
+      </section>
 
       <section>
         <h4>Video</h4>
@@ -123,6 +156,28 @@ const fileRows = computed<Row[]>(() => {
         </dl>
       </section>
 
+      <section v-if="isExport">
+        <h4>Source</h4>
+        <dl class="rows">
+          <div v-for="row in sourceRows" :key="row.label" class="row">
+            <dt>{{ row.label }}</dt>
+            <dd v-if="row.value" :class="{ mono: row.mono }" :title="row.value">{{ row.value }}</dd>
+            <dd v-else class="empty">—</dd>
+          </div>
+        </dl>
+        <UButton
+          class="source-btn"
+          icon="i-lucide-link"
+          label="Open source recording"
+          color="neutral"
+          variant="subtle"
+          size="md"
+          block
+          :disabled="!sourceClip"
+          @click="$emit('source')"
+        />
+      </section>
+
       <section>
         <h4>Location</h4>
         <!-- Selectable: a path is something you copy out by hand as often as
@@ -132,6 +187,17 @@ const fileRows = computed<Row[]>(() => {
     </div>
 
     <footer class="actions">
+      <UButton
+        class="wide"
+        icon="i-lucide-scissors"
+        :label="editing ? 'Leave edit mode' : 'Trim & export'"
+        :color="editing ? 'neutral' : 'primary'"
+        :variant="editing ? 'subtle' : 'soft'"
+        size="md"
+        block
+        :disabled="!canEdit"
+        @click="$emit('edit')"
+      />
       <UButton
         icon="i-lucide-folder-open"
         label="Explorer"
@@ -281,6 +347,15 @@ h4 {
   color: var(--fg-muted);
   word-break: break-all;
   user-select: text;
+}
+.note {
+  margin-top: var(--s-2);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  color: var(--fg-muted);
+}
+.source-btn {
+  margin-top: var(--s-2);
 }
 .actions {
   display: grid;
