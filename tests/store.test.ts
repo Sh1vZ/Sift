@@ -139,11 +139,14 @@ async function storeCases(): Promise<void> {
   // 4. Settings and rows survive close/reopen; unset settings fall back to defaults.
   store.data.settings.volume = 0.33
   store.data.settings.gridSize = 'compact'
+  store.data.settings.minimizeToTray = true
   store.saveSettings()
   await store.close()
   const again = new Store(dbFile)
   await again.load()
   check(again.data.settings.volume === 0.33 && again.data.settings.gridSize === 'compact', 'settings survive reopen')
+  check(again.data.settings.minimizeToTray === true, 'minimize-to-tray survives reopen')
+  check(again.data.settings.trayHintShown === false, 'unset tray hint flag uses its default')
   check(again.data.settings.concurrency === DEFAULT_SETTINGS.concurrency, 'unset settings use defaults')
   check(Object.keys(again.data.clips).length === 3 && again.data.folders.length === 2, 'folders + clips reload')
   check(again.data.folders.find((f) => f.id === 'fc')?.kind === 'clips', 'folder kind survives reopen')

@@ -117,6 +117,13 @@ export const THEME_IDS = [
 ] as const
 export type ThemeId = (typeof THEME_IDS)[number]
 
+/**
+ * localStorage key holding the last theme the user had. The app window and the
+ * splash window both read it before their first paint so neither flashes the
+ * default indigo at an OLED user; the persisted setting corrects it moments later.
+ */
+export const LAST_THEME_KEY = 'sift:theme'
+
 export interface Settings {
   watchFolders: boolean
   generateThumbnails: boolean
@@ -135,6 +142,10 @@ export interface Settings {
   theme: ThemeId
   /** Parallel ffmpeg jobs. Kept low so the app never fights a game for CPU. */
   concurrency: number
+  /** Closing the window hides it to the tray and leaves the library running. */
+  minimizeToTray: boolean
+  /** Internal: the one-time `still running` tray balloon has been shown. Never surfaced in the UI. */
+  trayHintShown: boolean
 }
 
 export interface ScanState {
@@ -216,6 +227,8 @@ export interface EventMap {
   /** Every live export job; a job is sent once in its terminal state and then dropped. */
   'exports:changed': ExportJob[]
   'window:maximized': boolean
+  /** The tray Settings item: show the settings screen on the OS settings pane. */
+  'app:open-settings': null
 }
 
 export type EventName = keyof EventMap
@@ -246,5 +259,7 @@ export const DEFAULT_SETTINGS: Settings = {
   sort: 'newest',
   groupBy: 'date',
   theme: 'sift',
-  concurrency: 2
+  concurrency: 2,
+  minimizeToTray: false,
+  trayHintShown: false
 }

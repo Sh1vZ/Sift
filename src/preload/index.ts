@@ -31,7 +31,8 @@ const api: Api = {
     minimize: () => void ipcRenderer.invoke('window:minimize'),
     toggleMaximize: () => void ipcRenderer.invoke('window:toggle-maximize'),
     close: () => void ipcRenderer.invoke('window:close'),
-    isMaximized: () => ipcRenderer.invoke('window:is-maximized')
+    isMaximized: () => ipcRenderer.invoke('window:is-maximized'),
+    ready: () => void ipcRenderer.invoke('window:ready')
   },
   on<K extends EventName>(name: K, handler: (payload: EventMap[K]) => void) {
     const listener = (_e: IpcRendererEvent, payload: EventMap[K]): void => handler(payload)

@@ -67,7 +67,8 @@ const ICONS: Record<string, string> = {
   scissors: 'i-lucide-scissors',
   'folder-output': 'i-lucide-folder-output',
   download: 'i-lucide-download',
-  link: 'i-lucide-link'
+  link: 'i-lucide-link',
+  tray: 'i-lucide-panel-bottom'
 }
 
 const props = withDefaults(defineProps<{ name: string; size?: number; stroke?: number }>(), {

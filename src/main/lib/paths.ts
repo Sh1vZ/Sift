@@ -1,5 +1,5 @@
 import { app } from 'electron'
-import { mkdirSync } from 'node:fs'
+import { existsSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import ffmpegPath from 'ffmpeg-static'
 import ffprobeStatic from 'ffprobe-static'
@@ -18,4 +18,17 @@ export const libraryDb = (): string => join(userDataDir(), 'library.db')
 
 export function ensureDirs(): void {
   mkdirSync(cacheDir(), { recursive: true })
+}
+
+/**
+ * The app icon on disk, for the window and the tray. A packaged build gets it
+ * from extraResources (electron-builder.yml) because the asar ships only out/**;
+ * dev and unpacked builds read it straight out of build/. Undefined when neither
+ * is there — the window falls back to the exe icon, the tray is simply skipped.
+ */
+export function appIconPath(): string | undefined {
+  for (const p of [join(process.resourcesPath, 'icon.png'), join(import.meta.dirname, '../../build/icon.png')]) {
+    if (existsSync(p)) return p
+  }
+  return undefined
 }

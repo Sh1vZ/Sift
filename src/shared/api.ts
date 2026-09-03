@@ -51,6 +51,8 @@ export interface Api {
     toggleMaximize(): void
     close(): void
     isMaximized(): Promise<boolean>
+    /** The app has its first real frame — dismisses the launch splash and reveals the window. */
+    ready(): void
   }
   on<K extends EventName>(name: K, handler: (payload: EventMap[K]) => void): () => void
   mediaUrl(clipId: string): string

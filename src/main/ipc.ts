@@ -11,7 +11,13 @@ async function pickFolder(win: BrowserWindow | null, title: string): Promise<str
   return result.canceled ? null : (result.filePaths[0] ?? null)
 }
 
-export function registerIpc(library: Library, getWindow: () => BrowserWindow | null): void {
+export function registerIpc(
+  library: Library,
+  getWindow: () => BrowserWindow | null,
+  onRendererReady: () => void,
+  /** Runs after every accepted settings patch, so main can react to app-level flags. */
+  onSettingsApplied: (settings: Settings) => void
+): void {
   ipcMain.handle('library:snapshot', () => library.snapshot())
 
   ipcMain.handle('library:add-folder', async () => {
@@ -26,7 +32,9 @@ export function registerIpc(library: Library, getWindow: () => BrowserWindow | n
     const p = { ...((patch ?? {}) as Partial<Settings>) }
     // Unknown theme ids would leave the renderer on no theme block at all.
     if (p.theme !== undefined && !THEME_IDS.includes(p.theme)) delete p.theme
-    return library.setSettings(p)
+    const settings = library.setSettings(p)
+    onSettingsApplied(settings)
+    return settings
   })
 
   ipcMain.handle('library:stats', () => library.stats())
@@ -68,4 +76,7 @@ export function registerIpc(library: Library, getWindow: () => BrowserWindow | n
   })
   ipcMain.handle('window:close', () => getWindow()?.close())
   ipcMain.handle('window:is-maximized', () => getWindow()?.isMaximized() ?? false)
+  ipcMain.handle('window:ready', () => {
+    onRendererReady()
+  })
 }

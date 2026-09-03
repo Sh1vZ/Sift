@@ -3,6 +3,7 @@ import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { is } from '@electron-toolkit/utils'
 import { openDevTools, userDataOverride } from './env'
+import { appIconPath } from './paths'
 
 function preloadPath(): string {
   const dir = join(import.meta.dirname, '../preload')
@@ -13,15 +14,14 @@ function preloadPath(): string {
   return join(dir, 'index.js')
 }
 
-/** Dev/unpacked builds pick the icon up from disk; the installer bakes it into the exe. */
-function iconPath(): string | undefined {
-  const p = join(import.meta.dirname, '../../build/icon.png')
-  return existsSync(p) ? p : undefined
-}
-
-export function createMainWindow(): BrowserWindow {
+/**
+ * `autoShow: false` leaves the window hidden once it has painted, so the splash
+ * can hold the screen until the renderer says the library is up and then reveal
+ * it (see lib/splash.ts). Everything else about the window is unchanged.
+ */
+export function createMainWindow({ autoShow = true }: { autoShow?: boolean } = {}): BrowserWindow {
   const win = new BrowserWindow({
-    icon: iconPath(),
+    icon: appIconPath(),
     width: 1440,
     height: 900,
     minWidth: 980,
@@ -41,7 +41,7 @@ export function createMainWindow(): BrowserWindow {
   })
 
   win.on('ready-to-show', () => {
-    win.show()
+    if (autoShow) win.show()
     if (openDevTools) win.webContents.openDevTools({ mode: 'detach' })
   })
   // Keep the profile marker in the title bar instead of letting the page title replace it.

@@ -36,7 +36,11 @@ export default defineConfig({
     },
     build: {
       rollupOptions: {
-        input: { index: resolve('src/renderer/index.html') }
+        // Two entries: the app, and the launch splash shown while it boots.
+        input: {
+          index: resolve('src/renderer/index.html'),
+          splash: resolve('src/renderer/splash.html')
+        }
       }
     },
     plugins: [

@@ -6,7 +6,16 @@ import { view } from './useLibrary'
  * id; the rail, the pane hero and the title-bar breadcrumb all read the same
  * section table so a new pane only has to be described once.
  */
-export type SettingsTab = 'folders' | 'clips' | 'indexing' | 'playback' | 'themes' | 'stats' | 'storage' | 'info'
+export type SettingsTab =
+  | 'folders'
+  | 'clips'
+  | 'indexing'
+  | 'playback'
+  | 'themes'
+  | 'os'
+  | 'stats'
+  | 'storage'
+  | 'info'
 
 export interface SettingsSection {
   id: SettingsTab
@@ -68,6 +77,18 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
         icon: 'i-lucide-palette',
         description: 'The colours the chrome is painted in. Thumbnails and clips are never tinted.',
         keywords: 'theme colour color oled black dark amoled accent palette appearance look'
+      }
+    ]
+  },
+  {
+    label: 'System',
+    sections: [
+      {
+        id: 'os',
+        label: 'OS settings',
+        icon: 'i-lucide-app-window',
+        description: 'What closing the window does, and whether Sift keeps working once it is out of sight.',
+        keywords: 'os tray background close minimize hide quit exit taskbar windows notification area system'
       }
     ]
   },

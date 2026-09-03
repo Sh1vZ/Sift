@@ -30,6 +30,7 @@ declare module 'vue' {
     InfoPane: typeof import('./src/components/settings/InfoPane.vue')['default']
     LibraryView: typeof import('./src/components/LibraryView.vue')['default']
     Magnet: typeof import('./src/components/bits/Magnet.vue')['default']
+    OsPane: typeof import('./src/components/settings/OsPane.vue')['default']
     PlaybackPane: typeof import('./src/components/settings/PlaybackPane.vue')['default']
     PlayerDetails: typeof import('./src/components/PlayerDetails.vue')['default']
     PlayerOverlay: typeof import('./src/components/PlayerOverlay.vue')['default']

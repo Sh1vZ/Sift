@@ -1,0 +1,233 @@
+/*
+ * Splash window. A separate document from the app, so it carries its own reset
+ * instead of base.css (which pulls in Tailwind preflight and the app helpers it
+ * has no use for). Everything visual still comes from tokens.css, so every
+ * theme — including the true-black OLED set — dresses the splash too.
+ */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  /* The window is transparent; only the card below paints. */
+  background: transparent;
+  color: var(--fg);
+  font-family: var(--font-body);
+  font-size: var(--text-base);
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  cursor: default;
+}
+
+h1,
+p {
+  margin: 0;
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ------------------------------------------------------------------- card */
+
+.splash {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  /* Room for the drop shadow, which falls outside the card on a transparent window. */
+  height: calc(100% - 48px);
+  margin: 24px;
+  padding: var(--s-6);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xl);
+  box-shadow: var(--shadow-lg);
+  /*
+   * App.vue's --app-wash is scaled for a 1440px window and would read as a flat
+   * tint at this size, so the splash mixes its own washes from the same brand
+   * tokens: primary from above, the reserved accent as a faint counterweight.
+   */
+  background:
+    radial-gradient(
+      120% 90% at 50% -25%,
+      color-mix(in srgb, var(--primary) 30%, transparent),
+      transparent 70%
+    ),
+    radial-gradient(
+      100% 80% at 0% 120%,
+      color-mix(in srgb, var(--accent) 12%, transparent),
+      transparent 70%
+    ),
+    var(--bg-1);
+  animation: splash-in var(--dur-slow) var(--ease-out) both;
+}
+
+/* The handoff: main fades the card out, then closes the window behind it. */
+.leaving .splash {
+  opacity: 0;
+  transform: scale(0.985);
+  transition:
+    opacity var(--dur) var(--ease-out),
+    transform var(--dur) var(--ease-out);
+}
+
+/* ---------------------------------------------------------------- content */
+
+.mark {
+  display: flex;
+  border-radius: var(--r-lg);
+  box-shadow: var(--glow-primary);
+  animation: splash-rise var(--dur-slow) var(--ease-spring) both;
+}
+
+.wordmark {
+  margin-top: var(--s-4);
+  font-family: var(--font-display);
+  font-size: 32px;
+  font-weight: 400;
+  line-height: 1.1;
+  letter-spacing: 0.06em;
+  color: var(--fg);
+}
+
+.wordmark span {
+  display: inline-block;
+  animation: splash-rise var(--dur-slow) var(--ease-out) both;
+  animation-delay: calc(90ms + var(--i) * 55ms);
+}
+
+.tagline {
+  margin-top: var(--s-2);
+  font-family: var(--font-heading);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: var(--fg-dim);
+  animation: splash-fade var(--dur-slow) var(--ease-out) both;
+  animation-delay: 320ms;
+}
+
+.progress {
+  overflow: hidden;
+  width: 168px;
+  height: 3px;
+  margin-top: var(--s-6);
+  border-radius: var(--r-full);
+  background: var(--border);
+  animation: splash-fade var(--dur-slow) var(--ease-out) both;
+  animation-delay: 380ms;
+}
+
+.bar {
+  display: block;
+  width: 40%;
+  height: 100%;
+  border-radius: var(--r-full);
+  background: linear-gradient(90deg, var(--primary), var(--secondary));
+  /* Transform only — the sweep stays on the compositor. */
+  animation: splash-sweep 1400ms var(--ease-in-out) infinite;
+}
+
+.status {
+  margin-top: var(--s-3);
+  font-family: var(--font-heading);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--fg-muted);
+  animation: splash-fade var(--dur-slow) var(--ease-out) both;
+  animation-delay: 380ms;
+}
+
+.version {
+  position: absolute;
+  right: var(--s-4);
+  bottom: var(--s-3);
+  font-size: var(--text-xs);
+  color: var(--fg-dim);
+}
+
+.version[hidden] {
+  display: none;
+}
+
+/* ---------------------------------------------------------------- motion */
+
+@keyframes splash-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+@keyframes splash-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+
+@keyframes splash-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes splash-sweep {
+  from {
+    transform: translateX(-110%);
+  }
+  to {
+    transform: translateX(360%);
+  }
+}
+
+/*
+ * Animations off — either the OS preference or the app's own setting, which
+ * main forwards as `html.no-motion` once it has read the library. Entrance
+ * animations simply do not run (their natural state is the visible one) and the
+ * sweeping bar becomes a quiet filled track, so the launch still looks alive
+ * without anything moving.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .splash,
+  .mark,
+  .wordmark span,
+  .tagline,
+  .progress,
+  .status {
+    animation: none;
+  }
+  .bar {
+    width: 100%;
+    animation: none;
+    opacity: 0.55;
+  }
+  .leaving .splash {
+    transition: none;
+  }
+}
+
+html.no-motion .splash,
+html.no-motion .mark,
+html.no-motion .wordmark span,
+html.no-motion .tagline,
+html.no-motion .progress,
+html.no-motion .status {
+  animation: none;
+}
+html.no-motion .bar {
+  width: 100%;
+  animation: none;
+  opacity: 0.55;
+}

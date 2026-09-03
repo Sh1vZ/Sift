@@ -1,5 +1,5 @@
 import { computed, watchEffect } from 'vue'
-import { THEME_IDS, type ThemeId } from '@shared/types'
+import { LAST_THEME_KEY, THEME_IDS, type ThemeId } from '@shared/types'
 import { settings, updateSettings } from './useLibrary'
 
 /**
@@ -202,7 +202,6 @@ export const THEMES: ThemeDef[] = [
 ]
 
 const DEFAULT_THEME = THEMES[0]
-const LAST_THEME_KEY = 'sift:theme'
 
 function isThemeId(v: unknown): v is ThemeId {
   return typeof v === 'string' && (THEME_IDS as readonly string[]).includes(v)

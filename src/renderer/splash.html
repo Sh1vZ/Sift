@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Sift</title>
+    <!-- Same lockdown as index.html, minus the routes the splash has no use for:
+         no clip: scheme, no media. connect-src keeps the dev server's HMR socket. -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' ws://localhost:* http://localhost:*"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark" />
+  </head>
+  <body>
+    <div class="splash">
+      <span class="mark" aria-hidden="true">
+        <svg viewBox="0 0 32 32" width="60" height="60">
+          <defs>
+            <linearGradient id="splash-mark" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" style="stop-color: var(--secondary)" />
+              <stop offset="1" style="stop-color: var(--primary)" />
+            </linearGradient>
+          </defs>
+          <rect x="2" y="2" width="28" height="28" rx="8" fill="url(#splash-mark)" />
+          <path d="M12.5 10.5v11l9-5.5z" style="fill: var(--on-primary)" />
+        </svg>
+      </span>
+
+      <h1 class="wordmark">
+        <span style="--i: 0">S</span><span style="--i: 1">i</span><span style="--i: 2">f</span
+        ><span style="--i: 3">t</span>
+      </h1>
+      <p class="tagline">Local-first clip library</p>
+
+      <div class="progress" role="progressbar" aria-label="Starting Sift">
+        <span class="bar"></span>
+      </div>
+      <p id="status" class="status" aria-live="polite">Starting up…</p>
+
+      <p id="version" class="version mono" hidden></p>
+    </div>
+    <script type="module" src="/src/splash.ts"></script>
+  </body>
+</html>

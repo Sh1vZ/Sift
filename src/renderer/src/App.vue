@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { nextTick, onMounted } from 'vue'
 import TitleBar from './components/TitleBar.vue'
 import Sidebar from './components/Sidebar.vue'
 import LibraryView from './components/LibraryView.vue'
@@ -11,12 +11,24 @@ import ToastBridge from './components/ToastBridge.vue'
 import { initLibrary, initialExports, ready, view } from '@/composables/useLibrary'
 import { initExports } from '@/composables/useExports'
 import { isOpen } from '@/composables/usePlayer'
+import { openSettings } from '@/composables/useSettings'
 // Side-effect import: applies the persisted theme to <html> before first paint.
 import '@/composables/useTheme'
 
 onMounted(async () => {
-  await initLibrary()
-  initExports(initialExports.value)
+  // The tray's Settings item. Subscribed here rather than in useLibrary because
+  // useSettings already imports from it; App is the root, so it never unmounts.
+  window.api.on('app:open-settings', () => openSettings('os'))
+  try {
+    await initLibrary()
+    initExports(initialExports.value)
+  } finally {
+    // The launch splash holds the screen until this lands: one frame after the
+    // first real render, so the window is never revealed mid-paint. In the
+    // `finally` on purpose — a boot that failed still has to reach the user.
+    await nextTick()
+    requestAnimationFrame(() => window.api.window.ready())
+  }
 })
 </script>
 
