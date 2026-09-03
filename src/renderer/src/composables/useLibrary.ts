@@ -1,0 +1,262 @@
+import { computed, ref, watch } from 'vue'
+import type { Clip, LibraryFolder, ScanState, Settings } from '@shared/types'
+import { DEFAULT_SETTINGS } from '@shared/types'
+import { dateBucket } from '@/utils/format'
+import { toast } from './useToasts'
+
+const api = window.api
+
+/**
+ * Clips live in a plain Map outside Vue's reactivity; `version` is bumped on
+ * every change so computed lists rebuild without deep-proxying thousands of
+ * objects. Cards receive fresh object references on update, which is all the
+ * grid needs to re-render the right rows.
+ */
+const clipsById = new Map<string, Clip>()
+const version = ref(0)
+
+export const ready = ref(false)
+export const folders = ref<LibraryFolder[]>([])
+export const settings = ref<Settings>({ ...DEFAULT_SETTINGS })
+export const scan = ref<ScanState>({ active: false, folder: '', found: 0, pending: 0, done: 0 })
+export const appVersion = ref('')
+export const suggestedFolders = ref<string[]>([])
+export const selectedGame = ref<string | null>(null)
+export const view = ref<'library' | 'folders' | 'stats'>('library')
+
+/** Ticks once a minute so "2 minutes ago" labels stay honest. */
+export const now = ref(Date.now())
+window.setInterval(() => (now.value = Date.now()), 60_000)
+
+export const allClips = computed<Clip[]>(() => {
+  void version.value
+  return Array.from(clipsById.values())
+})
+
+export interface GameSummary {
+  name: string
+  count: number
+  cover: string
+  latestMs: number
+  totalDuration: number
+  totalSize: number
+}
+
+export const games = computed<GameSummary[]>(() => {
+  const map = new Map<string, GameSummary & { coverMs: number }>()
+  for (const c of allClips.value) {
+    let g = map.get(c.game)
+    if (!g) {
+      g = { name: c.game, count: 0, cover: '', latestMs: 0, totalDuration: 0, totalSize: 0, coverMs: -1 }
+      map.set(c.game, g)
+    }
+    g.count++
+    g.totalDuration += c.duration
+    g.totalSize += c.size
+    if (c.recordedAtMs > g.latestMs) g.latestMs = c.recordedAtMs
+    if (c.thumb && c.recordedAtMs > g.coverMs) {
+      g.cover = c.thumb
+      g.coverMs = c.recordedAtMs
+    }
+  }
+  return [...map.values()].sort((a, b) => b.latestMs - a.latestMs)
+})
+
+function compare(sort: Settings['sort']): (a: Clip, b: Clip) => number {
+  switch (sort) {
+    case 'oldest':
+      return (a, b) => a.recordedAtMs - b.recordedAtMs || a.name.localeCompare(b.name)
+    case 'name':
+      return (a, b) => a.title.localeCompare(b.title) || a.recordedAtMs - b.recordedAtMs
+    case 'duration':
+      return (a, b) => b.duration - a.duration || b.recordedAtMs - a.recordedAtMs
+    case 'size':
+      return (a, b) => b.size - a.size || b.recordedAtMs - a.recordedAtMs
+    default:
+      return (a, b) => b.recordedAtMs - a.recordedAtMs || a.name.localeCompare(b.name)
+  }
+}
+
+export const visibleClips = computed<Clip[]>(() => {
+  const game = selectedGame.value
+  const list = game ? allClips.value.filter((c) => c.game === game) : allClips.value.slice()
+  return list.sort(compare(settings.value.sort))
+})
+
+export interface Section {
+  key: string
+  /** Null renders the clips without a header. */
+  title: string | null
+  clips: Clip[]
+}
+
+/** Grouping applied inside a game's grid. Anything unexpected in a stored setting falls back to date. */
+export const gridGroupBy = computed<'date' | 'none'>(() =>
+  settings.value.groupBy === 'none' ? 'none' : 'date'
+)
+
+export const sections = computed<Section[]>(() => {
+  const list = visibleClips.value
+  if (!list.length) return []
+  if (gridGroupBy.value === 'none') return [{ key: 'all', title: null, clips: list }]
+  const stamp = now.value
+  const buckets = new Map<string, { title: string; order: number; clips: Clip[] }>()
+  for (const c of list) {
+    const b = dateBucket(c.recordedAtMs, stamp)
+    let s = buckets.get(b.key)
+    if (!s) {
+      s = { title: b.title, order: b.order, clips: [] }
+      buckets.set(b.key, s)
+    }
+    s.clips.push(c)
+  }
+  return [...buckets.entries()]
+    .sort((a, b) => a[1].order - b[1].order)
+    .map(([key, s]) => ({ key, title: s.title, clips: s.clips }))
+})
+
+/** Grid order, flattened: what "next clip" means inside the player. */
+export const orderedClips = computed<Clip[]>(() => sections.value.flatMap((s) => s.clips))
+
+export const libraryStats = computed(() => {
+  let duration = 0
+  let size = 0
+  for (const c of visibleClips.value) {
+    duration += c.duration
+    size += c.size
+  }
+  return { count: visibleClips.value.length, duration, size }
+})
+
+export function getClip(id: string): Clip | undefined {
+  return clipsById.get(id)
+}
+
+/** Which screen the main area shows: the games browser is home, a game drills into its clips. */
+export const screen = computed<'games' | 'game' | 'folders' | 'stats'>(() => {
+  if (view.value !== 'library') return view.value
+  return selectedGame.value ? 'game' : 'games'
+})
+
+export function goGames(): void {
+  selectedGame.value = null
+  view.value = 'library'
+}
+
+export function openGame(name: string): void {
+  selectedGame.value = name
+  view.value = 'library'
+}
+
+// ---------------------------------------------------------- games browser
+
+export type GameSort = 'recent' | 'name' | 'count'
+export const gameQuery = ref('')
+export const gameSort = ref<GameSort>('recent')
+
+const squash = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]+/g, '')
+
+export const filteredGames = computed<GameSummary[]>(() => {
+  const q = gameQuery.value.trim().toLowerCase()
+  const qs = squash(q)
+  let list = games.value
+  if (q) list = list.filter((g) => g.name.toLowerCase().includes(q) || squash(g.name).includes(qs))
+  switch (gameSort.value) {
+    case 'name':
+      return [...list].sort((a, b) => a.name.localeCompare(b.name))
+    case 'count':
+      return [...list].sort((a, b) => b.count - a.count || b.latestMs - a.latestMs)
+    default:
+      return list
+  }
+})
+
+// If the selected game vanishes (folder removed, last clip deleted) fall back to All.
+watch(games, (list) => {
+  if (selectedGame.value && !list.some((g) => g.name === selectedGame.value)) selectedGame.value = null
+})
+
+export async function initLibrary(): Promise<void> {
+  const snap = await api.library.snapshot()
+  clipsById.clear()
+  for (const c of snap.clips) clipsById.set(c.id, c)
+  folders.value = snap.folders
+  settings.value = snap.settings
+  scan.value = snap.scan
+  appVersion.value = snap.appVersion
+  suggestedFolders.value = snap.suggestedFolders
+  version.value++
+  ready.value = true
+
+  api.on('clips:added', (clips) => {
+    for (const c of clips) clipsById.set(c.id, c)
+    version.value++
+  })
+  api.on('clips:updated', (patches) => {
+    for (const p of patches) {
+      const c = clipsById.get(p.id)
+      if (c) clipsById.set(p.id, { ...c, ...p })
+    }
+    version.value++
+  })
+  api.on('clips:removed', (ids) => {
+    for (const id of ids) clipsById.delete(id)
+    version.value++
+  })
+  api.on('folders:changed', (f) => (folders.value = f))
+  api.on('settings:changed', (s) => (settings.value = s))
+  api.on('scan:changed', (s) => (scan.value = s))
+}
+
+// ------------------------------------------------------------------ actions
+
+export async function updateSettings(patch: Partial<Settings>): Promise<void> {
+  settings.value = { ...settings.value, ...patch }
+  settings.value = await api.library.setSettings(patch)
+}
+
+export async function addFolder(path?: string): Promise<LibraryFolder | null> {
+  const res = path ? await api.library.addFolderPath(path) : await api.library.addFolder()
+  if (res.error) toast('error', 'Could not add folder', res.error)
+  else if (res.folder) toast('success', 'Folder added', `Scanning ${res.folder.name}…`)
+  return res.folder
+}
+
+export async function removeFolder(folder: LibraryFolder): Promise<void> {
+  const res = await api.library.removeFolder(folder.id)
+  if (!res.ok) toast('error', 'Could not remove folder', res.error)
+  else toast('info', 'Folder removed', `${folder.name} is no longer indexed. Files were left untouched.`)
+}
+
+export async function rescan(folderId?: string): Promise<void> {
+  await api.library.rescan(folderId)
+}
+
+export async function renameClip(clip: Clip, name: string): Promise<Clip | null> {
+  const res = await api.clips.rename(clip.id, name)
+  if (!res.ok || !res.clip) {
+    toast('error', 'Rename failed', res.error)
+    return null
+  }
+  // Swap the record now so the UI never sees a gap before the events arrive.
+  clipsById.delete(clip.id)
+  clipsById.set(res.clip.id, res.clip)
+  version.value++
+  return res.clip
+}
+
+export async function deleteClip(clip: Clip): Promise<boolean> {
+  const res = await api.clips.delete(clip.id)
+  if (!res.ok) {
+    toast('error', 'Delete failed', res.error)
+    return false
+  }
+  clipsById.delete(clip.id)
+  version.value++
+  toast('success', 'Moved to Recycle Bin', clip.name + clip.ext)
+  return true
+}
+
+export function revealClip(clip: Clip): void {
+  void api.clips.reveal(clip.id)
+}

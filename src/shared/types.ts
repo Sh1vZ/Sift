@@ -1,0 +1,165 @@
+/** Types shared between the main process, the preload bridge and the renderer. */
+
+export type ProbeState = 'pending' | 'ok' | 'failed'
+
+export interface Clip {
+  /** Stable id derived from the absolute file path. */
+  id: string
+  path: string
+  /** File name without extension. */
+  name: string
+  /** Cleaned-up display title (ShadowPlay date/DVR noise stripped). */
+  title: string
+  ext: string
+  folderId: string
+  /** Group the clip belongs to — the sub-folder name, i.e. the game. */
+  game: string
+  size: number
+  mtimeMs: number
+  /** Best-effort recording time: parsed from the file name, else birthtime/mtime. */
+  recordedAtMs: number
+  duration: number
+  width: number
+  height: number
+  fps: number
+  vcodec: string
+  hasAudio: boolean
+  /** File names inside the cache dir, empty when not generated (yet). */
+  thumb: string
+  sprite: string
+  spriteFrames: number
+  probeState: ProbeState
+}
+
+export interface LibraryFolder {
+  id: string
+  path: string
+  name: string
+  addedAtMs: number
+  clipCount: number
+  /** False when the drive/folder is not reachable right now; clips are kept, not dropped. */
+  available: boolean
+}
+
+export type GroupBy = 'date' | 'none'
+export type SortBy = 'newest' | 'oldest' | 'name' | 'duration' | 'size'
+export type GridSize = 'compact' | 'comfortable' | 'large'
+
+export interface Settings {
+  watchFolders: boolean
+  generateThumbnails: boolean
+  hoverPreview: boolean
+  animations: boolean
+  autoplayNext: boolean
+  volume: number
+  muted: boolean
+  gridSize: GridSize
+  sort: SortBy
+  groupBy: GroupBy
+  /** Parallel ffmpeg jobs. Kept low so the app never fights a game for CPU. */
+  concurrency: number
+}
+
+export interface ScanState {
+  active: boolean
+  /** Folder currently being walked. */
+  folder: string
+  found: number
+  /** Media jobs still queued (probe + thumbnail + sprite). */
+  pending: number
+  done: number
+}
+
+export interface LibrarySnapshot {
+  folders: LibraryFolder[]
+  clips: Clip[]
+  settings: Settings
+  scan: ScanState
+  appVersion: string
+  suggestedFolders: string[]
+}
+
+export interface ActionResult {
+  ok: boolean
+  error?: string
+}
+
+/** Disk used by the storage Sift owns, i.e. everything under `userData`. */
+export interface StorageStats {
+  /** %APPDATA%/sift (or the SIFT_USER_DATA override). */
+  userDataPath: string
+  /** library.db plus its -wal / -shm sidecars. */
+  databaseBytes: number
+  /** Poster frames and hover-scrub strips. */
+  cacheBytes: number
+  cacheFiles: number
+  /** Everything else Electron keeps there: GPU cache, logs, local storage. */
+  otherBytes: number
+  /** Volume holding the app data. Zero when the platform will not report it. */
+  diskFreeBytes: number
+  diskTotalBytes: number
+}
+
+export interface RuntimeStats {
+  appVersion: string
+  electron: string
+  chrome: string
+  node: string
+  platform: string
+  /** Milliseconds since the main process started. */
+  uptimeMs: number
+  /** Working set summed across every Electron process of this app. */
+  memoryBytes: number
+  processCount: number
+  /** False when the bundled ffmpeg/ffprobe could not be resolved. */
+  ffmpeg: boolean
+}
+
+export interface AppStats {
+  storage: StorageStats
+  runtime: RuntimeStats
+  generatedAtMs: number
+}
+
+export interface ClipPatch extends Partial<Clip> {
+  id: string
+}
+
+/** Payloads pushed from main → renderer. */
+export interface EventMap {
+  'clips:added': Clip[]
+  'clips:updated': ClipPatch[]
+  'clips:removed': string[]
+  'folders:changed': LibraryFolder[]
+  'settings:changed': Settings
+  'scan:changed': ScanState
+  'window:maximized': boolean
+}
+
+export type EventName = keyof EventMap
+
+export const VIDEO_EXTENSIONS = [
+  '.mp4',
+  '.mkv',
+  '.mov',
+  '.webm',
+  '.m4v',
+  '.avi',
+  '.wmv',
+  '.flv',
+  '.ts'
+] as const
+
+export const DEFAULT_SETTINGS: Settings = {
+  watchFolders: true,
+  generateThumbnails: true,
+  hoverPreview: true,
+  animations: true,
+  autoplayNext: false,
+  volume: 0.8,
+  muted: false,
+  gridSize: 'large',
+  sort: 'newest',
+  groupBy: 'date',
+  concurrency: 2
+}

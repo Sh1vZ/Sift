@@ -1,0 +1,14 @@
+/*
+ * Tailwind v4 + Nuxt UI. The app's own styles (tokens.css / base.css / scoped
+ * component styles) are unlayered, so they always win over utility classes;
+ * Nuxt UI's `--ui-*` design variables are re-pointed at the app tokens in
+ * tokens.css so every component picks up the Sift palette.
+ */
+@import 'tailwindcss';
+@import '@nuxt/ui';
+
+@theme {
+  --font-sans: 'Inter Variable', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --font-heading: 'Chakra Petch', 'Inter Variable', system-ui, sans-serif;
+  --font-display: 'Russo One', 'Chakra Petch', system-ui, sans-serif;
+}

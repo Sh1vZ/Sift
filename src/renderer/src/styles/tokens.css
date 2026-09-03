@@ -1,0 +1,116 @@
+/*
+ * Design tokens — derived from design-system/sift/MASTER.md
+ * (ui-ux-pro-max: "Neon purple + rose action", Russo One / Chakra Petch).
+ * Dark-only by design; the app never renders a light theme.
+ */
+:root {
+  color-scheme: dark;
+
+  /* Surfaces: four steps of elevation, each a touch lighter and bluer. */
+  --bg-0: #0a0a18;
+  --bg-1: #0f0f23;
+  --bg-2: #15152a;
+  --bg-3: #1e1c35;
+  --bg-4: #27273b;
+
+  --fg: #e2e8f0;
+  --fg-muted: #94a3b8;
+  --fg-dim: #64748b;
+  --fg-inverse: #0f172a;
+
+  --primary: #7c3aed;
+  --primary-hover: #8b5cf6;
+  --primary-soft: rgba(124, 58, 237, 0.16);
+  --secondary: #a78bfa;
+  --accent: #f43f5e;
+  --accent-soft: rgba(244, 63, 94, 0.16);
+  --success: #34d399;
+  --warning: #fbbf24;
+  --destructive: #ef4444;
+  --destructive-soft: rgba(239, 68, 68, 0.14);
+
+  --border: rgba(255, 255, 255, 0.07);
+  --border-hover: rgba(255, 255, 255, 0.13);
+  --border-active: rgba(167, 139, 250, 0.45);
+  --ring: #a78bfa;
+
+  --glow-primary: 0 0 0 1px rgba(167, 139, 250, 0.35), 0 12px 32px -8px rgba(124, 58, 237, 0.55);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 8px 24px -6px rgba(0, 0, 0, 0.55);
+  --shadow-lg: 0 24px 60px -12px rgba(0, 0, 0, 0.7);
+
+  --font-display: 'Russo One', 'Chakra Petch', system-ui, sans-serif;
+  --font-heading: 'Chakra Petch', 'Inter Variable', system-ui, sans-serif;
+  --font-body: 'Inter Variable', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --font-mono: 'Cascadia Code', 'Consolas', ui-monospace, monospace;
+
+  --text-xs: 11px;
+  --text-sm: 12.5px;
+  --text-base: 14px;
+  --text-md: 15px;
+  --text-lg: 18px;
+  --text-xl: 22px;
+  --text-2xl: 28px;
+
+  --r-sm: 6px;
+  --r-md: 10px;
+  --r-lg: 14px;
+  --r-xl: 20px;
+  --r-full: 999px;
+
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 20px;
+  --s-6: 24px;
+  --s-8: 32px;
+  --s-10: 40px;
+  --s-12: 48px;
+
+  --titlebar-h: 40px;
+  --sidebar-w: 248px;
+  /* Reading-width column for text-led screens (settings). Grid screens ignore it
+     and fill the window instead. */
+  --page-max: 960px;
+
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+  --dur-fast: 140ms;
+  --dur: 220ms;
+  --dur-slow: 380ms;
+}
+
+/* Nuxt UI reads these for every component; point them at the app's surfaces. */
+:root,
+.dark {
+  --ui-bg: var(--bg-1);
+  --ui-bg-muted: var(--bg-2);
+  --ui-bg-elevated: var(--bg-3);
+  --ui-bg-accented: var(--bg-4);
+  --ui-bg-inverted: var(--fg);
+  --ui-border: var(--border);
+  --ui-border-muted: var(--border);
+  --ui-border-accented: var(--border-hover);
+  --ui-border-inverted: var(--fg);
+  --ui-text-dimmed: var(--fg-dim);
+  --ui-text-muted: var(--fg-muted);
+  --ui-text-toned: #b4c0d3;
+  --ui-text: var(--fg);
+  --ui-text-highlighted: #f8fafc;
+  --ui-text-inverted: var(--fg-inverse);
+  --ui-primary: var(--ui-color-primary-500);
+  --ui-radius: 0.5rem;
+}
+
+/* Motion off: user setting or OS preference. Transitions collapse to instant. */
+html.no-motion,
+html.no-motion * {
+  --dur-fast: 0ms;
+  --dur: 0ms;
+  --dur-slow: 0ms;
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+}
