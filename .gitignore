@@ -4,3 +4,8 @@ out
 .DS_Store
 *.log
 .vite
+# local environment (keep .env.example)
+.env
+.env.local
+.env.*.local
+!.env.example

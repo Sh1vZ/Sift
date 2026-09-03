@@ -2,6 +2,7 @@ import { BrowserWindow, shell } from 'electron'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { is } from '@electron-toolkit/utils'
+import { openDevTools, userDataOverride } from './env'
 
 function preloadPath(): string {
   const dir = join(import.meta.dirname, '../preload')
@@ -29,7 +30,7 @@ export function createMainWindow(): BrowserWindow {
     frame: false,
     autoHideMenuBar: true,
     backgroundColor: '#0f0f23',
-    title: process.env.SIFT_USER_DATA ? 'Sift (dev profile)' : 'Sift',
+    title: userDataOverride ? 'Sift (dev profile)' : 'Sift',
     webPreferences: {
       preload: preloadPath(),
       contextIsolation: true,
@@ -39,9 +40,12 @@ export function createMainWindow(): BrowserWindow {
     }
   })
 
-  win.on('ready-to-show', () => win.show())
+  win.on('ready-to-show', () => {
+    win.show()
+    if (openDevTools) win.webContents.openDevTools({ mode: 'detach' })
+  })
   // Keep the profile marker in the title bar instead of letting the page title replace it.
-  if (process.env.SIFT_USER_DATA) win.on('page-title-updated', (e) => e.preventDefault())
+  if (userDataOverride) win.on('page-title-updated', (e) => e.preventDefault())
   win.on('maximize', () => win.webContents.send('window:maximized', true))
   win.on('unmaximize', () => win.webContents.send('window:maximized', false))
 

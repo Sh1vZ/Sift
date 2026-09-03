@@ -1,14 +1,15 @@
 import { app, BrowserWindow } from 'electron'
 import { electronApp, optimizer } from '@electron-toolkit/utils'
 import { registerIpc } from './ipc'
+import { userDataOverride } from './lib/env'
 import { Library } from './lib/library'
 import { ensureDirs } from './lib/paths'
 import { installProtocol, registerScheme } from './lib/protocol'
 import { createMainWindow } from './lib/window'
 
 // Optional isolated profile (separate library, cache and single-instance lock) —
-// handy for testing a build next to a running instance: SIFT_USER_DATA=<dir>.
-if (process.env.SIFT_USER_DATA) app.setPath('userData', process.env.SIFT_USER_DATA)
+// handy for testing a build next to a running instance. See src/main/lib/env.ts.
+if (userDataOverride) app.setPath('userData', userDataOverride)
 
 // Lets Chromium use the GPU's HEVC decoder for ShadowPlay recordings that use it.
 app.commandLine.appendSwitch('enable-features', 'PlatformHEVCDecoderSupport')

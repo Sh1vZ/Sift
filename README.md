@@ -16,6 +16,18 @@ npm install
 npm run dev
 ```
 
+## Configuration
+
+Optional. Copy `.env.example` to `.env` (git-ignored) and set what you need; restart `npm run dev` afterwards because electron-vite inlines the values at start-up.
+
+| Variable | Where it's read | Effect |
+| --- | --- | --- |
+| `MAIN_VITE_USER_DATA_DIR` | `.env`, dev builds only | Run against an isolated profile (own `library.db`, thumbnail cache, single-instance lock) — test a build next to a running install without touching its library |
+| `MAIN_VITE_OPEN_DEVTOOLS` | `.env`, dev builds only | `true` opens detached DevTools when the window appears |
+| `SIFT_USER_DATA` | shell environment, any build | Same profile override, but honoured by packaged builds too (`$env:SIFT_USER_DATA = "D:\sift-test"; npm run dev`) |
+
+Only `MAIN_VITE_*` / `PRELOAD_VITE_*` / `RENDERER_VITE_*` / `VITE_*` names reach the bundles; anything else in `.env` is ignored. `src/main/env.d.ts` types the ones the main process reads.
+
 ## Build a Windows installer
 
 ```bash
