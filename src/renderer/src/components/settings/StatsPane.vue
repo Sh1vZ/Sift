@@ -1,0 +1,385 @@
+<script setup lang="ts">
+import { computed } from 'vue'
+import Icon from '../Icon.vue'
+import CountUp from '../bits/CountUp.vue'
+import SettingsPanel from './SettingsPanel.vue'
+import SettingsRow from './SettingsRow.vue'
+import { motionEnabled } from '@/composables/useMotion'
+import { now, scan } from '@/composables/useLibrary'
+import { openSettings } from '@/composables/useSettings'
+import { codecs, libraryTotals, monthlyActivity, resolutions, topGames } from '@/composables/useStats'
+import { formatBytes, formatFull, formatRelative, formatSpan } from '@/utils/format'
+
+const n = new Intl.NumberFormat()
+
+interface Tile {
+  icon: string
+  label: string
+  value: string
+  /** Set for integer tiles, which count up when animations are on. */
+  count?: number
+}
+
+const tiles = computed<Tile[]>(() => {
+  const t = libraryTotals.value
+  return [
+    { icon: 'film', label: 'Clips indexed', value: n.format(t.clips), count: t.clips },
+    { icon: 'hard-drive', label: 'Library on disk', value: formatBytes(t.bytes) },
+    { icon: 'clock', label: 'Total playtime', value: formatSpan(t.duration) },
+    { icon: 'gamepad', label: 'Games', value: n.format(t.games), count: t.games }
+  ]
+})
+
+const previewPct = computed(() => {
+  const t = libraryTotals.value
+  return t.clips ? Math.round((t.withPreviews / t.clips) * 100) : 0
+})
+
+const bar = (share: number): Record<string, string> => ({ '--share': String(share) })
+</script>
+
+<template>
+  <div class="stack">
+    <ul class="tiles">
+      <li v-for="t in tiles" :key="t.label" class="tile">
+        <span class="tile-icon"><Icon :name="t.icon" :size="18" /></span>
+        <span class="tile-value mono">
+          <CountUp v-if="t.count !== undefined && motionEnabled" :to="t.count" :duration="1.1" separator="," />
+          <template v-else>{{ t.value }}</template>
+        </span>
+        <span class="tile-label">{{ t.label }}</span>
+      </li>
+    </ul>
+
+    <UAlert
+      v-if="scan.active || scan.pending"
+      color="primary"
+      variant="subtle"
+      icon="i-lucide-loader-circle"
+      title="Numbers are still moving"
+      :description="
+        scan.active
+          ? `Scanning ${scan.folder} — totals grow as clips are found.`
+          : `${scan.pending} clip${scan.pending === 1 ? '' : 's'} still waiting for a preview.`
+      "
+      :ui="{ icon: 'animate-spin' }"
+    />
+
+    <template v-if="libraryTotals.clips">
+      <SettingsPanel
+        title="Library"
+        description="How much of the index has been processed, and what it spans."
+        flush
+      >
+        <SettingsRow
+          icon="image"
+          title="Previews built"
+          :description="`${n.format(libraryTotals.withPreviews)} of ${n.format(libraryTotals.clips)} clips have a poster frame.`"
+          :value="`${previewPct}%`"
+        >
+          <UProgress
+            class="row-progress"
+            size="xs"
+            color="primary"
+            :model-value="previewPct"
+            :aria-label="`${previewPct}% of clips have previews`"
+          />
+        </SettingsRow>
+
+        <SettingsRow
+          v-if="libraryTotals.failed"
+          icon="alert"
+          tone="warning"
+          title="Could not be read"
+          description="ffprobe failed on these files. They stay in the library; the card shows a placeholder."
+        >
+          <template #trailing>
+            <UBadge
+              color="warning"
+              variant="subtle"
+              size="sm"
+              :label="`${libraryTotals.failed} clips`"
+              class="mono"
+            />
+          </template>
+        </SettingsRow>
+
+        <SettingsRow
+          icon="calendar"
+          title="Spans"
+          :description="`${formatFull(libraryTotals.oldestMs)} → ${formatFull(libraryTotals.newestMs)}`"
+          :value="formatRelative(libraryTotals.newestMs, now)"
+        />
+
+        <SettingsRow
+          icon="gauge"
+          title="Average clip"
+          description="Across every indexed recording."
+          :value="`${formatBytes(libraryTotals.avgBytes)} · ${formatSpan(libraryTotals.avgDuration)}`"
+        />
+
+        <SettingsRow
+          v-if="libraryTotals.largest"
+          icon="trending"
+          title="Biggest clip"
+          :value="formatBytes(libraryTotals.largest.size)"
+        >
+          <p class="row-detail truncate" :title="libraryTotals.largest.path">
+            {{ libraryTotals.largest.title }}
+          </p>
+        </SettingsRow>
+
+        <SettingsRow
+          v-if="libraryTotals.longest"
+          icon="timer"
+          title="Longest clip"
+          :value="formatSpan(libraryTotals.longest.duration)"
+        >
+          <p class="row-detail truncate" :title="libraryTotals.longest.path">
+            {{ libraryTotals.longest.title }}
+          </p>
+        </SettingsRow>
+      </SettingsPanel>
+
+      <SettingsPanel title="Recording activity" description="Clips recorded per month over the last year.">
+        <ul class="months" aria-label="Clips recorded per month">
+          <li v-for="m in monthlyActivity" :key="m.key" class="month" :title="`${m.title}: ${m.count} clips`">
+            <span class="month-track">
+              <span class="month-fill" :class="{ 'is-empty': !m.count }" :style="bar(m.share)" />
+            </span>
+            <span class="month-count mono">{{ m.count }}</span>
+            <span class="month-label">{{ m.label }}</span>
+            <span class="sr-only">{{ m.title }}: {{ m.count }} clips, {{ formatBytes(m.bytes) }}</span>
+          </li>
+        </ul>
+      </SettingsPanel>
+
+      <SettingsPanel title="Biggest games" description="Where your disk space actually goes.">
+        <ul class="bars" aria-label="Games by disk space">
+          <li v-for="g in topGames" :key="g.key" class="bar-row">
+            <span class="bar-label truncate" :title="g.label">{{ g.label }}</span>
+            <span class="bar-track">
+              <span class="bar-fill" :style="bar(g.share)" />
+            </span>
+            <span class="bar-value mono">{{ formatBytes(g.bytes) }}</span>
+            <span class="bar-sub mono">{{ g.count }}</span>
+          </li>
+        </ul>
+      </SettingsPanel>
+
+      <SettingsPanel title="Formats" description="Resolutions and video codecs found across the library.">
+        <div class="chips">
+          <div class="chip-group">
+            <span class="chip-title">Resolution</span>
+            <div class="chip-list">
+              <UBadge
+                v-for="r in resolutions"
+                :key="r.key"
+                color="primary"
+                variant="subtle"
+                size="md"
+                :label="`${r.label} · ${n.format(r.count)}`"
+                class="mono"
+              />
+            </div>
+          </div>
+          <div class="chip-group">
+            <span class="chip-title">Codec</span>
+            <div class="chip-list">
+              <UBadge
+                v-for="c in codecs"
+                :key="c.key"
+                color="neutral"
+                variant="subtle"
+                size="md"
+                :label="`${c.label} · ${n.format(c.count)}`"
+                class="mono"
+              />
+            </div>
+          </div>
+        </div>
+      </SettingsPanel>
+    </template>
+
+    <UEmpty
+      v-else
+      class="empty"
+      icon="i-lucide-chart-column"
+      title="Nothing to measure yet"
+      description="Add a folder of recordings and these numbers fill in as it scans."
+      variant="subtle"
+      :actions="[{ label: 'Go to Folders', icon: 'i-lucide-folder-plus', onClick: () => openSettings('folders') }]"
+    />
+  </div>
+</template>
+
+<style scoped>
+/* Headline figures: four equal tiles that drop to two columns when narrow. */
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--s-3);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.tile {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  padding: var(--s-4);
+  border-radius: var(--r-lg);
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+}
+.tile-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  margin-bottom: var(--s-1);
+  border-radius: var(--r-md);
+  background: var(--primary-soft);
+  color: var(--secondary);
+}
+.tile-value {
+  font-family: var(--font-heading);
+  font-size: var(--text-xl);
+  font-weight: 700;
+  line-height: 1.15;
+}
+.tile-label {
+  font-size: var(--text-sm);
+  color: var(--fg-muted);
+}
+
+.row-progress {
+  margin-top: var(--s-2);
+  max-width: 320px;
+}
+.row-detail {
+  margin-top: 2px;
+  font-size: var(--text-sm);
+  color: var(--fg-muted);
+}
+.empty {
+  padding: var(--s-8) var(--s-6);
+}
+
+/* Twelve-month column chart. Bars scale on the Y axis so nothing reflows. */
+.months {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--s-2);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.month {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s-1);
+}
+.month-track {
+  display: block;
+  width: 100%;
+  height: 96px;
+  border-radius: var(--r-sm);
+  background: var(--bg-2);
+  overflow: hidden;
+}
+.month-fill {
+  display: block;
+  width: 100%;
+  height: 100%;
+  transform: scaleY(var(--share));
+  transform-origin: bottom;
+  transition: transform var(--dur) var(--ease-out);
+  background: linear-gradient(180deg, var(--secondary), var(--primary));
+}
+.month-fill.is-empty {
+  /* A month with no clips still needs a visible baseline. */
+  transform: scaleY(0.02);
+  background: var(--bg-4);
+}
+.month-count {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--fg);
+}
+.month-label {
+  font-size: var(--text-xs);
+  color: var(--fg-dim);
+}
+
+/* Horizontal ranking bars. */
+.bars {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.bar-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 2.2fr auto 44px;
+  align-items: center;
+  gap: var(--s-3);
+}
+.bar-row + .bar-row {
+  margin-top: var(--s-3);
+}
+.bar-label {
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+.bar-track {
+  height: 10px;
+  border-radius: var(--r-full);
+  background: var(--bg-2);
+  overflow: hidden;
+}
+.bar-fill {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: var(--r-full);
+  transform: scaleX(var(--share));
+  transform-origin: left;
+  transition: transform var(--dur) var(--ease-out);
+  background: linear-gradient(90deg, var(--primary), var(--secondary));
+}
+.bar-value {
+  font-size: var(--text-sm);
+  color: var(--fg);
+}
+.bar-sub {
+  font-size: var(--text-sm);
+  color: var(--fg-dim);
+  text-align: right;
+}
+
+.chips {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+}
+.chip-title {
+  display: block;
+  margin-bottom: var(--s-2);
+  font-family: var(--font-heading);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+}
+.chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+}
+</style>

@@ -1,0 +1,164 @@
+<script setup lang="ts">
+import { computed, onMounted } from 'vue'
+import SettingsPanel from './SettingsPanel.vue'
+import SettingsRow from './SettingsRow.vue'
+import { now } from '@/composables/useLibrary'
+import { appStats, libraryTotals, refreshStats, revealAppData, statsError, statsLoading } from '@/composables/useStats'
+import { formatBytes, formatRelative } from '@/utils/format'
+
+const n = new Intl.NumberFormat()
+
+/** Everything Sift itself keeps under the app-data folder. */
+const appDataBytes = computed(() => {
+  const s = appStats.value?.storage
+  if (!s) return 0
+  return s.databaseBytes + s.cacheBytes + s.otherBytes
+})
+
+const diskUsedPct = computed(() => {
+  const s = appStats.value?.storage
+  if (!s?.diskTotalBytes) return 0
+  return Math.round(((s.diskTotalBytes - s.diskFreeBytes) / s.diskTotalBytes) * 100)
+})
+
+const measuredLabel = computed(() =>
+  appStats.value ? `Measured ${formatRelative(appStats.value.generatedAtMs, now.value).toLowerCase()}` : 'Measuring…'
+)
+
+// Walking the app-data folder is on-demand, so only measure if nothing is cached.
+onMounted(() => {
+  if (!appStats.value) void refreshStats()
+})
+</script>
+
+<template>
+  <div class="stack">
+    <SettingsPanel
+      title="On disk"
+      :description="measuredLabel"
+      flush
+    >
+      <template #actions>
+        <UButton
+          icon="i-lucide-refresh-cw"
+          label="Refresh"
+          color="neutral"
+          variant="subtle"
+          :loading="statsLoading"
+          @click="refreshStats()"
+        />
+      </template>
+
+      <UAlert
+        v-if="statsError"
+        class="panel-alert"
+        color="warning"
+        variant="subtle"
+        icon="i-lucide-triangle-alert"
+        title="Could not measure the app data folder"
+        :description="statsError"
+        :actions="[{ label: 'Try again', color: 'neutral', variant: 'subtle', onClick: () => refreshStats() }]"
+      />
+      <div v-else-if="!appStats" class="skeletons">
+        <div v-for="i in 4" :key="i" class="skeleton-row">
+          <USkeleton class="size-9 rounded-lg" />
+          <div class="skeleton-text">
+            <USkeleton class="h-4 w-40" />
+            <USkeleton class="mt-2 h-3 w-64" />
+          </div>
+          <USkeleton class="h-5 w-16" />
+        </div>
+      </div>
+      <template v-else>
+        <SettingsRow
+          icon="film"
+          title="Clips on disk"
+          :description="`Across ${libraryTotals.folders} watched folder${libraryTotals.folders === 1 ? '' : 's'}. Indexed in place — never copied, moved or re-encoded.`"
+          :value="formatBytes(libraryTotals.bytes)"
+        />
+
+        <SettingsRow
+          icon="image"
+          title="Preview cache"
+          :description="`${n.format(appStats.storage.cacheFiles)} poster frames and hover-scrub strips, generated once and reused.`"
+          :value="formatBytes(appStats.storage.cacheBytes)"
+        />
+
+        <SettingsRow
+          icon="database"
+          title="Index database"
+          :description="`SQLite record of ${n.format(libraryTotals.clips)} clip${libraryTotals.clips === 1 ? '' : 's'}, including the write-ahead log.`"
+          :value="formatBytes(appStats.storage.databaseBytes)"
+        />
+
+        <SettingsRow icon="box" title="App data" :value="formatBytes(appDataBytes)">
+          <p class="path truncate" :title="appStats.storage.userDataPath">
+            {{ appStats.storage.userDataPath }}
+          </p>
+          <template #trailing>
+            <UTooltip text="Open in File Explorer">
+              <UButton
+                icon="i-lucide-folder-open"
+                color="neutral"
+                variant="ghost"
+                square
+                aria-label="Open app data folder"
+                @click="revealAppData()"
+              />
+            </UTooltip>
+          </template>
+        </SettingsRow>
+
+        <SettingsRow
+          v-if="appStats.storage.diskTotalBytes"
+          icon="gauge"
+          title="Free on this drive"
+          :description="`${formatBytes(appStats.storage.diskFreeBytes)} free of ${formatBytes(appStats.storage.diskTotalBytes)} · ${diskUsedPct}% used`"
+        >
+          <UProgress
+            class="row-progress"
+            size="xs"
+            :model-value="diskUsedPct"
+            :color="diskUsedPct >= 90 ? 'warning' : 'primary'"
+            :aria-label="`Drive ${diskUsedPct}% full`"
+          />
+        </SettingsRow>
+      </template>
+    </SettingsPanel>
+
+    <p class="about">Measured locally. Nothing on this screen leaves your PC.</p>
+  </div>
+</template>
+
+<style scoped>
+.panel-alert {
+  margin: var(--s-5) var(--s-6);
+}
+.skeletons {
+  padding: var(--s-2) 0;
+}
+.skeleton-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  padding: var(--s-4) var(--s-6);
+}
+.skeleton-text {
+  flex: 1;
+  min-width: 0;
+}
+.path {
+  margin-top: 2px;
+  font-size: var(--text-sm);
+  color: var(--fg-muted);
+  user-select: text;
+}
+.row-progress {
+  margin-top: var(--s-2);
+  max-width: 320px;
+}
+.about {
+  font-size: var(--text-xs);
+  color: var(--fg-dim);
+}
+</style>

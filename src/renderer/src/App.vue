@@ -3,8 +3,7 @@ import { onMounted } from 'vue'
 import TitleBar from './components/TitleBar.vue'
 import Sidebar from './components/Sidebar.vue'
 import LibraryView from './components/LibraryView.vue'
-import FoldersView from './components/FoldersView.vue'
-import StatsView from './components/StatsView.vue'
+import SettingsView from './components/SettingsView.vue'
 import PlayerOverlay from './components/PlayerOverlay.vue'
 import DialogHost from './components/DialogHost.vue'
 import ToastBridge from './components/ToastBridge.vue'
@@ -24,8 +23,7 @@ onMounted(() => void initLibrary())
           <main class="main">
             <Transition name="view" mode="out-in">
               <LibraryView v-if="view === 'library'" key="library" />
-              <StatsView v-else-if="view === 'stats'" key="stats" />
-              <FoldersView v-else key="folders" />
+              <SettingsView v-else key="settings" />
             </Transition>
           </main>
         </div>

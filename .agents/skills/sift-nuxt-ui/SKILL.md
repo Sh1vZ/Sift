@@ -299,7 +299,7 @@ Two systems coexist deliberately:
   prop takes, and `UIcon`. Build-time bundled. ~40 names in use. **This is the default for
   anything Nuxt UI renders.**
 - **`Icon.vue`** — a trimmed inline Lucide path map (78 lines), still used by `ClipCard`,
-  `LibraryView`, `GamesBrowser`, and `FoldersView` for icons inside hand-built markup where
+  `LibraryView`, `GamesBrowser`, and the settings panes for icons inside hand-built markup where
   pulling in `UIcon` would add nothing.
 
 Rules:

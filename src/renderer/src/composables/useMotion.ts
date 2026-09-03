@@ -3,7 +3,8 @@ import { computed, ref, watchEffect } from 'vue'
 import { settings } from './useLibrary'
 
 const mql = window.matchMedia('(prefers-reduced-motion: reduce)')
-const osReduced = ref(mql.matches)
+/** True while Windows asks for reduced motion, which overrides the setting. */
+export const osReduced = ref(mql.matches)
 mql.addEventListener('change', (e) => (osReduced.value = e.matches))
 
 /** True when both the user setting and the OS allow non-essential motion. */

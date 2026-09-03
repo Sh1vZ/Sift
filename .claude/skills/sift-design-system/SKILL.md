@@ -139,7 +139,7 @@ not go below `--text-xs` for anything.
   surfaces therefore sit a step rounder than hand-built ones. Accepted; do not chase parity by
   overriding radius per component.
 - Spacing: `--s-1` 4 through `--s-12` 48. Use the scale — no arbitrary `13px` gaps.
-- Layout: `--titlebar-h` 40px, `--sidebar-w` 248px, `--page-max` 960px. Read these rather than
+- Layout: `--titlebar-h` 40px, `--sidebar-w` 60px (icon-only rail), `--page-max` 960px. Read these rather than
   hardcoding.
 
 ### Motion variables
@@ -371,7 +371,7 @@ Full motion rules, the Vue Bits inventory, and the adoption workflow are in `sif
 - ❌ Invisible or removed focus states
 - ❌ Glass/backdrop-blur surfaces beyond card badges and the modal scrim
 - ❌ Ambient/looping background animation on a working screen
-- ❌ Hardcoding `40px` / `248px` / `960px` instead of `--titlebar-h` / `--sidebar-w` / `--page-max`
+- ❌ Hardcoding `40px` / `60px` / `960px` instead of `--titlebar-h` / `--sidebar-w` / `--page-max`
 - ❌ A max-width column left-pinned in a full-width screen — fill the width or centre the column
 - ❌ Grid sizing in CSS that `useVirtualGrid` does not know about
 - ❌ Tailwind utilities for app chrome layout, or `@apply` anywhere

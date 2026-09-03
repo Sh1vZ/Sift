@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { scan, screen, selectedGame } from '@/composables/useLibrary'
+import { activeSection } from '@/composables/useSettings'
 
 const api = window.api
 const maximized = ref(false)
@@ -15,11 +16,8 @@ onBeforeUnmount(() => off?.())
 const crumbs = computed(() => {
   const trail: string[] = []
   switch (screen.value) {
-    case 'folders':
-      trail.push('Library & settings')
-      break
-    case 'stats':
-      trail.push('Stats')
+    case 'settings':
+      trail.push('Settings', activeSection.value.label)
       break
     case 'game':
       trail.push('Games', selectedGame.value ?? '')

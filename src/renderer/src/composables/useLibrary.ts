@@ -22,7 +22,7 @@ export const scan = ref<ScanState>({ active: false, folder: '', found: 0, pendin
 export const appVersion = ref('')
 export const suggestedFolders = ref<string[]>([])
 export const selectedGame = ref<string | null>(null)
-export const view = ref<'library' | 'folders' | 'stats'>('library')
+export const view = ref<'library' | 'settings'>('library')
 
 /** Ticks once a minute so "2 minutes ago" labels stay honest. */
 export const now = ref(Date.now())
@@ -133,7 +133,7 @@ export function getClip(id: string): Clip | undefined {
 }
 
 /** Which screen the main area shows: the games browser is home, a game drills into its clips. */
-export const screen = computed<'games' | 'game' | 'folders' | 'stats'>(() => {
+export const screen = computed<'games' | 'game' | 'settings'>(() => {
   if (view.value !== 'library') return view.value
   return selectedGame.value ? 'game' : 'games'
 })

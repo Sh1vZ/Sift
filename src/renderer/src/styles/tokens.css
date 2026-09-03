@@ -69,7 +69,10 @@
   --s-12: 48px;
 
   --titlebar-h: 40px;
-  --sidebar-w: 248px;
+  /* Icon-only rail: 40px links inside a 10px gutter. */
+  --sidebar-w: 60px;
+  /* Settings sub-menu rail, sitting between the sidebar and the pane. */
+  --submenu-w: 208px;
   /* Reading-width column for text-led screens (settings). Grid screens ignore it
      and fill the window instead. */
   --page-max: 960px;
