@@ -10,9 +10,11 @@ export interface WatchHandlers {
 
 /**
  * ShadowPlay keeps writing while it muxes, so we wait for the size to sit
- * still before treating a file as a finished clip.
+ * still before treating a file as a finished clip. `ignored` is consulted per
+ * event, so a predicate that reads live state (the clips folder path) keeps
+ * working after that state changes without restarting the watcher.
  */
-export function watchFolder(root: string, handlers: WatchHandlers): FSWatcher {
+export function watchFolder(root: string, handlers: WatchHandlers, ignored?: (path: string) => boolean): FSWatcher {
   const watcher = chokidar.watch(root, {
     ignoreInitial: true,
     depth: 8,
@@ -21,6 +23,7 @@ export function watchFolder(root: string, handlers: WatchHandlers): FSWatcher {
     ignored: (p, stats) => {
       const name = basename(p)
       if (name.startsWith('.') || name.startsWith('~')) return true
+      if (ignored?.(p)) return true
       return Boolean(stats?.isFile()) && !isVideoFile(p)
     }
   })

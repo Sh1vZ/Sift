@@ -16,16 +16,19 @@ function shouldSkipDir(name: string): boolean {
   return name.startsWith('.') || SKIP_DIRS.has(name.toLowerCase())
 }
 
+export interface WalkOptions {
+  signal?: AbortSignal
+  /** Directories (absolute paths) to leave out of the walk, e.g. the clips folder inside a library root. */
+  skip?: (dir: string) => boolean
+}
+
 /**
  * Depth-first walk that yields video paths as it finds them. Directory
  * listing is cheap; the expensive work (probing) happens in the media queue.
  */
-export async function* walkVideos(
-  root: string,
-  signal?: AbortSignal,
-  depth = 0
-): AsyncGenerator<string> {
-  if (depth > MAX_DEPTH || signal?.aborted) return
+export async function* walkVideos(root: string, opts: WalkOptions = {}, depth = 0): AsyncGenerator<string> {
+  const { signal, skip } = opts
+  if (depth > MAX_DEPTH || signal?.aborted || skip?.(root)) return
   let dir
   try {
     dir = await opendir(root)
@@ -42,5 +45,5 @@ export async function* walkVideos(
       yield full
     }
   }
-  for (const sub of subdirs) yield* walkVideos(sub, signal, depth + 1)
+  for (const sub of subdirs) yield* walkVideos(sub, opts, depth + 1)
 }

@@ -11,13 +11,21 @@ const api: Api = {
     rescan: (folderId) => ipcRenderer.invoke('library:rescan', folderId ?? ''),
     setSettings: (patch) => ipcRenderer.invoke('library:set-settings', patch),
     stats: () => ipcRenderer.invoke('library:stats'),
-    revealData: () => ipcRenderer.invoke('library:reveal-data')
+    revealData: () => ipcRenderer.invoke('library:reveal-data'),
+    setClipsDir: (path) => ipcRenderer.invoke('library:set-clips-dir', path),
+    chooseClipsDir: () => ipcRenderer.invoke('library:choose-clips-dir'),
+    revealClipsDir: () => ipcRenderer.invoke('library:reveal-clips-dir')
   },
   clips: {
     rename: (id, name) => ipcRenderer.invoke('clip:rename', id, name),
     delete: (id) => ipcRenderer.invoke('clip:delete', id),
     reveal: (id) => ipcRenderer.invoke('clip:reveal', id),
-    copyPath: (id) => ipcRenderer.invoke('clip:copy-path', id)
+    copyPath: (id) => ipcRenderer.invoke('clip:copy-path', id),
+    export: (req) => ipcRenderer.invoke('clip:export', req)
+  },
+  exports: {
+    cancel: (id) => ipcRenderer.invoke('export:cancel', id),
+    dismiss: (id) => ipcRenderer.invoke('export:dismiss', id)
   },
   window: {
     minimize: () => void ipcRenderer.invoke('window:minimize'),

@@ -29,7 +29,23 @@ export interface Clip {
   sprite: string
   spriteFrames: number
   probeState: ProbeState
+  /** Id of the recording this clip was exported from; '' for recordings and foreign files. */
+  sourceId: string
+  /** Requested trim range in source seconds; both 0 when not an export. */
+  trimStart: number
+  trimEnd: number
+  /** Audio stripped on export. */
+  muted: boolean
+  /** Export time; for files copied into the clips folder by hand, the file's birthtime; 0 for recordings. */
+  createdAtMs: number
 }
+
+/**
+ * `library` folders are watched recording roots that feed the Games screen;
+ * the single `clips` folder is where Sift exports trimmed clips to, and it
+ * feeds the Clips view instead. Library scans skip anything under it.
+ */
+export type FolderKind = 'library' | 'clips'
 
 export interface LibraryFolder {
   id: string
@@ -39,6 +55,43 @@ export interface LibraryFolder {
   clipCount: number
   /** False when the drive/folder is not reachable right now; clips are kept, not dropped. */
   available: boolean
+  kind: FolderKind
+}
+
+// ---------------------------------------------------------------- exports
+
+export type ExportState = 'queued' | 'running' | 'done' | 'failed' | 'cancelled'
+
+/** What the editor asks for. Validated again in main; never trusted as-is. */
+export interface ExportRequest {
+  /** Source clip id. */
+  id: string
+  /** File name without extension. */
+  name: string
+  start: number
+  end: number
+  muted: boolean
+}
+
+export interface ExportJob {
+  id: string
+  sourceId: string
+  /** Poster of the source, so the progress card has a picture from the first frame. */
+  sourceThumb: string
+  game: string
+  /** Final file name without extension, after collision suffixing. */
+  name: string
+  ext: string
+  start: number
+  end: number
+  muted: boolean
+  state: ExportState
+  /** 0..1 */
+  progress: number
+  error?: string
+  /** Set once the exported file is in the index. */
+  clipId?: string
+  createdAtMs: number
 }
 
 export type GroupBy = 'date' | 'none'
@@ -97,8 +150,11 @@ export interface LibrarySnapshot {
   clips: Clip[]
   settings: Settings
   scan: ScanState
+  exports: ExportJob[]
   appVersion: string
   suggestedFolders: string[]
+  /** Where exports go unless the user picked another folder: `<Videos>\Sift Clips`. */
+  defaultClipsDir: string
 }
 
 export interface ActionResult {
@@ -155,6 +211,8 @@ export interface EventMap {
   'folders:changed': LibraryFolder[]
   'settings:changed': Settings
   'scan:changed': ScanState
+  /** Every live export job; a job is sent once in its terminal state and then dropped. */
+  'exports:changed': ExportJob[]
   'window:maximized': boolean
 }
 

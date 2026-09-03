@@ -4,6 +4,8 @@ import type {
   Clip,
   EventMap,
   EventName,
+  ExportJob,
+  ExportRequest,
   LibraryFolder,
   LibrarySnapshot,
   Settings
@@ -23,6 +25,11 @@ export interface Api {
     stats(): Promise<AppStats>
     /** Opens %APPDATA%/sift in the file manager. */
     revealData(): Promise<ActionResult>
+    /** Moves the clips folder; `''` restores `<Videos>\Sift Clips`. Files on disk are never moved. */
+    setClipsDir(path: string): Promise<ActionResult & { folder?: LibraryFolder }>
+    /** Folder picker, then `setClipsDir`. `folder` is undefined when the picker was cancelled. */
+    chooseClipsDir(): Promise<ActionResult & { folder?: LibraryFolder }>
+    revealClipsDir(): Promise<ActionResult>
   }
   clips: {
     rename(id: string, name: string): Promise<ActionResult & { clip?: Clip }>
@@ -30,6 +37,13 @@ export interface Api {
     reveal(id: string): Promise<ActionResult>
     /** Puts the clip's absolute path on the system clipboard. */
     copyPath(id: string): Promise<ActionResult>
+    /** Queues a stream-copy export; progress arrives through `exports:changed`. */
+    export(req: ExportRequest): Promise<ActionResult & { job?: ExportJob }>
+  }
+  exports: {
+    cancel(id: string): Promise<ActionResult>
+    /** Drops a finished/failed job from the list ahead of its automatic pruning. */
+    dismiss(id: string): Promise<void>
   }
   window: {
     minimize(): void

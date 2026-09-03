@@ -17,7 +17,17 @@ const FLUSH_MS = 200
 const MIGRATIONS: Array<(db: DatabaseSync) => void> = [
   // v1 -> v2: large cards became the default grid size; drop any stored value so
   // existing libraries pick the new default up instead of the old one.
-  (db) => db.prepare("DELETE FROM settings WHERE key = 'gridSize'").run()
+  (db) => db.prepare("DELETE FROM settings WHERE key = 'gridSize'").run(),
+  // v2 -> v3: the clips folder (exports) became a folder kind, and clips learned
+  // where they were cut from.
+  (db) => {
+    db.exec("ALTER TABLE folders ADD COLUMN kind TEXT NOT NULL DEFAULT 'library'")
+    db.exec("ALTER TABLE clips ADD COLUMN source_id TEXT NOT NULL DEFAULT ''")
+    db.exec('ALTER TABLE clips ADD COLUMN trim_start REAL NOT NULL DEFAULT 0')
+    db.exec('ALTER TABLE clips ADD COLUMN trim_end REAL NOT NULL DEFAULT 0')
+    db.exec('ALTER TABLE clips ADD COLUMN muted INTEGER NOT NULL DEFAULT 0')
+    db.exec('ALTER TABLE clips ADD COLUMN created_at_ms REAL NOT NULL DEFAULT 0')
+  }
 ]
 const SCHEMA_VERSION = MIGRATIONS.length + 1
 
@@ -36,7 +46,8 @@ CREATE TABLE IF NOT EXISTS folders (
   name        TEXT NOT NULL,
   added_at_ms INTEGER NOT NULL,
   clip_count  INTEGER NOT NULL DEFAULT 0,
-  available   INTEGER NOT NULL DEFAULT 1
+  available   INTEGER NOT NULL DEFAULT 1,
+  kind        TEXT NOT NULL DEFAULT 'library'
 );
 CREATE TABLE IF NOT EXISTS clips (
   id             TEXT PRIMARY KEY,
@@ -58,11 +69,21 @@ CREATE TABLE IF NOT EXISTS clips (
   thumb          TEXT NOT NULL DEFAULT '',
   sprite         TEXT NOT NULL DEFAULT '',
   sprite_frames  INTEGER NOT NULL DEFAULT 0,
-  probe_state    TEXT NOT NULL DEFAULT 'pending'
+  probe_state    TEXT NOT NULL DEFAULT 'pending',
+  source_id      TEXT NOT NULL DEFAULT '',
+  trim_start     REAL NOT NULL DEFAULT 0,
+  trim_end       REAL NOT NULL DEFAULT 0,
+  muted          INTEGER NOT NULL DEFAULT 0,
+  created_at_ms  REAL NOT NULL DEFAULT 0
 );
+`
+
+/** Created after migrations run, since an index may name a column an older database only gains then. */
+const INDEXES = `
 CREATE INDEX IF NOT EXISTS clips_folder   ON clips(folder_id);
 CREATE INDEX IF NOT EXISTS clips_game     ON clips(game);
 CREATE INDEX IF NOT EXISTS clips_recorded ON clips(recorded_at_ms DESC);
+CREATE INDEX IF NOT EXISTS clips_source   ON clips(source_id);
 `
 
 interface ClipRow {
@@ -86,6 +107,11 @@ interface ClipRow {
   sprite: string
   sprite_frames: number
   probe_state: Clip['probeState']
+  source_id: string
+  trim_start: number
+  trim_end: number
+  muted: number
+  created_at_ms: number
 }
 
 interface FolderRow {
@@ -95,6 +121,7 @@ interface FolderRow {
   added_at_ms: number
   clip_count: number
   available: number
+  kind: string
 }
 
 /**
@@ -137,6 +164,7 @@ export class Store {
     db.exec('PRAGMA foreign_keys = ON')
     db.exec(SCHEMA)
     this.migrate(db)
+    db.exec(INDEXES)
     this.prepare(db)
 
     this.data.folders = (db.prepare('SELECT * FROM folders ORDER BY added_at_ms').all() as unknown as FolderRow[]).map(
@@ -146,7 +174,8 @@ export class Store {
         name: r.name,
         addedAtMs: r.added_at_ms,
         clipCount: r.clip_count,
-        available: Boolean(r.available)
+        available: Boolean(r.available),
+        kind: r.kind === 'clips' ? 'clips' : 'library'
       })
     )
     const clips: Record<string, Clip> = {}
@@ -169,23 +198,26 @@ export class Store {
   private prepare(db: DatabaseSync): void {
     this.stmts = {
       upsertFolder: db.prepare(`
-        INSERT INTO folders (id, path, name, added_at_ms, clip_count, available)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO folders (id, path, name, added_at_ms, clip_count, available, kind)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
           path = excluded.path, name = excluded.name, added_at_ms = excluded.added_at_ms,
-          clip_count = excluded.clip_count, available = excluded.available`),
+          clip_count = excluded.clip_count, available = excluded.available, kind = excluded.kind`),
       deleteFolder: db.prepare('DELETE FROM folders WHERE id = ?'),
       upsertClip: db.prepare(`
         INSERT INTO clips (id, path, name, title, ext, folder_id, game, size, mtime_ms, recorded_at_ms,
-          duration, width, height, fps, vcodec, has_audio, thumb, sprite, sprite_frames, probe_state)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          duration, width, height, fps, vcodec, has_audio, thumb, sprite, sprite_frames, probe_state,
+          source_id, trim_start, trim_end, muted, created_at_ms)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
           path = excluded.path, name = excluded.name, title = excluded.title, ext = excluded.ext,
           folder_id = excluded.folder_id, game = excluded.game, size = excluded.size,
           mtime_ms = excluded.mtime_ms, recorded_at_ms = excluded.recorded_at_ms,
           duration = excluded.duration, width = excluded.width, height = excluded.height, fps = excluded.fps,
           vcodec = excluded.vcodec, has_audio = excluded.has_audio, thumb = excluded.thumb,
-          sprite = excluded.sprite, sprite_frames = excluded.sprite_frames, probe_state = excluded.probe_state`),
+          sprite = excluded.sprite, sprite_frames = excluded.sprite_frames, probe_state = excluded.probe_state,
+          source_id = excluded.source_id, trim_start = excluded.trim_start, trim_end = excluded.trim_end,
+          muted = excluded.muted, created_at_ms = excluded.created_at_ms`),
       deleteClip: db.prepare('DELETE FROM clips WHERE id = ?'),
       setSetting: db.prepare(
         'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value'
@@ -293,7 +325,7 @@ export class Store {
   }
 
   private writeFolder(f: LibraryFolder): void {
-    this.stmts.upsertFolder.run(f.id, f.path, f.name, f.addedAtMs, f.clipCount, f.available ? 1 : 0)
+    this.stmts.upsertFolder.run(f.id, f.path, f.name, f.addedAtMs, f.clipCount, f.available ? 1 : 0, f.kind)
   }
 
   private writeClip(c: Clip): void {
@@ -317,7 +349,12 @@ export class Store {
       c.thumb,
       c.sprite,
       c.spriteFrames,
-      c.probeState
+      c.probeState,
+      c.sourceId,
+      c.trimStart,
+      c.trimEnd,
+      c.muted ? 1 : 0,
+      c.createdAtMs
     )
   }
 }
@@ -343,6 +380,11 @@ function rowToClip(r: ClipRow): Clip {
     thumb: r.thumb,
     sprite: r.sprite,
     spriteFrames: r.sprite_frames,
-    probeState: r.probe_state
+    probeState: r.probe_state,
+    sourceId: r.source_id,
+    trimStart: r.trim_start,
+    trimEnd: r.trim_end,
+    muted: Boolean(r.muted),
+    createdAtMs: r.created_at_ms
   }
 }

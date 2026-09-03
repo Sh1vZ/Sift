@@ -71,6 +71,70 @@ export function killActiveJobs(): void {
   active.clear()
 }
 
+export interface LongJobOptions {
+  /** Kill if no stdout line arrives for this long: the job is wedged, not slow. */
+  stallMs: number
+  /** Absolute cap, whatever the output. */
+  maxMs: number
+  onLine?: (line: string) => void
+  signal?: AbortSignal
+}
+
+/**
+ * Sibling of `run()` for jobs that legitimately outlive `JOB_TIMEOUT_MS`,
+ * i.e. an export. Same spawn contract (hidden window, below-normal priority,
+ * registered for shutdown), but stdout is handed over line by line so the
+ * caller can read `-progress` output, the stall timer resets on every line,
+ * and the last couple of KB of stderr come back for the error toast.
+ */
+export function runLong(bin: string, args: string[], opts: LongJobOptions): Promise<{ code: number; stderrTail: string }> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(bin, args, { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] })
+    active.add(child)
+    lowerPriority(child.pid)
+    let stderrTail = ''
+    let buffered = ''
+    let stall: NodeJS.Timeout | null = null
+    const armStall = (): void => {
+      if (stall) clearTimeout(stall)
+      stall = setTimeout(() => child.kill(), opts.stallMs)
+    }
+    armStall()
+    const cap = setTimeout(() => child.kill(), opts.maxMs)
+    const onAbort = (): void => {
+      child.kill()
+    }
+    opts.signal?.addEventListener('abort', onAbort, { once: true })
+    const done = (): void => {
+      if (stall) clearTimeout(stall)
+      clearTimeout(cap)
+      opts.signal?.removeEventListener('abort', onAbort)
+      active.delete(child)
+    }
+    child.stdout.on('data', (d: Buffer) => {
+      armStall()
+      buffered += d.toString()
+      let nl = buffered.indexOf('\n')
+      while (nl >= 0) {
+        opts.onLine?.(buffered.slice(0, nl).trim())
+        buffered = buffered.slice(nl + 1)
+        nl = buffered.indexOf('\n')
+      }
+    })
+    child.stderr.on('data', (d: Buffer) => {
+      stderrTail = (stderrTail + d.toString()).slice(-2048)
+    })
+    child.on('error', (err) => {
+      done()
+      reject(err)
+    })
+    child.on('close', (code) => {
+      done()
+      resolve({ code: code ?? -1, stderrTail: stderrTail.trim() })
+    })
+  })
+}
+
 function parseFps(rate: string | undefined): number {
   if (!rate) return 0
   const [n, d] = rate.split('/').map(Number)
