@@ -48,8 +48,10 @@ Output lands in `dist/`. `npm run build:unpack` produces an unpacked folder for 
 3. Tag and push:
 
 ```bash
-git commit -am "chore(release): 1.0.0-beta.2" && git tag v1.0.0-beta.2 && git push --follow-tags
+git commit -am "chore(release): 1.0.0-beta.2" && git tag -a v1.0.0-beta.2 -m "Sift 1.0.0-beta.2" && git push --follow-tags
 ```
+
+`-a` matters: `--follow-tags` pushes annotated tags only, so a lightweight `git tag v…` is skipped silently and the workflow never fires. Check with `git ls-remote --tags origin` if a release does not start.
 
 Beta versions carry a `-beta.N` suffix and the GitHub release is flagged as a prerelease; a build whose own version is a prerelease opts into those, a stable build only sees stable releases. Beta users are still offered a later stable release, so promoting the line is just `releaseType: prerelease` → `release` in `electron-builder.yml` alongside dropping the suffix.
 

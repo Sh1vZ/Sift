@@ -28,14 +28,27 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      # 24 because tests/store.test.ts runs under plain Node and
+      # Node 24 because tests/store.test.ts runs under plain Node and
       # src/main/lib/store.ts imports node:sqlite, which needs no flag only from
-      # Node 22.13 on. Electron bundles its own Node, so this constrains the
-      # test step rather than the app.
+      # Node 22.13 on. Electron bundles its own Node, so this constrains the test
+      # step rather than the app.
+      #
+      # Pinned to an exact patch, not '24', because the bundled npm is what
+      # resolves the tree: app-builder-lib pulls electron-winstaller as an
+      # optional *peer*, and npm versions disagree on which release of it to
+      # take. A newer npm picks one that needs @electron/windows-sign, which this
+      # lockfile does not carry, and `npm ci` then fails the sync check. Bump this
+      # and regenerate package-lock.json together, never one alone.
       - uses: actions/setup-node@v5
         with:
-          node-version: '24'
+          node-version: '24.9.0'
           cache: 'npm'
+
+      # Belt and braces: setup-node's bundled npm has changed within a patch
+      # release before, and the lockfile is only valid for the resolver that
+      # wrote it.
+      - name: Pin npm to the version that resolved package-lock.json
+        run: npm i -g npm@11.6.0
 
       # ~200 MB of Electron zip plus electron-builder's nsis/winCodeSign
       # resources, re-downloaded on every cold run otherwise.
