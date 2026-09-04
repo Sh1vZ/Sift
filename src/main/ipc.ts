@@ -1,4 +1,4 @@
-import { BrowserWindow, dialog, ipcMain } from 'electron'
+import { type BrowserWindow, dialog, ipcMain } from 'electron'
 import { THEME_IDS, type ExportRequest, type Settings } from '@shared/types'
 import type { Library } from './lib/library'
 import type { Updater } from './lib/updater'
@@ -7,7 +7,10 @@ const str = (v: unknown): string => (typeof v === 'string' ? v : '')
 const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : NaN)
 
 async function pickFolder(win: BrowserWindow | null, title: string): Promise<string | null> {
-  const opts: Electron.OpenDialogOptions = { title, properties: ['openDirectory', 'dontAddToRecent'] }
+  const opts: Electron.OpenDialogOptions = {
+    title,
+    properties: ['openDirectory', 'dontAddToRecent'],
+  }
   const result = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts)
   return result.canceled ? null : (result.filePaths[0] ?? null)
 }
@@ -19,7 +22,7 @@ export function registerIpc(
   /** Runs after every accepted settings patch, so main can react to app-level flags. */
   onSettingsApplied: (settings: Settings) => void,
   /** The auto-update state machine; inert in development builds. */
-  updates: Updater
+  updates: Updater,
 ): void {
   ipcMain.handle('library:snapshot', () => library.snapshot())
 
@@ -53,7 +56,9 @@ export function registerIpc(
   ipcMain.handle('library:reveal-clips-dir', () => library.revealClipsDir())
 
   ipcMain.handle('clip:rename', (_e, id, name) => library.renameClip(str(id), str(name)))
-  ipcMain.handle('clip:delete', (_e, id, permanent) => library.deleteClip(str(id), permanent === true))
+  ipcMain.handle('clip:delete', (_e, id, permanent) =>
+    library.deleteClip(str(id), permanent === true),
+  )
   ipcMain.handle('clip:reveal', (_e, id) => library.reveal(str(id)))
   ipcMain.handle('clip:copy-path', (_e, id) => library.copyPath(str(id)))
   ipcMain.handle('clip:export', (_e, raw) => {
@@ -64,7 +69,7 @@ export function registerIpc(
       name: str(r.name),
       start: num(r.start),
       end: num(r.end),
-      muted: r.muted === true
+      muted: r.muted === true,
     }
     return library.exportClip(req)
   })

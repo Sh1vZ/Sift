@@ -8,40 +8,40 @@ export default defineConfig({
     plugins: [externalizeDepsPlugin()],
     build: {
       rollupOptions: {
-        input: { index: resolve('src/main/index.ts') }
-      }
+        input: { index: resolve('src/main/index.ts') },
+      },
     },
     resolve: {
-      alias: { '@shared': resolve('src/shared') }
-    }
+      alias: { '@shared': resolve('src/shared') },
+    },
   },
   preload: {
     plugins: [externalizeDepsPlugin()],
     build: {
       rollupOptions: {
-        input: { index: resolve('src/preload/index.ts') }
-      }
+        input: { index: resolve('src/preload/index.ts') },
+      },
     },
     resolve: {
-      alias: { '@shared': resolve('src/shared') }
-    }
+      alias: { '@shared': resolve('src/shared') },
+    },
   },
   renderer: {
     root: 'src/renderer',
     resolve: {
       alias: {
         '@': resolve('src/renderer/src'),
-        '@shared': resolve('src/shared')
-      }
+        '@shared': resolve('src/shared'),
+      },
     },
     build: {
       rollupOptions: {
         // Two entries: the app, and the launch splash shown while it boots.
         input: {
           index: resolve('src/renderer/index.html'),
-          splash: resolve('src/renderer/splash.html')
-        }
-      }
+          splash: resolve('src/renderer/splash.html'),
+        },
+      },
     },
     plugins: [
       vue(),
@@ -56,7 +56,7 @@ export default defineConfig({
             info: 'sky',
             warning: 'amber',
             error: 'rose',
-            neutral: 'slate'
+            neutral: 'slate',
           },
           button: {
             slots: { base: 'font-heading font-semibold uppercase tracking-wider cursor-pointer' },
@@ -64,18 +64,18 @@ export default defineConfig({
             // bridge maps to the near-black --fg-inverse. Text on the primary colour is
             // --on-primary; `.on-primary` in base.css applies it (app CSS is unlayered, so
             // it beats the utility, and nothing depends on Tailwind scanning this file).
-            compoundVariants: [{ color: 'primary', variant: 'solid', class: 'on-primary' }]
-          }
+            compoundVariants: [{ color: 'primary', variant: 'solid', class: 'on-primary' }],
+          },
         },
         icon: {
           mode: 'svg',
           clientBundle: {
             // The default scan skips .ts, but the settings rail names its icons in a composable.
             scan: { globInclude: ['**/*.{vue,ts,jsx,tsx,md,mdc,mdx,yml,yaml}'] },
-            sizeLimitKb: 512
-          }
-        }
-      })
-    ]
-  }
+            sizeLimitKb: 512,
+          },
+        },
+      }),
+    ],
+  },
 })

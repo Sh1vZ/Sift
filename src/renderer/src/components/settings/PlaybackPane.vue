@@ -12,26 +12,31 @@ const toggles: Array<{ key: ToggleKey; icon: string; title: string; description:
     key: 'hoverPreview',
     icon: 'eye',
     title: 'Hover to scrub',
-    description: 'Move across a card to preview the clip without opening it.'
+    description: 'Move across a card to preview the clip without opening it.',
   },
   {
     key: 'editOnOpen',
     icon: 'scissors',
     title: 'Open clips in edit mode',
-    description: 'Start with the trim timeline showing. Press E or Esc to leave it; off, E enters it when you want.'
+    description:
+      'Start with the trim timeline showing. Press E or Esc to leave it; off, E enters it when you want.',
   },
   {
     key: 'autoplayNext',
     icon: 'list-video',
     title: 'Autoplay next clip',
-    description: 'When a clip ends, continue with the next one in the grid.'
-  }
+    description: 'When a clip ends, continue with the next one in the grid.',
+  },
 ]
 </script>
 
 <template>
   <div class="stack">
-    <SettingsPanel title="Playing clips" description="How the grid and the player behave while you browse." flush>
+    <SettingsPanel
+      title="Playing clips"
+      description="How the grid and the player behave while you browse."
+      flush
+    >
       <SettingsRow
         v-for="t in toggles"
         :key="t.key"
@@ -50,7 +55,11 @@ const toggles: Array<{ key: ToggleKey; icon: string; title: string; description:
       </SettingsRow>
     </SettingsPanel>
 
-    <SettingsPanel title="Motion" description="Card reveals, view changes and player transitions." flush>
+    <SettingsPanel
+      title="Motion"
+      description="Card reveals, view changes and player transitions."
+      flush
+    >
       <SettingsRow
         icon="sparkles"
         title="Animations"

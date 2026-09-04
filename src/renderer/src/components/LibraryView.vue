@@ -24,43 +24,45 @@ import {
   selectedGame,
   settings,
   updateSettings,
-  visibleClips
+  visibleClips,
 } from '@/composables/useLibrary'
 import { motionEnabled } from '@/composables/useMotion'
 import { activeTheme } from '@/composables/useTheme'
 import { formatBytes, formatDuration } from '@/utils/format'
 
 // The WebGL aurora (and its ogl dependency) only loads when the empty state is actually shown.
+// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- .vue modules are untyped to eslint; vue-tsc type-checks this
 const Aurora = defineAsyncComponent(() => import('./bits/Aurora.vue'))
 
 const hasFolders = computed(() => folders.value.some((f) => f.kind === 'library'))
 // Filter/sort/group/size changes restart the grid from the top with a stagger.
 const gridResetKey = computed(
-  () => `${selectedGame.value}|${settings.value.sort}|${settings.value.groupBy}|${settings.value.gridSize}`
+  () =>
+    `${selectedGame.value}|${settings.value.sort}|${settings.value.groupBy}|${settings.value.gridSize}`,
 )
 const inGame = computed(() => screen.value === 'game')
 const title = computed(() => (inGame.value ? (selectedGame.value ?? '') : 'Games'))
 
 const groupOptions: Array<{ value: GroupBy; label: string; icon: string }> = [
   { value: 'date', label: 'Date', icon: 'i-lucide-calendar' },
-  { value: 'none', label: 'None', icon: 'i-lucide-layout-grid' }
+  { value: 'none', label: 'None', icon: 'i-lucide-layout-grid' },
 ]
 const sizeOptions: Array<{ value: GridSize; icon: string; label: string }> = [
   { value: 'large', icon: 'i-lucide-grid-2x2', label: 'Large cards' },
   { value: 'comfortable', icon: 'i-lucide-layout-grid', label: 'Comfortable cards' },
-  { value: 'compact', icon: 'i-lucide-grid-3x3', label: 'Compact cards' }
+  { value: 'compact', icon: 'i-lucide-grid-3x3', label: 'Compact cards' },
 ]
 const sortOptions: Array<{ value: SortBy; label: string }> = [
   { value: 'newest', label: 'Newest first' },
   { value: 'oldest', label: 'Oldest first' },
   { value: 'name', label: 'Name' },
   { value: 'duration', label: 'Longest' },
-  { value: 'size', label: 'Largest' }
+  { value: 'size', label: 'Largest' },
 ]
 
 const sortModel = computed({
   get: () => settings.value.sort,
-  set: (v: SortBy) => void updateSettings({ sort: v })
+  set: (v: SortBy) => void updateSettings({ sort: v }),
 })
 </script>
 
@@ -104,7 +106,10 @@ const sortModel = computed({
           <Transition name="dissolve">
             <p v-if="inGame && libraryStats.count" key="game" class="stats">
               <span>
-                <CountUp v-if="motionEnabled" :to="libraryStats.count" :duration="0.9" /><template v-else>{{ libraryStats.count }}</template>
+                <CountUp v-if="motionEnabled" :to="libraryStats.count" :duration="0.9" /><template
+                  v-else
+                  >{{ libraryStats.count }}</template
+                >
                 clip{{ libraryStats.count === 1 ? '' : 's' }}
               </span>
               <span class="dot">·</span>
@@ -114,12 +119,18 @@ const sortModel = computed({
             </p>
             <p v-else-if="!inGame && games.length" key="games" class="stats">
               <span>
-                <CountUp v-if="motionEnabled" :to="games.length" :duration="0.9" /><template v-else>{{ games.length }}</template>
+                <CountUp v-if="motionEnabled" :to="games.length" :duration="0.9" /><template
+                  v-else
+                  >{{ games.length }}</template
+                >
                 game{{ games.length === 1 ? '' : 's' }}
               </span>
               <span class="dot">·</span>
               <span>
-                <CountUp v-if="motionEnabled" :to="recordings.length" :duration="0.9" /><template v-else>{{ recordings.length }}</template>
+                <CountUp v-if="motionEnabled" :to="recordings.length" :duration="0.9" /><template
+                  v-else
+                  >{{ recordings.length }}</template
+                >
                 clip{{ recordings.length === 1 ? '' : 's' }}
               </span>
             </p>
@@ -147,7 +158,14 @@ const sortModel = computed({
                 />
               </UFieldGroup>
 
-              <USelect v-model="sortModel" :items="sortOptions" size="md" icon="i-lucide-arrow-up-down" class="w-44" aria-label="Sort clips" />
+              <USelect
+                v-model="sortModel"
+                :items="sortOptions"
+                size="md"
+                icon="i-lucide-arrow-up-down"
+                class="w-44"
+                aria-label="Sort clips"
+              />
 
               <UFieldGroup size="md" aria-label="Card size">
                 <UTooltip v-for="s in sizeOptions" :key="s.value" :text="s.label">
@@ -177,7 +195,13 @@ const sortModel = computed({
               @click="rescan()"
             />
           </UTooltip>
-          <UButton icon="i-lucide-folder-plus" label="Add folder" color="primary" size="lg" @click="addFolder()" />
+          <UButton
+            icon="i-lucide-folder-plus"
+            label="Add folder"
+            color="primary"
+            size="lg"
+            @click="addFolder()"
+          />
         </div>
       </Transition>
     </header>
@@ -187,16 +211,37 @@ const sortModel = computed({
          then reads as a dissolve rather than the screen blinking to a new one. -->
     <div class="stage">
       <Transition name="crossfade">
-        <ClipGrid v-if="inGame && visibleClips.length" key="grid" :sections="sections" :reset-key="gridResetKey" />
+        <ClipGrid
+          v-if="inGame && visibleClips.length"
+          key="grid"
+          :sections="sections"
+          :reset-key="gridResetKey"
+        />
 
         <GamesBrowser v-else-if="!inGame && games.length" key="games" />
 
         <div v-else-if="!hasFolders" key="hero" class="empty hero">
           <div v-if="motionEnabled" class="hero-bg" aria-hidden="true">
-            <Aurora :color-stops="[activeTheme.colors.bg1, activeTheme.colors.primary, activeTheme.colors.accent]" :amplitude="1.1" :blend="0.6" :speed="0.6" />
+            <Aurora
+              :color-stops="[
+                activeTheme.colors.bg1,
+                activeTheme.colors.primary,
+                activeTheme.colors.accent,
+              ]"
+              :amplitude="1.1"
+              :blend="0.6"
+              :speed="0.6"
+            />
           </div>
 
-          <div class="hero-folder" role="button" tabindex="0" aria-label="Choose a folder" @click="addFolder()" @keydown.enter="addFolder()">
+          <div
+            class="hero-folder"
+            role="button"
+            tabindex="0"
+            aria-label="Choose a folder"
+            @click="addFolder()"
+            @keydown.enter="addFolder()"
+          >
             <Folder :color="activeTheme.colors.primary" :size="1.5" :items="['', '', '']">
               <template #item-1><span class="paper p1" /></template>
               <template #item-2><span class="paper p2" /></template>
@@ -218,7 +263,14 @@ const sortModel = computed({
             moved — clips are indexed where they live and new ones show up automatically.
           </p>
           <div class="hero-actions">
-            <StarBorder as="button" class="star-btn" color="#c4b5fd" speed="5s" :thickness="2" @click="addFolder()">
+            <StarBorder
+              as="button"
+              class="star-btn"
+              color="#c4b5fd"
+              speed="5s"
+              :thickness="2"
+              @click="addFolder()"
+            >
               <Icon name="folder-plus" :size="16" />
               Choose a folder
             </StarBorder>
@@ -361,7 +413,11 @@ const sortModel = computed({
   background: linear-gradient(135deg, #34d399, #6ee7b7);
 }
 .p3 {
-  background: linear-gradient(135deg, var(--secondary), color-mix(in srgb, var(--secondary) 70%, white));
+  background: linear-gradient(
+    135deg,
+    var(--secondary),
+    color-mix(in srgb, var(--secondary) 70%, white)
+  );
 }
 .hero-title {
   position: relative;

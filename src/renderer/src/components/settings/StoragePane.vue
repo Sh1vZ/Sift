@@ -3,7 +3,14 @@ import { computed, onMounted } from 'vue'
 import SettingsPanel from './SettingsPanel.vue'
 import SettingsRow from './SettingsRow.vue'
 import { now } from '@/composables/useLibrary'
-import { appStats, libraryTotals, refreshStats, revealAppData, statsError, statsLoading } from '@/composables/useStats'
+import {
+  appStats,
+  libraryTotals,
+  refreshStats,
+  revealAppData,
+  statsError,
+  statsLoading,
+} from '@/composables/useStats'
 import { formatBytes, formatRelative } from '@/utils/format'
 import { formatBitrate } from '@/utils/quality'
 
@@ -23,7 +30,9 @@ const diskUsedPct = computed(() => {
 })
 
 const measuredLabel = computed(() =>
-  appStats.value ? `Measured ${formatRelative(appStats.value.generatedAtMs, now.value).toLowerCase()}` : 'Measuring…'
+  appStats.value
+    ? `Measured ${formatRelative(appStats.value.generatedAtMs, now.value).toLowerCase()}`
+    : 'Measuring…',
 )
 
 // Walking the app-data folder is on-demand, so only measure if nothing is cached.
@@ -34,11 +43,7 @@ onMounted(() => {
 
 <template>
   <div class="stack">
-    <SettingsPanel
-      title="On disk"
-      :description="measuredLabel"
-      flush
-    >
+    <SettingsPanel title="On disk" :description="measuredLabel" flush>
       <template #actions>
         <UButton
           icon="i-lucide-refresh-cw"
@@ -61,7 +66,14 @@ onMounted(() => {
             icon="i-lucide-triangle-alert"
             title="Could not measure the app data folder"
             :description="statsError"
-            :actions="[{ label: 'Try again', color: 'neutral', variant: 'subtle', onClick: () => refreshStats() }]"
+            :actions="[
+              {
+                label: 'Try again',
+                color: 'neutral',
+                variant: 'subtle',
+                onClick: () => refreshStats(),
+              },
+            ]"
           />
           <div v-else-if="!appStats" key="loading" class="skeletons">
             <div v-for="i in 4" :key="i" class="skeleton-row">

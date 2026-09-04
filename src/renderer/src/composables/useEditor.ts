@@ -26,7 +26,7 @@ export const canExport = computed(
     editing.value &&
     !submitting.value &&
     exportName.value.trim().length > 0 &&
-    selectionLength.value >= MIN_SELECTION_S
+    selectionLength.value >= MIN_SELECTION_S,
 )
 
 export function enterEdit(clip: Clip): void {
@@ -64,7 +64,7 @@ export async function submit(clip: Clip): Promise<ExportJob | null> {
       name: exportName.value.trim(),
       start: inSec.value,
       end: outSec.value,
-      muted: exportMuted.value
+      muted: exportMuted.value,
     })
     if (job) {
       toast('info', 'Exporting clip', `${job.name}${job.ext} · ${job.game}`)

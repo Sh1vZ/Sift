@@ -10,7 +10,7 @@ import {
   revealClipsDir,
   settings,
   updateSettings,
-  type Section
+  type Section,
 } from '@/composables/useLibrary'
 import { motionEnabled } from '@/composables/useMotion'
 import { formatBytes, formatDuration } from '@/utils/format'
@@ -23,7 +23,7 @@ import SplitText from './bits/SplitText.vue'
 const sizeOptions: Array<{ value: GridSize; icon: string; label: string }> = [
   { value: 'large', icon: 'i-lucide-grid-2x2', label: 'Large cards' },
   { value: 'comfortable', icon: 'i-lucide-layout-grid', label: 'Comfortable cards' },
-  { value: 'compact', icon: 'i-lucide-grid-3x3', label: 'Compact cards' }
+  { value: 'compact', icon: 'i-lucide-grid-3x3', label: 'Compact cards' },
 ]
 
 /** A job's stand-in card until the real clip arrives through `clips:added`. */
@@ -53,7 +53,7 @@ function placeholder(job: ExportJob): Clip {
     trimStart: job.start,
     trimEnd: job.end,
     muted: job.muted,
-    createdAtMs: job.createdAtMs
+    createdAtMs: job.createdAtMs,
   }
 }
 
@@ -75,7 +75,9 @@ const sectionsWithJobs = computed<Section[]>(() => {
 })
 
 const hasContent = computed(() => sectionsWithJobs.value.length > 0)
-const unreachable = computed(() => Boolean(clipsFolder.value && !clipsFolder.value.available && exportedClips.value.length))
+const unreachable = computed(() =>
+  Boolean(clipsFolder.value && !clipsFolder.value.available && exportedClips.value.length),
+)
 const resetKey = computed(() => settings.value.gridSize)
 </script>
 
@@ -103,7 +105,10 @@ const resetKey = computed(() => settings.value.gridSize)
           <Transition name="dissolve">
             <p v-if="clipsStats.count" key="totals" class="stats">
               <span>
-                <CountUp v-if="motionEnabled" :to="clipsStats.count" :duration="0.9" /><template v-else>{{ clipsStats.count }}</template>
+                <CountUp v-if="motionEnabled" :to="clipsStats.count" :duration="0.9" /><template
+                  v-else
+                  >{{ clipsStats.count }}</template
+                >
                 clip{{ clipsStats.count === 1 ? '' : 's' }}
               </span>
               <span class="dot">·</span>
@@ -154,7 +159,15 @@ const resetKey = computed(() => settings.value.gridSize)
             variant="subtle"
             title="Clips folder not reachable"
             :description="`${clipsFolder?.path} is not available right now. Clips are kept in the list, but they cannot be played or exported to until it is back.`"
-            :actions="[{ label: 'Change folder…', icon: 'i-lucide-folder-search', color: 'neutral', variant: 'subtle', onClick: () => chooseClipsDir() }]"
+            :actions="[
+              {
+                label: 'Change folder…',
+                icon: 'i-lucide-folder-search',
+                color: 'neutral',
+                variant: 'subtle',
+                onClick: () => chooseClipsDir(),
+              },
+            ]"
           />
         </div>
       </div>
@@ -182,7 +195,13 @@ const resetKey = computed(() => settings.value.gridSize)
           :description="`Open a recording, press E to trim it, and export. Clips land in ${clipsFolder?.path ?? 'your clips folder'} and show up here, grouped by game.`"
         >
           <template #actions>
-            <UButton icon="i-lucide-gamepad-2" label="Browse games" color="primary" size="lg" @click="goGames()" />
+            <UButton
+              icon="i-lucide-gamepad-2"
+              label="Browse games"
+              color="primary"
+              size="lg"
+              @click="goGames()"
+            />
           </template>
         </UEmpty>
       </Transition>

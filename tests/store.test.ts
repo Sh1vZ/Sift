@@ -13,7 +13,14 @@ import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { changelogReleases, changelogSection, parseChangelog } from '@shared/changelog'
 import { DEFAULT_SETTINGS, type Clip, type LibraryFolder } from '@shared/types'
-import { buildExportArgs, exportExt, safeGameDir, sanitizeName, uniqueName, parseProgressLine } from '../src/main/lib/exports'
+import {
+  buildExportArgs,
+  exportExt,
+  safeGameDir,
+  sanitizeName,
+  uniqueName,
+  parseProgressLine,
+} from '../src/main/lib/exports'
 import { Store } from '../src/main/lib/store'
 
 const dir = mkdtempSync(join(tmpdir(), 'sift-store-'))
@@ -26,7 +33,7 @@ const folder: LibraryFolder = {
   addedAtMs: 1,
   clipCount: 0,
   available: true,
-  kind: 'library'
+  kind: 'library',
 }
 
 const clip = (id: string): Clip => ({
@@ -54,7 +61,7 @@ const clip = (id: string): Clip => ({
   trimStart: 0,
   trimEnd: 0,
   muted: false,
-  createdAtMs: 0
+  createdAtMs: 0,
 })
 
 const count = (file: string, sql: string): number => {
@@ -107,7 +114,10 @@ async function storeCases(): Promise<void> {
   store.upsertFolder(folder)
   await store.flush()
   check(count(dbFile, 'SELECT COUNT(*) n FROM folders') === 1, 'folder written')
-  check(count(dbFile, 'SELECT COUNT(*) n FROM clips') === 2, 'clips written after their folder (no FK failure)')
+  check(
+    count(dbFile, 'SELECT COUNT(*) n FROM clips') === 2,
+    'clips written after their folder (no FK failure)',
+  )
   check(count(dbFile, 'SELECT clip_count n FROM folders') === 2, 'latest folder state wins')
 
   // 2. Coalescing: several patches to one clip become one row with the final state.
@@ -118,12 +128,21 @@ async function storeCases(): Promise<void> {
   store.upsertClip(c1)
   await store.flush()
   check(
-    count(dbFile, "SELECT COUNT(*) n FROM clips WHERE id = 'c1' AND probe_state = 'ok' AND duration = 12") === 1,
-    'coalesced patches persist the final state'
+    count(
+      dbFile,
+      "SELECT COUNT(*) n FROM clips WHERE id = 'c1' AND probe_state = 'ok' AND duration = 12",
+    ) === 1,
+    'coalesced patches persist the final state',
   )
 
   // 3. A clips-kind folder and an export's provenance round-trip.
-  const clipsFolder: LibraryFolder = { ...folder, id: 'fc', path: 'C:/Users/me/Videos/Sift Clips', name: 'Sift Clips', kind: 'clips' }
+  const clipsFolder: LibraryFolder = {
+    ...folder,
+    id: 'fc',
+    path: 'C:/Users/me/Videos/Sift Clips',
+    name: 'Sift Clips',
+    kind: 'clips',
+  }
   store.upsertFolder(clipsFolder)
   const exported: Clip = {
     ...clip('e1'),
@@ -133,7 +152,7 @@ async function storeCases(): Promise<void> {
     trimStart: 3,
     trimEnd: 9.5,
     muted: true,
-    createdAtMs: 42
+    createdAtMs: 42,
   }
   store.upsertClip(exported)
 
@@ -145,18 +164,37 @@ async function storeCases(): Promise<void> {
   await store.close()
   const again = new Store(dbFile)
   await again.load()
-  check(again.data.settings.volume === 0.33 && again.data.settings.gridSize === 'compact', 'settings survive reopen')
+  check(
+    again.data.settings.volume === 0.33 && again.data.settings.gridSize === 'compact',
+    'settings survive reopen',
+  )
   check(again.data.settings.minimizeToTray === true, 'minimize-to-tray survives reopen')
   check(again.data.settings.trayHintShown === false, 'unset tray hint flag uses its default')
-  check(again.data.settings.concurrency === DEFAULT_SETTINGS.concurrency, 'unset settings use defaults')
-  check(Object.keys(again.data.clips).length === 3 && again.data.folders.length === 2, 'folders + clips reload')
-  check(again.data.folders.find((f) => f.id === 'fc')?.kind === 'clips', 'folder kind survives reopen')
+  check(
+    again.data.settings.concurrency === DEFAULT_SETTINGS.concurrency,
+    'unset settings use defaults',
+  )
+  check(
+    Object.keys(again.data.clips).length === 3 && again.data.folders.length === 2,
+    'folders + clips reload',
+  )
+  check(
+    again.data.folders.find((f) => f.id === 'fc')?.kind === 'clips',
+    'folder kind survives reopen',
+  )
   const e1 = again.data.clips.e1
   check(
-    e1?.sourceId === 'c1' && e1.trimStart === 3 && e1.trimEnd === 9.5 && e1.muted === true && e1.createdAtMs === 42,
-    'export provenance survives reopen'
+    e1?.sourceId === 'c1' &&
+      e1.trimStart === 3 &&
+      e1.trimEnd === 9.5 &&
+      e1.muted === true &&
+      e1.createdAtMs === 42,
+    'export provenance survives reopen',
   )
-  check(again.data.clips.c1?.sourceId === '' && again.data.clips.c1?.muted === false, 'recordings keep empty provenance')
+  check(
+    again.data.clips.c1?.sourceId === '' && again.data.clips.c1?.muted === false,
+    'recordings keep empty provenance',
+  )
 
   // 5. Removing a folder cascades to its clips; a clip delete queued alongside is harmless.
   again.deleteClip('c1')
@@ -175,36 +213,84 @@ async function migrationCase(): Promise<void> {
   const store = new Store(oldFile)
   await store.load()
   check(store.data.folders[0]?.kind === 'library', 'v2 folders migrate to kind=library')
-  check(store.data.clips.oc?.sourceId === '' && store.data.clips.oc?.createdAtMs === 0, 'v2 clips migrate with empty provenance')
+  check(
+    store.data.clips.oc?.sourceId === '' && store.data.clips.oc?.createdAtMs === 0,
+    'v2 clips migrate with empty provenance',
+  )
   const cols = new DatabaseSync(oldFile, { readOnly: true })
-  const names = (cols.prepare('PRAGMA table_info(clips)').all() as Array<{ name: string }>).map((r) => r.name)
-  const version = (cols.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as { value: string }).value
+  const names = (cols.prepare('PRAGMA table_info(clips)').all() as Array<{ name: string }>).map(
+    (r) => r.name,
+  )
+  const version = (
+    cols.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as { value: string }
+  ).value
   cols.close()
-  check(names.includes('created_at_ms') && names.includes('source_id'), 'migration added the provenance columns')
+  check(
+    names.includes('created_at_ms') && names.includes('source_id'),
+    'migration added the provenance columns',
+  )
   check(version === '3', 'schema version advanced to 3')
   await store.close()
 }
 
 function exportHelperCases(): void {
-  check(sanitizeName('  Ace - Clip. ').name === 'Ace - Clip', 'sanitizeName trims and strips trailing dots')
+  check(
+    sanitizeName('  Ace - Clip. ').name === 'Ace - Clip',
+    'sanitizeName trims and strips trailing dots',
+  )
   check(Boolean(sanitizeName('bad:name').error), 'sanitizeName rejects Windows-invalid characters')
   check(Boolean(sanitizeName('CON').error), 'sanitizeName rejects reserved names')
-  check(safeGameDir('Half-Life: Alyx') === 'Half-Life- Alyx', 'safeGameDir replaces invalid characters')
+  check(
+    safeGameDir('Half-Life: Alyx') === 'Half-Life- Alyx',
+    'safeGameDir replaces invalid characters',
+  )
   check(safeGameDir('') === 'Clips', 'safeGameDir falls back')
-  check(exportExt('.MKV') === '.mp4' && exportExt('.webm') === '.webm', 'exportExt picks the container')
-  check(uniqueName('Clip', (c) => c === 'Clip' || c === 'Clip (2)') === 'Clip (3)', 'uniqueName suffixes on collision')
-  check(parseProgressLine('out_time_us=2500000') === 2.5 && parseProgressLine('frame=12') === null, 'parseProgressLine')
+  check(
+    exportExt('.MKV') === '.mp4' && exportExt('.webm') === '.webm',
+    'exportExt picks the container',
+  )
+  check(
+    uniqueName('Clip', (c) => c === 'Clip' || c === 'Clip (2)') === 'Clip (3)',
+    'uniqueName suffixes on collision',
+  )
+  check(
+    parseProgressLine('out_time_us=2500000') === 2.5 && parseProgressLine('frame=12') === null,
+    'parseProgressLine',
+  )
 
-  const args = buildExportArgs({ src: 'in.mp4', out: 'out.mp4', start: 1.5, end: 4, muted: false, vcodec: 'hevc' })
+  const args = buildExportArgs({
+    src: 'in.mp4',
+    out: 'out.mp4',
+    start: 1.5,
+    end: 4,
+    muted: false,
+    vcodec: 'hevc',
+  })
   const i = args.indexOf('-i')
   check(
     args.indexOf('-ss') < i && args.indexOf('-to') < i && args[args.indexOf('-ss') + 1] === '1.500',
-    'seek and stop are input options'
+    'seek and stop are input options',
   )
-  check(args.includes('0:a?') && !args.includes('-an') && args.includes('hvc1'), 'audio mapped, hevc tagged')
-  check(args[args.length - 1] === 'out.mp4' && args.includes('copy'), 'stream copy to the output path')
-  const muted = buildExportArgs({ src: 'in.mp4', out: 'out.mp4', start: 0, end: 1, muted: true, vcodec: 'h264' })
-  check(muted.includes('-an') && !muted.includes('0:a?') && !muted.includes('hvc1'), 'muted drops audio')
+  check(
+    args.includes('0:a?') && !args.includes('-an') && args.includes('hvc1'),
+    'audio mapped, hevc tagged',
+  )
+  check(
+    args[args.length - 1] === 'out.mp4' && args.includes('copy'),
+    'stream copy to the output path',
+  )
+  const muted = buildExportArgs({
+    src: 'in.mp4',
+    out: 'out.mp4',
+    start: 0,
+    end: 1,
+    muted: true,
+    vcodec: 'h264',
+  })
+  check(
+    muted.includes('-an') && !muted.includes('0:a?') && !muted.includes('hvc1'),
+    'muted drops audio',
+  )
 }
 
 const CHANGELOG = `# Changelog
@@ -221,30 +307,45 @@ const CHANGELOG = `# Changelog
 function changelogCases(): void {
   check(
     changelogSection(CHANGELOG, '1.0.0-beta.2') === '### Added\n- Sift updates itself now.',
-    'changelogSection stops at the next version heading'
+    'changelogSection stops at the next version heading',
   )
   check(
     changelogSection(CHANGELOG, 'v1.0.0-beta.1') === '### Fixed\n- A thing.',
-    'changelogSection tolerates a v prefix and reads the last section'
+    'changelogSection tolerates a v prefix and reads the last section',
   )
-  check(changelogSection(CHANGELOG, '9.9.9') === '', 'changelogSection is empty for an unknown version')
-  check(changelogSection('', '1.0.0') === '' && changelogSection(CHANGELOG, '') === '', 'changelogSection handles empties')
-  const section = ['### Added', '- One **bold** and `code`', '  wrapped onto a second line', '  - Nested', '* Two'].join('\n')
+  check(
+    changelogSection(CHANGELOG, '9.9.9') === '',
+    'changelogSection is empty for an unknown version',
+  )
+  check(
+    changelogSection('', '1.0.0') === '' && changelogSection(CHANGELOG, '') === '',
+    'changelogSection handles empties',
+  )
+  const section = [
+    '### Added',
+    '- One **bold** and `code`',
+    '  wrapped onto a second line',
+    '  - Nested',
+    '* Two',
+  ].join('\n')
   const blocks = parseChangelog(section)
   check(
     blocks.length === 2 && blocks[0]?.kind === 'heading' && blocks[0].text === 'Added',
-    'parseChangelog reads a sub-heading'
+    'parseChangelog reads a sub-heading',
   )
   const list = blocks[1]
-  check(list?.kind === 'list' && list.items.length === 2, 'parseChangelog groups bullets into one list')
+  check(
+    list?.kind === 'list' && list.items.length === 2,
+    'parseChangelog groups bullets into one list',
+  )
   const first = list?.kind === 'list' ? list.items[0] : undefined
   check(
     first?.content.map((n) => n.kind).join(',') === 'text,strong,text,code,text',
-    'parseChangelog splits bold and code spans out of a bullet'
+    'parseChangelog splits bold and code spans out of a bullet',
   )
   check(
     first?.content.at(-1)?.text === ' wrapped onto a second line',
-    'parseChangelog folds a wrapped line back into its bullet'
+    'parseChangelog folds a wrapped line back into its bullet',
   )
   check(first?.children.length === 1, 'parseChangelog nests an indented bullet under its parent')
 
@@ -252,17 +353,19 @@ function changelogCases(): void {
   const runs = link[0]?.kind === 'list' ? (link[0].items[0]?.content ?? []) : []
   check(
     runs.some((n) => n.kind === 'link' && n.href === 'https://example.com'),
-    'parseChangelog keeps an http link'
+    'parseChangelog keeps an http link',
   )
   check(
     runs.every((n) => n.kind !== 'link' || n.href.startsWith('https://')),
-    'parseChangelog refuses a non-http href'
+    'parseChangelog refuses a non-http href',
   )
 
   const releases = changelogReleases(CHANGELOG)
   check(
-    releases.length === 2 && releases[0]?.version === '1.0.0-beta.2' && releases[0]?.date === '2026-09-10',
-    'changelogReleases lists every version with its date, newest first'
+    releases.length === 2 &&
+      releases[0]?.version === '1.0.0-beta.2' &&
+      releases[0]?.date === '2026-09-10',
+    'changelogReleases lists every version with its date, newest first',
   )
 }
 

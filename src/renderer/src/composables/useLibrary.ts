@@ -63,8 +63,12 @@ export const allClips = computed<Clip[]>(() => {
 // ------------------------------------------------------ recordings vs clips
 
 /** The folder Sift exports into. Always present once the snapshot has loaded. */
-export const clipsFolder = computed<LibraryFolder | null>(() => folders.value.find((f) => f.kind === 'clips') ?? null)
-const exportFolderIds = computed(() => new Set(folders.value.filter((f) => f.kind === 'clips').map((f) => f.id)))
+export const clipsFolder = computed<LibraryFolder | null>(
+  () => folders.value.find((f) => f.kind === 'clips') ?? null,
+)
+const exportFolderIds = computed(
+  () => new Set(folders.value.filter((f) => f.kind === 'clips').map((f) => f.id)),
+)
 
 /** Recordings only — what the Games screen and its grids are built from. */
 export const recordings = computed<Clip[]>(() => {
@@ -92,7 +96,15 @@ export const games = computed<GameSummary[]>(() => {
   for (const c of recordings.value) {
     let g = map.get(c.game)
     if (!g) {
-      g = { name: c.game, count: 0, cover: '', latestMs: 0, totalDuration: 0, totalSize: 0, coverMs: -1 }
+      g = {
+        name: c.game,
+        count: 0,
+        cover: '',
+        latestMs: 0,
+        totalDuration: 0,
+        totalSize: 0,
+        coverMs: -1,
+      }
       map.set(c.game, g)
     }
     g.count++
@@ -137,7 +149,7 @@ export interface Section {
 
 /** Grouping applied inside a game's grid. Anything unexpected in a stored setting falls back to date. */
 export const gridGroupBy = computed<'date' | 'none'>(() =>
-  settings.value.groupBy === 'none' ? 'none' : 'date'
+  settings.value.groupBy === 'none' ? 'none' : 'date',
 )
 
 export const sections = computed<Section[]>(() => {
@@ -195,7 +207,7 @@ export const clipSections = computed<Section[]>(() => {
     .map(([game, g]) => ({
       key: `g:${game}`,
       title: game,
-      clips: g.clips.sort((a, b) => exportedAt(b) - exportedAt(a) || a.name.localeCompare(b.name))
+      clips: g.clips.sort((a, b) => exportedAt(b) - exportedAt(a) || a.name.localeCompare(b.name)),
     }))
 })
 
@@ -265,8 +277,9 @@ export const filteredGames = computed<GameSummary[]>(() => {
 watch(
   () => (selectedGame.value ? games.value : null),
   (list) => {
-    if (list && selectedGame.value && !list.some((g) => g.name === selectedGame.value)) selectedGame.value = null
-  }
+    if (list && selectedGame.value && !list.some((g) => g.name === selectedGame.value))
+      selectedGame.value = null
+  },
 )
 
 export async function initLibrary(): Promise<void> {
@@ -320,7 +333,12 @@ export async function addFolder(path?: string): Promise<LibraryFolder | null> {
 export async function removeFolder(folder: LibraryFolder): Promise<void> {
   const res = await api.library.removeFolder(folder.id)
   if (!res.ok) toast('error', 'Could not remove folder', res.error)
-  else toast('info', 'Folder removed', `${folder.name} is no longer indexed. Files were left untouched.`)
+  else
+    toast(
+      'info',
+      'Folder removed',
+      `${folder.name} is no longer indexed. Files were left untouched.`,
+    )
 }
 
 export async function rescan(folderId?: string): Promise<void> {
@@ -332,10 +350,11 @@ async function confirmClipsMove(): Promise<boolean> {
   if (!exportedClips.value.length) return true
   return confirm({
     title: 'Change the clips folder?',
-    message: 'Clips already exported stay on disk where they are, but they leave the Clips list. New exports go to the folder you pick.',
+    message:
+      'Clips already exported stay on disk where they are, but they leave the Clips list. New exports go to the folder you pick.',
     detail: clipsFolder.value?.path,
     detailIcon: 'i-lucide-folder-output',
-    confirmLabel: 'Choose folder'
+    confirmLabel: 'Choose folder',
   })
 }
 

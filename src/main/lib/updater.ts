@@ -77,7 +77,7 @@ function plainNotes(notes: UpdateInfo['releaseNotes']): string {
     raw
       .replace(/<\s*(br|\/p|\/li|\/h[1-6]|\/div|\/tr)\s*\/?>/gi, '\n')
       .replace(/<\s*li[^>]*>/gi, '• ')
-      .replace(/<[^>]+>/g, '')
+      .replace(/<[^>]+>/g, ''),
   )
     .split(/\r?\n/)
     .map((line) => line.replace(/[ \t]+/g, ' ').trim())
@@ -90,8 +90,10 @@ function plainNotes(notes: UpdateInfo['releaseNotes']): string {
 
 function friendlyError(err: unknown): string {
   const message = err instanceof Error ? err.message : String(err)
-  if (/ERR_UPDATER_CHANNEL_FILE_NOT_FOUND|404/i.test(message)) return 'No update feed for this build yet.'
-  if (/ENOTFOUND|EAI_AGAIN|ETIMEDOUT|ECONNRESET|ENETUNREACH|net::/i.test(message)) return 'Could not reach GitHub.'
+  if (/ERR_UPDATER_CHANNEL_FILE_NOT_FOUND|404/i.test(message))
+    return 'No update feed for this build yet.'
+  if (/ENOTFOUND|EAI_AGAIN|ETIMEDOUT|ECONNRESET|ENETUNREACH|net::/i.test(message))
+    return 'Could not reach GitHub.'
   return message.split('\n')[0]?.trim() || 'The update check failed.'
 }
 
@@ -119,7 +121,7 @@ export function createUpdater(opts: { emit: Emit; quit: () => void }): Updater {
       wantsInstall: () => false,
       install: () => {},
       runInstaller: () => {},
-      dispose: () => {}
+      dispose: () => {},
     }
   }
 
@@ -147,10 +149,11 @@ export function createUpdater(opts: { emit: Emit; quit: () => void }): Updater {
   autoUpdater.fullChangelog = true
   autoUpdater.forceDevUpdateConfig = updaterDev
   autoUpdater.logger = {
+    // eslint-disable-next-line no-console -- this is the log sink itself
     info: (m) => console.log('[updater]', m),
     warn: (m) => console.warn('[updater]', m),
     error: (m) => console.error('[updater]', m),
-    debug: () => {}
+    debug: () => {},
   }
 
   autoUpdater.on('checking-for-update', () => push({ status: 'checking', error: '' }))
@@ -158,11 +161,24 @@ export function createUpdater(opts: { emit: Emit; quit: () => void }): Updater {
   autoUpdater.on('update-available', (info: UpdateInfo) => {
     // autoDownload means this is immediately followed by download-progress; the
     // 'available' state is only ever seen in the gap.
-    push({ status: 'available', version: info.version, notes: plainNotes(info.releaseNotes), progress: 0, error: '' })
+    push({
+      status: 'available',
+      version: info.version,
+      notes: plainNotes(info.releaseNotes),
+      progress: 0,
+      error: '',
+    })
   })
 
   autoUpdater.on('update-not-available', () => {
-    push({ status: 'up-to-date', version: '', notes: '', progress: 0, error: '', checkedAtMs: Date.now() })
+    push({
+      status: 'up-to-date',
+      version: '',
+      notes: '',
+      progress: 0,
+      error: '',
+      checkedAtMs: Date.now(),
+    })
   })
 
   autoUpdater.on('download-progress', (p: ProgressInfo) => {
@@ -177,7 +193,7 @@ export function createUpdater(opts: { emit: Emit; quit: () => void }): Updater {
       progress: 1,
       bytesPerSecond: 0,
       error: '',
-      checkedAtMs: Date.now()
+      checkedAtMs: Date.now(),
     })
   })
 
@@ -186,7 +202,8 @@ export function createUpdater(opts: { emit: Emit; quit: () => void }): Updater {
     // Only a check the user asked for gets an error state. A background check that
     // could not reach GitHub is not worth interrupting anyone over, so it lands
     // back on `idle` with the reason kept for the settings pane.
-    if (manualCheck) push({ status: 'error', error: message, version: '', progress: 0, bytesPerSecond: 0 })
+    if (manualCheck)
+      push({ status: 'error', error: message, version: '', progress: 0, bytesPerSecond: 0 })
     else push({ status: 'idle', error: message, progress: 0, bytesPerSecond: 0 })
   })
 
@@ -231,6 +248,6 @@ export function createUpdater(opts: { emit: Emit; quit: () => void }): Updater {
       // user owns and needs no UI and no UAC prompt. isForceRunAfter: come back up.
       autoUpdater.quitAndInstall(true, true)
     },
-    dispose: clearTimers
+    dispose: clearTimers,
   }
 }

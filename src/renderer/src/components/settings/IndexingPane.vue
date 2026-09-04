@@ -13,18 +13,21 @@ const toggles: Array<{ key: ToggleKey; icon: string; title: string; description:
     icon: 'radar',
     title: 'Watch folders',
     description:
-      'Pick up new recordings the moment they finish writing. Uses a lightweight OS file watcher.'
+      'Pick up new recordings the moment they finish writing. Uses a lightweight OS file watcher.',
   },
   {
     key: 'generateThumbnails',
     icon: 'image',
     title: 'Generate thumbnails',
     description:
-      'Poster frames and hover-scrub strips are rendered once by ffmpeg at low CPU priority and cached.'
-  }
+      'Poster frames and hover-scrub strips are rendered once by ffmpeg at low CPU priority and cached.',
+  },
 ]
 
-const workerOptions = [1, 2, 3, 4].map((n) => ({ label: `${n} worker${n === 1 ? '' : 's'}`, value: n }))
+const workerOptions = [1, 2, 3, 4].map((n) => ({
+  label: `${n} worker${n === 1 ? '' : 's'}`,
+  value: n,
+}))
 
 const pending = computed(() => allClips.value.filter((c) => c.probeState === 'pending').length)
 </script>
@@ -90,7 +93,11 @@ const pending = computed(() => allClips.value.filter((c) => c.probeState === 'pe
       </SettingsRow>
     </SettingsPanel>
 
-    <SettingsPanel title="Queue" description="What the preview workers still have in front of them." flush>
+    <SettingsPanel
+      title="Queue"
+      description="What the preview workers still have in front of them."
+      flush
+    >
       <SettingsRow
         icon="timer"
         title="Waiting to be probed"

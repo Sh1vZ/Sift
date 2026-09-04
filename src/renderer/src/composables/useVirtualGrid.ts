@@ -51,7 +51,7 @@ const MIN_CARD_W: Record<GridSize, number> = { compact: 214, comfortable: 268, l
 export function useVirtualGrid(
   container: Ref<HTMLElement | null>,
   sections: Ref<Section[]>,
-  gridSize: Ref<GridSize>
+  gridSize: Ref<GridSize>,
 ) {
   const width = ref(0)
   const height = ref(0)
@@ -95,7 +95,14 @@ export function useVirtualGrid(
     let top = PAD_TOP
     for (const s of sections.value) {
       if (s.title !== null) {
-        rows.push({ kind: 'header', key: `h:${s.key}`, title: s.title, count: s.clips.length, top, height: HEADER_H })
+        rows.push({
+          kind: 'header',
+          key: `h:${s.key}`,
+          title: s.title,
+          count: s.clips.length,
+          top,
+          height: HEADER_H,
+        })
         top += HEADER_H
       }
       for (let i = 0; i < s.clips.length; i += cols) {
@@ -106,7 +113,7 @@ export function useVirtualGrid(
           top,
           height: cardHeight + GAP,
           cardWidth,
-          cardHeight
+          cardHeight,
         })
         top += cardHeight + GAP
       }

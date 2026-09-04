@@ -1,6 +1,11 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 
+const props = withDefaults(defineProps<{ name: string; size?: number; stroke?: number }>(), {
+  size: 18,
+  stroke: 2,
+})
+
 /**
  * Thin wrapper over Nuxt UI's <UIcon> keeping the app's short icon names.
  * Values are written as full `i-lucide-*` literals on purpose: the Nuxt UI
@@ -68,13 +73,8 @@ const ICONS: Record<string, string> = {
   'folder-output': 'i-lucide-folder-output',
   download: 'i-lucide-download',
   link: 'i-lucide-link',
-  tray: 'i-lucide-panel-bottom'
+  tray: 'i-lucide-panel-bottom',
 }
-
-const props = withDefaults(defineProps<{ name: string; size?: number; stroke?: number }>(), {
-  size: 18,
-  stroke: 2
-})
 
 const icon = computed(() => ICONS[props.name] ?? `i-lucide-${props.name}`)
 </script>

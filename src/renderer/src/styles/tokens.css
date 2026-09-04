@@ -42,9 +42,7 @@
   --border-active: rgba(167, 139, 250, 0.45);
   --ring: #a78bfa;
 
-  --glow-primary:
-    0 0 0 1px rgba(167, 139, 250, 0.35),
-    0 12px 32px -8px rgba(124, 58, 237, 0.55);
+  --glow-primary: 0 0 0 1px rgba(167, 139, 250, 0.35), 0 12px 32px -8px rgba(124, 58, 237, 0.55);
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
   --shadow-md: 0 8px 24px -6px rgba(0, 0, 0, 0.55);
   --shadow-lg: 0 24px 60px -12px rgba(0, 0, 0, 0.7);
@@ -52,22 +50,13 @@
   /* The two static radial washes App.vue paints over --bg-1. Owned here so a
      theme can recolour them; the OLED themes keep them over a true-black ground. */
   --app-wash:
-    radial-gradient(
-      1200px 600px at 80% -10%,
-      rgba(124, 58, 237, 0.14),
-      transparent 60%
-    ),
-    radial-gradient(
-      800px 500px at -10% 110%,
-      rgba(244, 63, 94, 0.07),
-      transparent 60%
-    );
+    radial-gradient(1200px 600px at 80% -10%, rgba(124, 58, 237, 0.14), transparent 60%),
+    radial-gradient(800px 500px at -10% 110%, rgba(244, 63, 94, 0.07), transparent 60%);
 
-  --font-display: "Russo One", "Chakra Petch", system-ui, sans-serif;
-  --font-heading: "Chakra Petch", "Inter Variable", system-ui, sans-serif;
-  --font-body:
-    "Inter Variable", "Segoe UI", system-ui, -apple-system, sans-serif;
-  --font-mono: "Cascadia Code", "Consolas", ui-monospace, monospace;
+  --font-display: 'Russo One', 'Chakra Petch', system-ui, sans-serif;
+  --font-heading: 'Chakra Petch', 'Inter Variable', system-ui, sans-serif;
+  --font-body: 'Inter Variable', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --font-mono: 'Cascadia Code', 'Consolas', ui-monospace, monospace;
 
   --text-xs: 11px;
   --text-sm: 12.5px;
@@ -142,10 +131,10 @@
    in the corner rather than a glow. The brand still carries through every lit
    pixel — primary, borders, accents. Every OLED variant shares this block and
    adds its own brand colours below. */
-html[data-theme="oled"],
-html[data-theme="oled-mint"],
-html[data-theme="oled-frost"],
-html[data-theme="oled-crimson"] {
+html[data-theme='oled'],
+html[data-theme='oled-mint'],
+html[data-theme='oled-frost'],
+html[data-theme='oled-crimson'] {
   --app-wash: none;
   --bg-0: #000000;
   --bg-1: #000000;
@@ -160,7 +149,7 @@ html[data-theme="oled-crimson"] {
 }
 
 /* Ember: warm charcoal ground, orange identity, gold punctuation. */
-html[data-theme="ember"] {
+html[data-theme='ember'] {
   --bg-0: #0b0807;
   --bg-1: #110e0c;
   --bg-2: #181412;
@@ -178,20 +167,10 @@ html[data-theme="ember"] {
   --accent-soft: rgba(250, 204, 21, 0.16);
   --border-active: rgba(253, 186, 116, 0.45);
   --ring: #fdba74;
-  --glow-primary:
-    0 0 0 1px rgba(253, 186, 116, 0.35),
-    0 12px 32px -8px rgba(249, 115, 22, 0.55);
+  --glow-primary: 0 0 0 1px rgba(253, 186, 116, 0.35), 0 12px 32px -8px rgba(249, 115, 22, 0.55);
   --app-wash:
-    radial-gradient(
-      1200px 600px at 80% -10%,
-      rgba(249, 115, 22, 0.13),
-      transparent 60%
-    ),
-    radial-gradient(
-      800px 500px at -10% 110%,
-      rgba(250, 204, 21, 0.06),
-      transparent 60%
-    );
+    radial-gradient(1200px 600px at 80% -10%, rgba(249, 115, 22, 0.13), transparent 60%),
+    radial-gradient(800px 500px at -10% 110%, rgba(250, 204, 21, 0.06), transparent 60%);
   --ui-text-toned: #cfc4bc;
   --ui-text-highlighted: #fbf7f4;
   --ui-color-primary-50: #fff7ed;
@@ -208,7 +187,7 @@ html[data-theme="ember"] {
 }
 
 /* Synthwave: deep purple ground, hot pink identity, cyan punctuation. */
-html[data-theme="synthwave"] {
+html[data-theme='synthwave'] {
   --bg-0: #0b0516;
   --bg-1: #10081d;
   --bg-2: #180c2a;
@@ -226,20 +205,10 @@ html[data-theme="synthwave"] {
   --accent-soft: rgba(34, 211, 238, 0.16);
   --border-active: rgba(249, 168, 212, 0.45);
   --ring: #f9a8d4;
-  --glow-primary:
-    0 0 0 1px rgba(249, 168, 212, 0.35),
-    0 12px 32px -8px rgba(236, 72, 153, 0.55);
+  --glow-primary: 0 0 0 1px rgba(249, 168, 212, 0.35), 0 12px 32px -8px rgba(236, 72, 153, 0.55);
   --app-wash:
-    radial-gradient(
-      1200px 600px at 80% -10%,
-      rgba(236, 72, 153, 0.14),
-      transparent 60%
-    ),
-    radial-gradient(
-      800px 500px at -10% 110%,
-      rgba(34, 211, 238, 0.07),
-      transparent 60%
-    );
+    radial-gradient(1200px 600px at 80% -10%, rgba(236, 72, 153, 0.14), transparent 60%),
+    radial-gradient(800px 500px at -10% 110%, rgba(34, 211, 238, 0.07), transparent 60%);
   --ui-text-toned: #cdb8e0;
   --ui-text-highlighted: #faf5ff;
   --ui-color-primary-50: #fdf2f8;
@@ -256,7 +225,7 @@ html[data-theme="synthwave"] {
 }
 
 /* Crimson: red-black ground, crimson identity, amber punctuation. */
-html[data-theme="crimson"] {
+html[data-theme='crimson'] {
   --bg-0: #0f0708;
   --bg-1: #150a0c;
   --bg-2: #1d0f12;
@@ -274,20 +243,10 @@ html[data-theme="crimson"] {
   --accent-soft: rgba(251, 191, 36, 0.16);
   --border-active: rgba(252, 165, 165, 0.45);
   --ring: #fca5a5;
-  --glow-primary:
-    0 0 0 1px rgba(252, 165, 165, 0.35),
-    0 12px 32px -8px rgba(220, 38, 38, 0.55);
+  --glow-primary: 0 0 0 1px rgba(252, 165, 165, 0.35), 0 12px 32px -8px rgba(220, 38, 38, 0.55);
   --app-wash:
-    radial-gradient(
-      1200px 600px at 80% -10%,
-      rgba(220, 38, 38, 0.13),
-      transparent 60%
-    ),
-    radial-gradient(
-      800px 500px at -10% 110%,
-      rgba(251, 191, 36, 0.06),
-      transparent 60%
-    );
+    radial-gradient(1200px 600px at 80% -10%, rgba(220, 38, 38, 0.13), transparent 60%),
+    radial-gradient(800px 500px at -10% 110%, rgba(251, 191, 36, 0.06), transparent 60%);
   --ui-text-toned: #d2bfc4;
   --ui-text-highlighted: #fcf5f6;
   --ui-color-primary-50: #fef2f2;
@@ -305,7 +264,7 @@ html[data-theme="crimson"] {
 
 /* Solar: warm graphite ground, golden identity, sky punctuation. Yellow is
    too light for white glyphs, so text on a primary fill goes dark here. */
-html[data-theme="solar"] {
+html[data-theme='solar'] {
   --bg-0: #0a0a08;
   --bg-1: #10100d;
   --bg-2: #171713;
@@ -324,19 +283,10 @@ html[data-theme="solar"] {
   --accent-soft: rgba(56, 189, 248, 0.16);
   --border-active: rgba(253, 224, 71, 0.45);
   --ring: #fde047;
-  --glow-primary:
-    0 0 0 1px rgba(253, 224, 71, 0.35), 0 12px 32px -8px rgba(234, 179, 8, 0.55);
+  --glow-primary: 0 0 0 1px rgba(253, 224, 71, 0.35), 0 12px 32px -8px rgba(234, 179, 8, 0.55);
   --app-wash:
-    radial-gradient(
-      1200px 600px at 80% -10%,
-      rgba(234, 179, 8, 0.12),
-      transparent 60%
-    ),
-    radial-gradient(
-      800px 500px at -10% 110%,
-      rgba(56, 189, 248, 0.06),
-      transparent 60%
-    );
+    radial-gradient(1200px 600px at 80% -10%, rgba(234, 179, 8, 0.12), transparent 60%),
+    radial-gradient(800px 500px at -10% 110%, rgba(56, 189, 248, 0.06), transparent 60%);
   --ui-text-toned: #cfcec2;
   --ui-text-highlighted: #fbfaf5;
   --ui-color-primary-50: #fefce8;
@@ -354,7 +304,7 @@ html[data-theme="solar"] {
 
 /* Nox: deep plum ground, magenta identity, amber punctuation. The canvas is the
    darkest step (#150811); chrome and panels climb #1a0916 → #26081c → #380036. */
-html[data-theme="nox"] {
+html[data-theme='nox'] {
   --bg-0: #1a0916;
   --bg-1: #150811;
   --bg-2: #200a19;
@@ -373,20 +323,10 @@ html[data-theme="nox"] {
   --accent-soft: rgba(251, 191, 36, 0.16);
   --border-active: rgba(238, 154, 231, 0.45);
   --ring: #ee9ae7;
-  --glow-primary:
-    0 0 0 1px rgba(238, 154, 231, 0.35),
-    0 12px 32px -8px rgba(176, 30, 164, 0.55);
+  --glow-primary: 0 0 0 1px rgba(238, 154, 231, 0.35), 0 12px 32px -8px rgba(176, 30, 164, 0.55);
   --app-wash:
-    radial-gradient(
-      1200px 600px at 80% -10%,
-      rgba(176, 30, 164, 0.16),
-      transparent 60%
-    ),
-    radial-gradient(
-      800px 500px at -10% 110%,
-      rgba(251, 191, 36, 0.06),
-      transparent 60%
-    );
+    radial-gradient(1200px 600px at 80% -10%, rgba(176, 30, 164, 0.16), transparent 60%),
+    radial-gradient(800px 500px at -10% 110%, rgba(251, 191, 36, 0.06), transparent 60%);
   --ui-text-toned: #d8c6d3;
   --ui-text-highlighted: #fdf7fb;
   --ui-color-primary-50: #fdf2fc;
@@ -408,7 +348,7 @@ html[data-theme="nox"] {
    light for white glyphs, so text on a primary fill goes dark here. Borders
    and shadows follow the OLED treatment: a ground this dark swallows the
    default hairlines. */
-html[data-theme="grim"] {
+html[data-theme='grim'] {
   --bg-0: #011502;
   --bg-1: #000a01;
   --bg-2: #01180a;
@@ -429,23 +369,13 @@ html[data-theme="grim"] {
   --border-hover: rgba(158, 197, 171, 0.18);
   --border-active: rgba(158, 197, 171, 0.45);
   --ring: #9ec5ab;
-  --glow-primary:
-    0 0 0 1px rgba(158, 197, 171, 0.35),
-    0 12px 32px -8px rgba(83, 140, 108, 0.55);
+  --glow-primary: 0 0 0 1px rgba(158, 197, 171, 0.35), 0 12px 32px -8px rgba(83, 140, 108, 0.55);
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.7);
   --shadow-md: 0 8px 24px -6px rgba(0, 0, 0, 0.85);
   --shadow-lg: 0 24px 60px -12px rgba(0, 0, 0, 0.95);
   --app-wash:
-    radial-gradient(
-      1200px 600px at 80% -10%,
-      rgba(158, 197, 171, 0.07),
-      transparent 60%
-    ),
-    radial-gradient(
-      800px 500px at -10% 110%,
-      rgba(224, 112, 92, 0.05),
-      transparent 60%
-    );
+    radial-gradient(1200px 600px at 80% -10%, rgba(158, 197, 171, 0.07), transparent 60%),
+    radial-gradient(800px 500px at -10% 110%, rgba(224, 112, 92, 0.05), transparent 60%);
   --ui-text-toned: #c9d8ce;
   --ui-text-highlighted: #f4faf6;
   --ui-color-primary-50: #f2f8f4;
@@ -465,7 +395,7 @@ html[data-theme="grim"] {
    punctuation. Every surface step climbs through navy rather than grey so the
    blue cast never leaves, and the washes read as a blue nebula overhead with a
    faint gold star-field low on the left. */
-html[data-theme="space"] {
+html[data-theme='space'] {
   --bg-0: #060b1c;
   --bg-1: #0a1128;
   --bg-2: #101a38;
@@ -486,23 +416,13 @@ html[data-theme="space"] {
   --border-hover: rgba(157, 177, 255, 0.18);
   --border-active: rgba(157, 177, 255, 0.45);
   --ring: #9db1ff;
-  --glow-primary:
-    0 0 0 1px rgba(157, 177, 255, 0.35),
-    0 12px 32px -8px rgba(67, 97, 238, 0.55);
+  --glow-primary: 0 0 0 1px rgba(157, 177, 255, 0.35), 0 12px 32px -8px rgba(67, 97, 238, 0.55);
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
   --shadow-md: 0 8px 24px -6px rgba(0, 0, 0, 0.7);
   --shadow-lg: 0 24px 60px -12px rgba(0, 0, 0, 0.85);
   --app-wash:
-    radial-gradient(
-      1200px 600px at 80% -10%,
-      rgba(67, 97, 238, 0.18),
-      transparent 60%
-    ),
-    radial-gradient(
-      800px 500px at -10% 110%,
-      rgba(255, 201, 74, 0.06),
-      transparent 60%
-    );
+    radial-gradient(1200px 600px at 80% -10%, rgba(67, 97, 238, 0.18), transparent 60%),
+    radial-gradient(800px 500px at -10% 110%, rgba(255, 201, 74, 0.06), transparent 60%);
   --ui-text-toned: #bcc7e6;
   --ui-text-highlighted: #f4f7ff;
   --ui-color-primary-50: #eef2ff;
@@ -519,7 +439,7 @@ html[data-theme="space"] {
 }
 
 /* OLED Mint: true black, emerald identity, pink punctuation. */
-html[data-theme="oled-mint"] {
+html[data-theme='oled-mint'] {
   --fg: #e6f0ea;
   --fg-muted: #9ab3a6;
   --fg-dim: #6a8375;
@@ -532,9 +452,7 @@ html[data-theme="oled-mint"] {
   --accent-soft: rgba(244, 114, 182, 0.16);
   --border-active: rgba(110, 231, 183, 0.45);
   --ring: #6ee7b7;
-  --glow-primary:
-    0 0 0 1px rgba(110, 231, 183, 0.35),
-    0 12px 32px -8px rgba(16, 185, 129, 0.55);
+  --glow-primary: 0 0 0 1px rgba(110, 231, 183, 0.35), 0 12px 32px -8px rgba(16, 185, 129, 0.55);
   --ui-text-toned: #bad0c4;
   --ui-text-highlighted: #f3faf6;
   --ui-color-primary-50: #ecfdf5;
@@ -551,7 +469,7 @@ html[data-theme="oled-mint"] {
 }
 
 /* OLED Frost: true black, cyan identity, violet punctuation. */
-html[data-theme="oled-frost"] {
+html[data-theme='oled-frost'] {
   --fg: #e4f0f4;
   --fg-muted: #97b0b9;
   --fg-dim: #678089;
@@ -564,9 +482,7 @@ html[data-theme="oled-frost"] {
   --accent-soft: rgba(167, 139, 250, 0.16);
   --border-active: rgba(103, 232, 249, 0.45);
   --ring: #67e8f9;
-  --glow-primary:
-    0 0 0 1px rgba(103, 232, 249, 0.35),
-    0 12px 32px -8px rgba(6, 182, 212, 0.55);
+  --glow-primary: 0 0 0 1px rgba(103, 232, 249, 0.35), 0 12px 32px -8px rgba(6, 182, 212, 0.55);
   --ui-text-toned: #b8ccd4;
   --ui-text-highlighted: #f2f9fb;
   --ui-color-primary-50: #ecfeff;
@@ -583,7 +499,7 @@ html[data-theme="oled-frost"] {
 }
 
 /* OLED Crimson: true black, crimson identity, amber punctuation. */
-html[data-theme="oled-crimson"] {
+html[data-theme='oled-crimson'] {
   --fg: #f5e9eb;
   --fg-muted: #b09aa0;
   --fg-dim: #7f6a70;
@@ -596,9 +512,7 @@ html[data-theme="oled-crimson"] {
   --accent-soft: rgba(251, 191, 36, 0.16);
   --border-active: rgba(252, 165, 165, 0.45);
   --ring: #fca5a5;
-  --glow-primary:
-    0 0 0 1px rgba(252, 165, 165, 0.35),
-    0 12px 32px -8px rgba(220, 38, 38, 0.55);
+  --glow-primary: 0 0 0 1px rgba(252, 165, 165, 0.35), 0 12px 32px -8px rgba(220, 38, 38, 0.55);
   --ui-text-toned: #d2bfc4;
   --ui-text-highlighted: #fcf5f6;
   --ui-color-primary-50: #fef2f2;

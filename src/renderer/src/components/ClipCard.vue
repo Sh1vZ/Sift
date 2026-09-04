@@ -3,7 +3,13 @@ import { computed, ref } from 'vue'
 import type { Clip, ExportJob } from '@shared/types'
 import Icon from './Icon.vue'
 import { now, settings } from '@/composables/useLibrary'
-import { clamp, formatBytes, formatDuration, formatRelative, formatResolution } from '@/utils/format'
+import {
+  clamp,
+  formatBytes,
+  formatDuration,
+  formatRelative,
+  formatResolution,
+} from '@/utils/format'
 
 const props = withDefaults(
   defineProps<{
@@ -13,7 +19,7 @@ const props = withDefaults(
     /** An export still in flight: the card is a progress placeholder, not something you can open. */
     job?: ExportJob
   }>(),
-  { variant: 'recording', job: undefined }
+  { variant: 'recording', job: undefined },
 )
 const emit = defineEmits<{ open: [clip: Clip, rect: DOMRect] }>()
 
@@ -27,10 +33,19 @@ const spriteLoaded = ref(false)
 const poster = computed(() => (props.clip.thumb ? api.thumbUrl(props.clip.thumb) : ''))
 const sprite = computed(() => (props.clip.sprite ? api.thumbUrl(props.clip.sprite) : ''))
 const frames = computed(() => props.clip.spriteFrames)
-const canScrub = computed(() => !props.job && settings.value.hoverPreview && Boolean(sprite.value) && frames.value > 1)
-const resolution = computed(() => formatResolution(props.clip.width, props.clip.height, props.clip.fps))
+const canScrub = computed(
+  () => !props.job && settings.value.hoverPreview && Boolean(sprite.value) && frames.value > 1,
+)
+const resolution = computed(() =>
+  formatResolution(props.clip.width, props.clip.height, props.clip.fps),
+)
 const when = computed(() =>
-  formatRelative(props.variant === 'export' ? props.clip.createdAtMs || props.clip.recordedAtMs : props.clip.recordedAtMs, now.value)
+  formatRelative(
+    props.variant === 'export'
+      ? props.clip.createdAtMs || props.clip.recordedAtMs
+      : props.clip.recordedAtMs,
+    now.value,
+  ),
 )
 
 const jobPct = computed(() => Math.round((props.job?.progress ?? 0) * 100))
@@ -100,7 +115,11 @@ function open(): void {
         <Transition name="fade">
           <div v-if="!poster || !posterLoaded" class="placeholder">
             <USkeleton v-if="clip.probeState === 'pending'" class="placeholder-skeleton" />
-            <Icon :name="clip.probeState === 'failed' ? 'video-off' : 'film'" :size="26" :stroke="1.6" />
+            <Icon
+              :name="clip.probeState === 'failed' ? 'video-off' : 'film'"
+              :size="26"
+              :stroke="1.6"
+            />
           </div>
         </Transition>
 
@@ -111,7 +130,7 @@ function open(): void {
             decoding="async"
             :style="{
               width: `${frames * 100}%`,
-              transform: `translate3d(${(-frame * 100) / frames}%, 0, 0)`
+              transform: `translate3d(${(-frame * 100) / frames}%, 0, 0)`,
             }"
             @load="spriteLoaded = true"
           />
@@ -134,7 +153,12 @@ function open(): void {
         </div>
 
         <UBadge v-if="resolution && !job" class="badge res" size="sm" :label="resolution" />
-        <UBadge v-if="clip.duration" class="badge duration mono" size="sm" :label="formatDuration(clip.duration)" />
+        <UBadge
+          v-if="clip.duration"
+          class="badge duration mono"
+          size="sm"
+          :label="formatDuration(clip.duration)"
+        />
 
         <span v-if="!job" class="play-hint" aria-hidden="true">
           <Icon name="play" :size="20" />

@@ -43,7 +43,7 @@ const RES_TIERS: Array<{ min: number; label: string }> = [
   { min: 2160, label: '4K' },
   { min: 1440, label: '1440p' },
   { min: 1080, label: '1080p' },
-  { min: 720, label: '720p' }
+  { min: 720, label: '720p' },
 ]
 const TIER_SLACK = 0.9
 
@@ -66,7 +66,7 @@ const fullFmt = new Intl.DateTimeFormat(undefined, {
   month: 'short',
   day: 'numeric',
   hour: 'numeric',
-  minute: '2-digit'
+  minute: '2-digit',
 })
 const monthFmt = new Intl.DateTimeFormat(undefined, { month: 'long' })
 const monthYearFmt = new Intl.DateTimeFormat(undefined, { month: 'long', year: 'numeric' })
@@ -94,7 +94,10 @@ function startOfDay(ms: number): number {
 }
 
 /** Bucket used for the date-grouped grid. Sort key descends with recency. */
-export function dateBucket(ms: number, now = Date.now()): { key: string; title: string; order: number } {
+export function dateBucket(
+  ms: number,
+  now = Date.now(),
+): { key: string; title: string; order: number } {
   const day = startOfDay(ms)
   const today = startOfDay(now)
   const days = Math.round((today - day) / 86_400_000)
@@ -108,7 +111,7 @@ export function dateBucket(ms: number, now = Date.now()): { key: string; title: 
   return {
     key,
     title: sameYear ? monthFmt.format(ms) : monthYearFmt.format(ms),
-    order: 1_000_000 - (d.getFullYear() * 12 + d.getMonth())
+    order: 1_000_000 - (d.getFullYear() * 12 + d.getMonth()),
   }
 }
 

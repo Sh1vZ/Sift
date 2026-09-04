@@ -27,7 +27,7 @@ const MIGRATIONS: Array<(db: DatabaseSync) => void> = [
     db.exec('ALTER TABLE clips ADD COLUMN trim_end REAL NOT NULL DEFAULT 0')
     db.exec('ALTER TABLE clips ADD COLUMN muted INTEGER NOT NULL DEFAULT 0')
     db.exec('ALTER TABLE clips ADD COLUMN created_at_ms REAL NOT NULL DEFAULT 0')
-  }
+  },
 ]
 const SCHEMA_VERSION = MIGRATIONS.length + 1
 
@@ -150,7 +150,11 @@ export class Store {
    * that reference them (clips.folder_id → folders.id), whatever order the
    * calls arrived in.
    */
-  private pending = { folders: new Map<string, () => void>(), clips: new Map<string, () => void>(), other: new Map<string, () => void>() }
+  private pending = {
+    folders: new Map<string, () => void>(),
+    clips: new Map<string, () => void>(),
+    other: new Map<string, () => void>(),
+  }
   private timer: NodeJS.Timeout | null = null
 
   /** `dbPath` is injected (rather than derived from Electron's userData here) so the store is testable without Electron. */
@@ -167,23 +171,27 @@ export class Store {
     db.exec(INDEXES)
     this.prepare(db)
 
-    this.data.folders = (db.prepare('SELECT * FROM folders ORDER BY added_at_ms').all() as unknown as FolderRow[]).map(
-      (r) => ({
-        id: r.id,
-        path: r.path,
-        name: r.name,
-        addedAtMs: r.added_at_ms,
-        clipCount: r.clip_count,
-        available: Boolean(r.available),
-        kind: r.kind === 'clips' ? 'clips' : 'library'
-      })
-    )
+    this.data.folders = (
+      db.prepare('SELECT * FROM folders ORDER BY added_at_ms').all() as unknown as FolderRow[]
+    ).map((r) => ({
+      id: r.id,
+      path: r.path,
+      name: r.name,
+      addedAtMs: r.added_at_ms,
+      clipCount: r.clip_count,
+      available: Boolean(r.available),
+      kind: r.kind === 'clips' ? 'clips' : 'library',
+    }))
     const clips: Record<string, Clip> = {}
-    for (const r of db.prepare('SELECT * FROM clips').all() as unknown as ClipRow[]) clips[r.id] = rowToClip(r)
+    for (const r of db.prepare('SELECT * FROM clips').all() as unknown as ClipRow[])
+      clips[r.id] = rowToClip(r)
     this.data.clips = clips
 
     const settings: Record<string, unknown> = { ...DEFAULT_SETTINGS }
-    for (const r of db.prepare('SELECT key, value FROM settings').all() as unknown as Array<{ key: string; value: string }>) {
+    for (const r of db.prepare('SELECT key, value FROM settings').all() as unknown as Array<{
+      key: string
+      value: string
+    }>) {
       if (r.key in DEFAULT_SETTINGS) {
         try {
           settings[r.key] = JSON.parse(r.value)
@@ -220,25 +228,29 @@ export class Store {
           muted = excluded.muted, created_at_ms = excluded.created_at_ms`),
       deleteClip: db.prepare('DELETE FROM clips WHERE id = ?'),
       setSetting: db.prepare(
-        'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value'
-      )
+        'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+      ),
     }
   }
 
   private migrate(db: DatabaseSync): void {
     const row = db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as
-      | { value: string }
-      | undefined
+      { value: string } | undefined
     let version = row ? Number(row.value) : SCHEMA_VERSION
     while (version < SCHEMA_VERSION) {
       const step = MIGRATIONS[version - 1]
       this.transaction(() => {
         step(db)
-        db.prepare("UPDATE meta SET value = ? WHERE key = 'schema_version'").run(String(version + 1))
+        db.prepare("UPDATE meta SET value = ? WHERE key = 'schema_version'").run(
+          String(version + 1),
+        )
       })
       version++
     }
-    db.prepare('INSERT OR IGNORE INTO meta (key, value) VALUES (?, ?)').run('schema_version', String(SCHEMA_VERSION))
+    db.prepare('INSERT OR IGNORE INTO meta (key, value) VALUES (?, ?)').run(
+      'schema_version',
+      String(SCHEMA_VERSION),
+    )
   }
 
   // ---------------------------------------------------------- write API
@@ -263,7 +275,8 @@ export class Store {
 
   saveSettings(): void {
     this.enqueue(this.pending.other, 'settings', () => {
-      for (const [k, v] of Object.entries(this.data.settings)) this.stmts.setSetting.run(k, JSON.stringify(v))
+      for (const [k, v] of Object.entries(this.data.settings))
+        this.stmts.setSetting.run(k, JSON.stringify(v))
     })
   }
 
@@ -277,7 +290,11 @@ export class Store {
       clearTimeout(this.timer)
       this.timer = null
     }
-    const ops = [...this.pending.folders.values(), ...this.pending.clips.values(), ...this.pending.other.values()]
+    const ops = [
+      ...this.pending.folders.values(),
+      ...this.pending.clips.values(),
+      ...this.pending.other.values(),
+    ]
     this.pending.folders.clear()
     this.pending.clips.clear()
     this.pending.other.clear()
@@ -309,7 +326,7 @@ export class Store {
 
   private enqueue(bucket: Map<string, () => void>, key: string, op: () => void): void {
     bucket.set(key, op)
-    if (!this.timer) this.timer = setTimeout(() => void this.flush(), FLUSH_MS)
+    this.timer ??= setTimeout(() => void this.flush(), FLUSH_MS)
   }
 
   private transaction(fn: () => void): void {
@@ -325,7 +342,15 @@ export class Store {
   }
 
   private writeFolder(f: LibraryFolder): void {
-    this.stmts.upsertFolder.run(f.id, f.path, f.name, f.addedAtMs, f.clipCount, f.available ? 1 : 0, f.kind)
+    this.stmts.upsertFolder.run(
+      f.id,
+      f.path,
+      f.name,
+      f.addedAtMs,
+      f.clipCount,
+      f.available ? 1 : 0,
+      f.kind,
+    )
   }
 
   private writeClip(c: Clip): void {
@@ -354,7 +379,7 @@ export class Store {
       c.trimStart,
       c.trimEnd,
       c.muted ? 1 : 0,
-      c.createdAtMs
+      c.createdAtMs,
     )
   }
 }
@@ -385,6 +410,6 @@ function rowToClip(r: ClipRow): Clip {
     trimStart: r.trim_start,
     trimEnd: r.trim_end,
     muted: Boolean(r.muted),
-    createdAtMs: r.created_at_ms
+    createdAtMs: r.created_at_ms,
   }
 }

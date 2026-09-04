@@ -11,8 +11,8 @@ export function clipId(filePath: string): string {
  * OBS / others: "2024-05-03 21-44-12.mp4", "Replay_2024-05-03_21-44-12", "20240503_214412"
  */
 const DATE_PATTERNS = [
-  /(\d{4})[.\-_](\d{2})[.\-_](\d{2})[ _\-]+(\d{2})[.\-_:](\d{2})[.\-_:](\d{2})/,
-  /(\d{4})(\d{2})(\d{2})[_\-T]?(\d{2})(\d{2})(\d{2})/
+  /(\d{4})[.\-_](\d{2})[.\-_](\d{2})[ _-]+(\d{2})[.\-_:](\d{2})[.\-_:](\d{2})/,
+  /(\d{4})(\d{2})(\d{2})[_\-T]?(\d{2})(\d{2})(\d{2})/,
 ]
 
 export function parseRecordedAt(name: string): number | null {

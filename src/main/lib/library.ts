@@ -18,7 +18,7 @@ import type {
   LibrarySnapshot,
   ScanState,
   Settings,
-  WhatsNew
+  WhatsNew,
 } from '@shared/types'
 import { fullChangelog, releaseNotesFor } from './changelog'
 import { cleanTitle, clipId, deriveGame, parseRecordedAt } from './clips'
@@ -30,7 +30,7 @@ import {
   safeGameDir,
   sanitizeName,
   uniqueName,
-  validateExportRequest
+  validateExportRequest,
 } from './exports'
 import {
   MediaQueue,
@@ -40,7 +40,7 @@ import {
   removeArtifacts,
   runLong,
   spriteName,
-  thumbName
+  thumbName,
 } from './media'
 import { FFMPEG, cacheDir, libraryDb, userDataDir } from './paths'
 import { walkVideos } from './scanner'
@@ -59,7 +59,8 @@ const EXPORT_MAX_MS = 15 * 60_000
 const EXPORT_PRUNE_DONE_MS = 10_000
 const EXPORT_PRUNE_FAILED_MS = 30_000
 
-const isTerminal = (j: ExportJob): boolean => j.state === 'done' || j.state === 'failed' || j.state === 'cancelled'
+const isTerminal = (j: ExportJob): boolean =>
+  j.state === 'done' || j.state === 'failed' || j.state === 'cancelled'
 
 /**
  * Owns the library state and coordinates the store, folder scans, the ffmpeg
@@ -71,7 +72,13 @@ export class Library {
   private readonly media: MediaQueue
   private readonly watchers = new Map<string, FSWatcher>()
   private scanChain: Promise<void> = Promise.resolve()
-  private readonly scanState: ScanState = { active: false, folder: '', found: 0, pending: 0, done: 0 }
+  private readonly scanState: ScanState = {
+    active: false,
+    folder: '',
+    found: 0,
+    pending: 0,
+    done: 0,
+  }
 
   private added = new Map<string, Clip>()
   private updated = new Map<string, ClipPatch>()
@@ -94,7 +101,7 @@ export class Library {
   constructor(private readonly emit: Emit) {
     this.media = new MediaQueue(
       (clip) => this.processClip(clip),
-      (patch) => this.applyPatch(patch)
+      (patch) => this.applyPatch(patch),
     )
     this.media.onProgress = (pending) => {
       this.scanState.pending = pending
@@ -144,7 +151,7 @@ export class Library {
       exports: [...this.exports.values()].map((j) => ({ ...j })),
       appVersion: app.getVersion(),
       suggestedFolders: existsSync(videos) ? [videos] : [],
-      defaultClipsDir: this.defaultClipsDir()
+      defaultClipsDir: this.defaultClipsDir(),
     }
   }
 
@@ -168,7 +175,10 @@ export class Library {
     const path = normalize(rawPath).replace(/[\\/]+$/, '')
     const lower = path.toLowerCase()
     if (this.isUnderClipsRoot(path)) {
-      return { folder: null, error: 'That is your Sift Clips folder — its clips already show under Clips.' }
+      return {
+        folder: null,
+        error: 'That is your Sift Clips folder — its clips already show under Clips.',
+      }
     }
     for (const f of this.store.data.folders) {
       // The clips folder may sit inside a library root: scans skip it.
@@ -181,7 +191,7 @@ export class Library {
       if (existing.startsWith(lower + '\\') || existing.startsWith(lower + '/')) {
         return {
           folder: null,
-          error: `"${f.name}" sits inside this folder. Remove it first to avoid indexing clips twice.`
+          error: `"${f.name}" sits inside this folder. Remove it first to avoid indexing clips twice.`,
         }
       }
     }
@@ -192,7 +202,7 @@ export class Library {
       addedAtMs: Date.now(),
       clipCount: 0,
       available: existsSync(path),
-      kind: 'library'
+      kind: 'library',
     }
     this.store.data.folders.push(folder)
     this.store.upsertFolder(folder)
@@ -209,7 +219,10 @@ export class Library {
     const index = folders.findIndex((f) => f.id === id)
     if (index < 0) return { ok: false, error: 'Folder not found.' }
     if (folders[index].kind === 'clips') {
-      return { ok: false, error: 'The clips folder cannot be removed. Change it under Settings → Clips instead.' }
+      return {
+        ok: false,
+        error: 'The clips folder cannot be removed. Change it under Settings → Clips instead.',
+      }
     }
     const [folder] = folders.splice(index, 1)
     await this.stopWatcher(folder.id)
@@ -265,7 +278,7 @@ export class Library {
       addedAtMs: Date.now(),
       clipCount: 0,
       available: existsSync(path),
-      kind: 'clips'
+      kind: 'clips',
     }
     this.store.data.folders.push(folder)
     this.store.upsertFolder(folder)
@@ -273,18 +286,28 @@ export class Library {
 
   /** `''` restores the default. Exports already on disk stay where they are; only the index moves. */
   async setClipsDir(raw: string): Promise<ActionResult & { folder?: LibraryFolder }> {
-    const path = (raw.trim() ? normalize(raw.trim()) : this.defaultClipsDir()).replace(/[\\/]+$/, '')
+    const path = (raw.trim() ? normalize(raw.trim()) : this.defaultClipsDir()).replace(
+      /[\\/]+$/,
+      '',
+    )
     const lower = path.toLowerCase()
     for (const f of this.store.data.folders) {
       if (f.kind !== 'library') continue
       const existing = f.path.toLowerCase()
-      if (existing === lower) return { ok: false, error: `"${f.name}" is a watched folder. Pick a folder that is not one.` }
+      if (existing === lower)
+        return {
+          ok: false,
+          error: `"${f.name}" is a watched folder. Pick a folder that is not one.`,
+        }
       if (existing.startsWith(lower + '\\') || existing.startsWith(lower + '/')) {
-        return { ok: false, error: `"${f.name}" sits inside that folder, so its recordings would be indexed twice.` }
+        return {
+          ok: false,
+          error: `"${f.name}" sits inside that folder, so its recordings would be indexed twice.`,
+        }
       }
     }
     const current = this.clipsFolder()
-    if (current && current.path.toLowerCase() === lower) return { ok: true, folder: current }
+    if (current?.path.toLowerCase() === lower) return { ok: true, folder: current }
     if ([...this.exports.values()].some((j) => !isTerminal(j))) {
       return { ok: false, error: 'Wait for the current export to finish first.' }
     }
@@ -303,7 +326,7 @@ export class Library {
       addedAtMs: Date.now(),
       clipCount: 0,
       available: existsSync(path),
-      kind: 'clips'
+      kind: 'clips',
     }
     this.store.data.folders.push(folder)
     this.store.upsertFolder(folder)
@@ -318,7 +341,10 @@ export class Library {
   async revealClipsDir(): Promise<ActionResult> {
     const path = this.clipsRoot()
     if (!existsSync(path)) {
-      return { ok: false, error: 'The clips folder does not exist yet — your first export creates it.' }
+      return {
+        ok: false,
+        error: 'The clips folder does not exist yet — your first export creates it.',
+      }
     }
     const error = await shell.openPath(path)
     return error ? { ok: false, error } : { ok: true }
@@ -391,7 +417,8 @@ export class Library {
     if (!clip) return { ok: false, error: 'Clip not found.' }
     const name = newName.trim()
     if (!name) return { ok: false, error: 'Name cannot be empty.' }
-    if (INVALID_NAME.test(name)) return { ok: false, error: 'Name contains characters Windows does not allow.' }
+    if (INVALID_NAME.test(name))
+      return { ok: false, error: 'Name contains characters Windows does not allow.' }
     if (name === clip.name) return { ok: true, clip }
 
     const target = join(dirname(clip.path), name + clip.ext)
@@ -404,14 +431,24 @@ export class Library {
 
     // Ids derive from the path, so a rename produces a new record. Cached
     // artifacts are moved along so nothing needs regenerating.
-    const next: Clip = { ...clip, id: clipId(target), path: target, name, title: cleanTitle(name, clip.game) }
+    const next: Clip = {
+      ...clip,
+      id: clipId(target),
+      path: target,
+      name,
+      title: cleanTitle(name, clip.game),
+    }
     if (clip.thumb) {
       next.thumb = thumbName(next)
-      await fsRename(join(cacheDir(), clip.thumb), join(cacheDir(), next.thumb)).catch(() => (next.thumb = ''))
+      await fsRename(join(cacheDir(), clip.thumb), join(cacheDir(), next.thumb)).catch(
+        () => (next.thumb = ''),
+      )
     }
     if (clip.sprite) {
       next.sprite = spriteName(next)
-      await fsRename(join(cacheDir(), clip.sprite), join(cacheDir(), next.sprite)).catch(() => (next.sprite = ''))
+      await fsRename(join(cacheDir(), clip.sprite), join(cacheDir(), next.sprite)).catch(
+        () => (next.sprite = ''),
+      )
     }
     delete this.store.data.clips[clip.id]
     this.store.data.clips[next.id] = next
@@ -445,10 +482,10 @@ export class Library {
     return { ok: true }
   }
 
-  copyPath(id: string): ActionResult {
+  async copyPath(id: string): Promise<ActionResult> {
     const clip = this.store.data.clips[id]
     if (!clip) return { ok: false, error: 'Clip not found.' }
-    clipboard.writeText(clip.path)
+    await clipboard.writeText(clip.path)
     return { ok: true }
   }
 
@@ -459,7 +496,8 @@ export class Library {
     const source = this.store.data.clips[req.id]
     const invalid = validateExportRequest(req, source)
     if (invalid || !source) return { ok: false, error: invalid ?? 'Clip not found.' }
-    if (!existsSync(source.path)) return { ok: false, error: 'The source file is no longer on disk.' }
+    if (!existsSync(source.path))
+      return { ok: false, error: 'The source file is no longer on disk.' }
 
     const folder = this.clipsFolder()
     if (!folder) return { ok: false, error: 'No clips folder is configured.' }
@@ -482,7 +520,9 @@ export class Library {
     const name = uniqueName(base, (candidate) => {
       const target = join(dir, candidate + ext)
       return (
-        existsSync(target) || Boolean(this.store.data.clips[clipId(target)]) || targets.has(target.toLowerCase())
+        existsSync(target) ||
+        Boolean(this.store.data.clips[clipId(target)]) ||
+        targets.has(target.toLowerCase())
       )
     })
     const job: ExportJob = {
@@ -497,12 +537,14 @@ export class Library {
       muted: req.muted && source.hasAudio,
       state: 'queued',
       progress: 0,
-      createdAtMs: Date.now()
+      createdAtMs: Date.now(),
     }
     this.exports.set(job.id, job)
     this.exportTargets.set(job.id, join(dir, name + ext))
     this.scheduleExportsEmit(true)
-    this.exportChain = this.exportChain.then(() => this.runExportJob(job, source, dir)).catch(() => undefined)
+    this.exportChain = this.exportChain
+      .then(() => this.runExportJob(job, source, dir))
+      .catch(() => undefined)
     return { ok: true, job: { ...job } }
   }
 
@@ -545,7 +587,7 @@ export class Library {
         start: job.start,
         end: job.end,
         muted: job.muted,
-        vcodec: source.vcodec
+        vcodec: source.vcodec,
       })
       const { code, stderrTail } = await runLong(FFMPEG, args, {
         stallMs: EXPORT_STALL_MS,
@@ -556,7 +598,7 @@ export class Library {
           if (t === null || span <= 0) return
           job.progress = Math.min(1, t / span)
           this.scheduleExportsEmit()
-        }
+        },
       })
       if (abort.signal.aborted) throw new Error('Export cancelled.')
       if (code !== 0) throw new Error(stderrTail || `ffmpeg exited with code ${code}`)
@@ -590,7 +632,7 @@ export class Library {
         trimStart: job.start,
         trimEnd: job.end,
         muted: job.muted,
-        createdAtMs: Date.now()
+        createdAtMs: Date.now(),
       }
       const previous = this.store.data.clips[clip.id]
       if (previous) void removeArtifacts(previous)
@@ -663,7 +705,7 @@ export class Library {
         continue
       }
       const existing = this.store.data.clips[id]
-      if (existing && existing.size === st.size && Math.abs(existing.mtimeMs - st.mtimeMs) < 1000) {
+      if (existing?.size === st.size && Math.abs(existing.mtimeMs - st.mtimeMs) < 1000) {
         if (this.needsWork(existing)) this.media.enqueue(existing)
         continue
       }
@@ -723,7 +765,8 @@ export class Library {
       trimStart: previous?.trimStart ?? 0,
       trimEnd: previous?.trimEnd ?? 0,
       muted: previous?.muted ?? false,
-      createdAtMs: previous?.createdAtMs ?? (folder.kind === 'clips' ? st.birthtimeMs || st.mtimeMs : 0)
+      createdAtMs:
+        previous?.createdAtMs ?? (folder.kind === 'clips' ? st.birthtimeMs || st.mtimeMs : 0),
     }
     this.store.data.clips[clip.id] = clip
     this.store.upsertClip(clip)
@@ -791,9 +834,9 @@ export class Library {
         onRemove: (p) => {
           const clip = this.store.data.clips[clipId(p)]
           if (clip) this.dropClip(clip)
-        }
+        },
       },
-      ignored
+      ignored,
     )
     this.watchers.set(folder.id, watcher)
   }
@@ -816,7 +859,7 @@ export class Library {
     const existing = this.store.data.clips[clipId(file)]
     // Also what makes our own finished export a no-op here: the record was
     // written from the same stat before the watcher settled.
-    if (existing && existing.size === st.size && Math.abs(existing.mtimeMs - st.mtimeMs) < 1000) return
+    if (existing?.size === st.size && Math.abs(existing.mtimeMs - st.mtimeMs) < 1000) return
     const clip = this.upsertClip(folder, file, st, existing)
     if (isNew) {
       folder.clipCount++
@@ -832,7 +875,10 @@ export class Library {
   // ----------------------------------------------------------------- events
 
   private emitFolders(): void {
-    this.emit('folders:changed', this.store.data.folders.map((f) => ({ ...f })))
+    this.emit(
+      'folders:changed',
+      this.store.data.folders.map((f) => ({ ...f })),
+    )
   }
 
   private scheduleScanEmit(now = false): void {
@@ -850,7 +896,11 @@ export class Library {
   }
 
   private scheduleExportsEmit(now = false): void {
-    const send = (): void => this.emit('exports:changed', [...this.exports.values()].map((j) => ({ ...j })))
+    const send = (): void =>
+      this.emit(
+        'exports:changed',
+        [...this.exports.values()].map((j) => ({ ...j })),
+      )
     if (now) {
       if (this.exportsTimer) clearTimeout(this.exportsTimer)
       this.exportsTimer = null
@@ -877,7 +927,10 @@ export class Library {
       this.removed.clear()
     }
     if (this.added.size) {
-      this.emit('clips:added', [...this.added.values()].map((c) => ({ ...c })))
+      this.emit(
+        'clips:added',
+        [...this.added.values()].map((c) => ({ ...c })),
+      )
       this.added.clear()
     }
     if (this.updated.size) {

@@ -60,5 +60,5 @@ window.sift = {
   },
   leave() {
     root.classList.add('leaving')
-  }
+  },
 }

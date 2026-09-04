@@ -9,12 +9,12 @@ const toaster = useToast()
 const color: Record<ToastKind, 'primary' | 'success' | 'error'> = {
   info: 'primary',
   success: 'success',
-  error: 'error'
+  error: 'error',
 }
 const icon: Record<ToastKind, string> = {
   info: 'i-lucide-info',
   success: 'i-lucide-check',
-  error: 'i-lucide-triangle-alert'
+  error: 'i-lucide-triangle-alert',
 }
 
 watch(pending, (list) => {
@@ -26,8 +26,16 @@ watch(pending, (list) => {
       color: color[t.kind],
       icon: icon[t.kind],
       actions: t.action
-        ? [{ label: t.action.label, color: 'neutral', variant: 'outline', size: 'xs', onClick: t.action.onClick }]
-        : undefined
+        ? [
+            {
+              label: t.action.label,
+              color: 'neutral',
+              variant: 'outline',
+              size: 'xs',
+              onClick: t.action.onClick,
+            },
+          ]
+        : undefined,
     })
   }
 })

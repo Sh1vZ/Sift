@@ -127,7 +127,7 @@ export function parseInline(line: string): ChangelogInline[] {
         out,
         href
           ? { kind: 'link', text: unescape(linkText), href }
-          : { kind: 'text', text: unescape(`${linkText} (${linkHref})`) }
+          : { kind: 'text', text: unescape(`${linkText} (${linkHref})`) },
       )
     } else if (strong !== undefined) {
       push(out, { kind: 'strong', text: unescape(strong) })
@@ -226,7 +226,8 @@ export function parseChangelog(section: string): ChangelogBlock[] {
         while (stack.length > 1 && indent < (stack[stack.length - 1]?.indent ?? 0)) stack.pop()
         const top = stack[stack.length - 1]
         const parent = openItem()
-        if (top && parent && indent >= top.indent + 2) stack.push({ indent, items: parent.children })
+        if (top && parent && indent >= top.indent + 2)
+          stack.push({ indent, items: parent.children })
       }
       stack[stack.length - 1]?.items.push(item)
       continue
@@ -265,7 +266,11 @@ export function changelogReleases(md: string): ChangelogRelease[] {
     if (!heading) return
     const version = headingVersion(heading)
     if (version) {
-      releases.push({ version, date: headingDate(heading), blocks: parseChangelog(body.join('\n')) })
+      releases.push({
+        version,
+        date: headingDate(heading),
+        blocks: parseChangelog(body.join('\n')),
+      })
     }
   }
 

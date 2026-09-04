@@ -12,7 +12,8 @@ import { app } from 'electron'
 
 /** Isolated profile dir (separate library.db, thumbnail cache, single-instance lock). Empty = default profile. */
 export const userDataOverride: string =
-  process.env.SIFT_USER_DATA || (!app.isPackaged ? (import.meta.env.MAIN_VITE_USER_DATA_DIR ?? '') : '')
+  process.env.SIFT_USER_DATA ||
+  (!app.isPackaged ? (import.meta.env.MAIN_VITE_USER_DATA_DIR ?? '') : '')
 
 /**
  * Log per-process CPU and working set every few seconds. A `SIFT_*` knob on
@@ -23,11 +24,13 @@ export const userDataOverride: string =
 export const perfLog: boolean = process.env.SIFT_PERF_LOG === '1'
 
 /** Open Chromium DevTools as soon as the window shows (dev only). */
-export const openDevTools: boolean = !app.isPackaged && import.meta.env.MAIN_VITE_OPEN_DEVTOOLS === 'true'
+export const openDevTools: boolean =
+  !app.isPackaged && import.meta.env.MAIN_VITE_OPEN_DEVTOOLS === 'true'
 
 /**
  * Run the updater against `dev-app-update.yml` instead of leaving it inert, so the
  * download/install flow can be exercised without publishing a release. Dev only —
  * a packaged build always uses the real feed.
  */
-export const updaterDev: boolean = !app.isPackaged && import.meta.env.MAIN_VITE_UPDATER_DEV === 'true'
+export const updaterDev: boolean =
+  !app.isPackaged && import.meta.env.MAIN_VITE_UPDATER_DEV === 'true'

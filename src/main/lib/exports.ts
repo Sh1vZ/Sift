@@ -12,12 +12,15 @@ export const MIN_SELECTION_S = 0.25
  * A file name the user typed, made safe for NTFS. Returns the reason when
  * nothing usable is left so the editor can show it.
  */
-export function sanitizeName(raw: string): { name: string; error?: undefined } | { name?: undefined; error: string } {
+export function sanitizeName(
+  raw: string,
+): { name: string; error?: undefined } | { name?: undefined; error: string } {
   const name = raw.trim().replace(/[. ]+$/, '')
   if (!name) return { error: 'Name cannot be empty.' }
   if (INVALID_NAME.test(name)) return { error: 'Name contains characters Windows does not allow.' }
   if (RESERVED_NAME.test(name)) return { error: 'That name is reserved by Windows.' }
-  if (name.length > MAX_NAME_LENGTH) return { error: `Name is longer than ${MAX_NAME_LENGTH} characters.` }
+  if (name.length > MAX_NAME_LENGTH)
+    return { error: `Name is longer than ${MAX_NAME_LENGTH} characters.` }
   return { name }
 }
 
@@ -49,7 +52,8 @@ export function exportExt(sourceExt: string): string {
 /** Error message, or null when the request is fine to run. */
 export function validateExportRequest(req: ExportRequest, clip: Clip | undefined): string | null {
   if (!clip) return 'Clip not found.'
-  if (clip.probeState !== 'ok' || clip.duration <= 0) return 'Media info is still loading for this clip.'
+  if (clip.probeState !== 'ok' || clip.duration <= 0)
+    return 'Media info is still loading for this clip.'
   const named = sanitizeName(req.name)
   if (named.error) return named.error
   if (!Number.isFinite(req.start) || !Number.isFinite(req.end)) return 'Invalid trim range.'
@@ -92,7 +96,7 @@ export function buildExportArgs(p: ExportPlan): string[] {
     '-i',
     p.src,
     '-map',
-    '0:v:0'
+    '0:v:0',
   ]
   if (p.muted) args.push('-an')
   else args.push('-map', '0:a?')

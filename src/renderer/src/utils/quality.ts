@@ -32,7 +32,7 @@ const CODEC_FACTOR: Record<string, number> = {
   hevc: 1.8,
   h265: 1.8,
   av1: 2,
-  vp9: 1.6
+  vp9: 1.6,
 }
 
 /**
@@ -67,7 +67,7 @@ export const QUALITY_TIERS: QualityTierDef[] = [
   { id: 'high', label: 'High', color: 'success', min: 0.2 },
   { id: 'good', label: 'Good', color: 'primary', min: 0.1 },
   { id: 'fair', label: 'Fair', color: 'warning', min: 0.05 },
-  { id: 'low', label: 'Compressed', color: 'neutral', min: 0 }
+  { id: 'low', label: 'Compressed', color: 'neutral', min: 0 },
 ]
 
 const UNKNOWN: QualityTierDef = { id: 'unknown', label: 'Unknown', color: 'neutral', min: 0 }

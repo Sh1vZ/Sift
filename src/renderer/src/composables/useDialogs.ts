@@ -50,7 +50,9 @@ export function confirm(opts: ConfirmOptions): Promise<boolean> {
 }
 
 /** Three-way confirm: the primary action, the `alt` action, or cancel. */
-export function confirmWithAlt(opts: ConfirmOptions & { alt: ConfirmAction }): Promise<ConfirmChoice> {
+export function confirmWithAlt(
+  opts: ConfirmOptions & { alt: ConfirmAction },
+): Promise<ConfirmChoice> {
   return openConfirm(opts)
 }
 

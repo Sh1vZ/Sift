@@ -7,7 +7,14 @@ import SettingsRow from './SettingsRow.vue'
 import { motionEnabled } from '@/composables/useMotion'
 import { now, scan } from '@/composables/useLibrary'
 import { openSettings } from '@/composables/useSettings'
-import { bitrateTiers, codecs, libraryTotals, monthlyActivity, resolutions, topGames } from '@/composables/useStats'
+import {
+  bitrateTiers,
+  codecs,
+  libraryTotals,
+  monthlyActivity,
+  resolutions,
+  topGames,
+} from '@/composables/useStats'
 import { formatBytes, formatFull, formatRelative, formatSpan } from '@/utils/format'
 import { QUALITY_TIERS, type QualityTierDef } from '@/utils/quality'
 
@@ -27,7 +34,7 @@ const tiles = computed<Tile[]>(() => {
     { icon: 'film', label: 'Clips indexed', value: n.format(t.clips), count: t.clips },
     { icon: 'hard-drive', label: 'Library on disk', value: formatBytes(t.bytes) },
     { icon: 'clock', label: 'Total playtime', value: formatSpan(t.duration) },
-    { icon: 'gamepad', label: 'Games', value: n.format(t.games), count: t.games }
+    { icon: 'gamepad', label: 'Games', value: n.format(t.games), count: t.games },
   ]
 })
 
@@ -48,7 +55,12 @@ const tierColor = (key: string): QualityTierDef['color'] =>
       <li v-for="t in tiles" :key="t.label" class="tile">
         <span class="tile-icon"><Icon :name="t.icon" :size="18" /></span>
         <span class="tile-value mono">
-          <CountUp v-if="t.count !== undefined && motionEnabled" :to="t.count" :duration="1.1" separator="," />
+          <CountUp
+            v-if="t.count !== undefined && motionEnabled"
+            :to="t.count"
+            :duration="1.1"
+            separator=","
+          />
           <template v-else>{{ t.value }}</template>
         </span>
         <span class="tile-label">{{ t.label }}</span>
@@ -152,15 +164,29 @@ const tierColor = (key: string): QualityTierDef['color'] =>
             </SettingsRow>
           </SettingsPanel>
 
-          <SettingsPanel title="Recording activity" description="Clips recorded per month over the last year.">
+          <SettingsPanel
+            title="Recording activity"
+            description="Clips recorded per month over the last year."
+          >
             <ul class="months" aria-label="Clips recorded per month">
-              <li v-for="m in monthlyActivity" :key="m.key" class="month" :title="`${m.title}: ${m.count} clips`">
+              <li
+                v-for="m in monthlyActivity"
+                :key="m.key"
+                class="month"
+                :title="`${m.title}: ${m.count} clips`"
+              >
                 <span class="month-track">
-                  <span class="month-fill" :class="{ 'is-empty': !m.count }" :style="bar(m.share)" />
+                  <span
+                    class="month-fill"
+                    :class="{ 'is-empty': !m.count }"
+                    :style="bar(m.share)"
+                  />
                 </span>
                 <span class="month-count mono">{{ m.count }}</span>
                 <span class="month-label">{{ m.label }}</span>
-                <span class="sr-only">{{ m.title }}: {{ m.count }} clips, {{ formatBytes(m.bytes) }}</span>
+                <span class="sr-only"
+                  >{{ m.title }}: {{ m.count }} clips, {{ formatBytes(m.bytes) }}</span
+                >
               </li>
             </ul>
           </SettingsPanel>
@@ -237,7 +263,13 @@ const tierColor = (key: string): QualityTierDef['color'] =>
           title="Nothing to measure yet"
           description="Add a folder of recordings and these numbers fill in as it scans."
           variant="subtle"
-          :actions="[{ label: 'Go to Folders', icon: 'i-lucide-folder-plus', onClick: () => openSettings('folders') }]"
+          :actions="[
+            {
+              label: 'Go to Folders',
+              icon: 'i-lucide-folder-plus',
+              onClick: () => openSettings('folders'),
+            },
+          ]"
         />
       </Transition>
     </div>

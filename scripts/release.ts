@@ -45,7 +45,7 @@ interface Options {
 class ReleaseError extends Error {
   constructor(
     message: string,
-    readonly hint: string[] = []
+    readonly hint: string[] = [],
   ) {
     super(message)
   }
@@ -68,7 +68,11 @@ function warn(message: string): void {
 }
 
 function gitRaw(...args: string[]): string {
-  return execFileSync('git', args, { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
+  return execFileSync('git', args, {
+    cwd: ROOT,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  })
 }
 
 function git(...args: string[]): string {
@@ -102,7 +106,7 @@ function parseArgs(argv: string[]): Options {
   if (!options.bump) {
     fail(
       'no version given',
-      'Usage: npm run release -- <beta|stable|patch|minor|major|x.y.z> [--dry-run] [--yes]'
+      'Usage: npm run release -- <beta|stable|patch|minor|major|x.y.z> [--dry-run] [--yes]',
     )
   }
   return options
@@ -110,8 +114,7 @@ function parseArgs(argv: string[]): Options {
 
 function packageVersion(): string {
   const raw: unknown = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'))
-  const version =
-    typeof raw === 'object' && raw !== null && 'version' in raw ? (raw as { version: unknown }).version : ''
+  const version = typeof raw === 'object' && raw !== null && 'version' in raw ? raw.version : ''
   if (typeof version !== 'string' || !SEMVER.test(version)) {
     fail(`package.json version ${JSON.stringify(version)} is not a semver string`)
   }
@@ -139,23 +142,26 @@ function nextVersion(current: string, bump: string): string {
       `cannot infer the next beta from ${current}`,
       `${current} is not a \`-beta.N\` version, so the base for the next beta line is a`,
       'decision, not a calculation. Pass it explicitly, e.g.',
-      `  npm run release -- ${major}.${minor + 1}.0-beta.1`
+      `  npm run release -- ${major}.${minor + 1}.0-beta.1`,
     )
   }
   // npm's rule: bumping a prerelease by patch settles it rather than adding one.
   if (bump === 'patch') return pre ? `${major}.${minor}.${patch}` : `${major}.${minor}.${patch + 1}`
   if (bump === 'stable') {
-    if (!pre) fail(`${current} is already a stable version`, 'Use `patch`, `minor` or `major` instead.')
+    if (!pre)
+      fail(`${current} is already a stable version`, 'Use `patch`, `minor` or `major` instead.')
     return `${major}.${minor}.${patch}`
   }
-  if (bump === 'minor') return pre && patch === 0 ? `${major}.${minor}.0` : `${major}.${minor + 1}.0`
-  if (bump === 'major') return pre && minor === 0 && patch === 0 ? `${major}.0.0` : `${major + 1}.0.0`
+  if (bump === 'minor')
+    return pre && patch === 0 ? `${major}.${minor}.0` : `${major}.${minor + 1}.0`
+  if (bump === 'major')
+    return pre && minor === 0 && patch === 0 ? `${major}.0.0` : `${major + 1}.0.0`
 
   const explicit = bump.replace(/^v/i, '')
   if (!SEMVER.test(explicit)) {
     fail(
       `"${bump}" is neither a bump keyword nor a version`,
-      'Expected one of: beta, stable, patch, minor, major, or an exact version like 1.2.0-beta.1.'
+      'Expected one of: beta, stable, patch, minor, major, or an exact version like 1.2.0-beta.1.',
     )
   }
   const next = parts(explicit)
@@ -190,7 +196,7 @@ function checkGitState(): void {
       'Commit or stash them first. Only these may be uncommitted:',
       `  ${RELEASE_FILES.join(', ')}`,
       'Dirty:',
-      ...dirty.map((path) => `  ${path}`)
+      ...dirty.map((path) => `  ${path}`),
     )
   }
 
@@ -208,12 +214,13 @@ function checkGitState(): void {
       fail(
         `${BRANCH} is ${behind} commit(s) behind origin/${BRANCH}`,
         'Pull first — a release built from a stale branch ships stale code:',
-        '  git pull --ff-only'
+        '  git pull --ff-only',
       )
     }
     if (ahead > 0) {
       warn(`${ahead} unpushed commit(s) will be pushed with this release:`)
-      for (const line of git('log', '--oneline', `origin/${BRANCH}..HEAD`).split('\n')) note(`  ${line}`)
+      for (const line of git('log', '--oneline', `origin/${BRANCH}..HEAD`).split('\n'))
+        note(`  ${line}`)
     }
   } catch {
     warn(`no origin/${BRANCH} to compare against`)
@@ -227,7 +234,7 @@ function checkTagFree(version: string): void {
     fail(
       `tag v${version} already exists locally`,
       'That version has been released, or a previous run left the tag behind:',
-      `  git tag -d v${version}`
+      `  git tag -d v${version}`,
     )
   }
 }
@@ -249,13 +256,11 @@ function checkChangelog(version: string): string {
       `  ## [${version}] - ${today()}`,
       '',
       '  ### Added',
-      '  - …'
+      '  - …',
     )
   }
 
-  const heading = md
-    .split(/\r?\n/)
-    .find((line) => /^##\s/.test(line) && line.includes(version))
+  const heading = md.split(/\r?\n/).find((line) => /^##\s/.test(line) && line.includes(version))
   const date = heading ? /(\d{4}-\d{2}-\d{2})/.exec(heading)?.[1] : undefined
   if (!date) warn(`the ${version} heading carries no YYYY-MM-DD date`)
   else if (date !== today()) warn(`the ${version} heading is dated ${date}, today is ${today()}`)
@@ -286,14 +291,14 @@ function checkPublishChannel(version: string): void {
   if (isPrerelease && releaseType !== 'prerelease') {
     fail(
       `${version} is a prerelease but electron-builder.yml has releaseType: ${releaseType}`,
-      'Set `releaseType: prerelease` in electron-builder.yml, commit, then run this again.'
+      'Set `releaseType: prerelease` in electron-builder.yml, commit, then run this again.',
     )
   }
   if (!isPrerelease && releaseType !== 'release') {
     fail(
       `${version} is a stable version but electron-builder.yml has releaseType: ${releaseType}`,
       'A stable build never offers itself a prerelease, so nobody would be updated to this.',
-      'Set `releaseType: release` in electron-builder.yml, commit, then run this again.'
+      'Set `releaseType: release` in electron-builder.yml, commit, then run this again.',
     )
   }
   note(`publishing as ${releaseType}`)
@@ -385,31 +390,39 @@ async function main(): Promise<void> {
       if (!process.stdin.isTTY) {
         fail(
           'refusing to push without confirmation',
-          'stdin is not a terminal, so pass --yes to push, or --no-push to stop at the tag.'
+          'stdin is not a terminal, so pass --yes to push, or --no-push to stop at the tag.',
         )
       }
       step('Ready to publish')
-      note(`push ${BRANCH} and ${tag} to origin — this starts the release build and cannot be undone quietly`)
+      note(
+        `push ${BRANCH} and ${tag} to origin — this starts the release build and cannot be undone quietly`,
+      )
       if (!(await confirm('  Push?'))) {
         fail(
           'not pushed',
           'The commit and tag are in place. Push when ready:',
           `  git push --follow-tags origin ${BRANCH}`,
           'Or undo:',
-          ...undo.map((line) => `  ${line}`)
+          ...undo.map((line) => `  ${line}`),
         )
       }
     }
 
     step('Pushing')
-    const push = spawnSync('git', ['push', '--follow-tags', 'origin', BRANCH], { cwd: ROOT, stdio: 'inherit' })
-    if (push.status !== 0) fail('push failed', 'Fix the cause and retry:', `  git push --follow-tags origin ${BRANCH}`)
+    const push = spawnSync('git', ['push', '--follow-tags', 'origin', BRANCH], {
+      cwd: ROOT,
+      stdio: 'inherit',
+    })
+    if (push.status !== 0)
+      fail('push failed', 'Fix the cause and retry:', `  git push --follow-tags origin ${BRANCH}`)
 
     const url = repoUrl()
     step(`Shipped ${tag}. CI builds and publishes it now (~10 min).`)
     note(`Build:   ${url}/actions/workflows/release.yml`)
     note(`Release: ${url}/releases/tag/${tag}`)
-    note('Check the release is not a draft and carries the installer, latest.yml and the .blockmap.')
+    note(
+      'Check the release is not a draft and carries the installer, latest.yml and the .blockmap.',
+    )
   } catch (error) {
     if (undo.length && error instanceof ReleaseError && error.hint.length === 0) {
       error.hint.push('Undo the local changes with:', ...undo.map((line) => `  ${line}`))

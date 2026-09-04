@@ -9,7 +9,14 @@ defineProps<{ content: ChangelogInline[] }>()
     <strong v-if="run.kind === 'strong'">{{ run.text }}</strong>
     <em v-else-if="run.kind === 'em'">{{ run.text }}</em>
     <code v-else-if="run.kind === 'code'" class="code">{{ run.text }}</code>
-    <a v-else-if="run.kind === 'link'" class="link" :href="run.href" target="_blank" rel="noreferrer">{{ run.text }}</a>
+    <a
+      v-else-if="run.kind === 'link'"
+      class="link"
+      :href="run.href"
+      target="_blank"
+      rel="noreferrer"
+      >{{ run.text }}</a
+    >
     <template v-else>{{ run.text }}</template>
   </template>
 </template>

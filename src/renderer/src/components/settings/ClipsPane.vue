@@ -5,27 +5,35 @@ import {
   defaultClipsDir,
   exportedClips,
   resetClipsDir,
-  revealClipsDir
+  revealClipsDir,
 } from '@/composables/useLibrary'
 import { computed } from 'vue'
 import SettingsPanel from './SettingsPanel.vue'
 import SettingsRow from './SettingsRow.vue'
 
 const isDefault = computed(
-  () => !clipsFolder.value || clipsFolder.value.path.toLowerCase() === defaultClipsDir.value.toLowerCase()
+  () =>
+    !clipsFolder.value ||
+    clipsFolder.value.path.toLowerCase() === defaultClipsDir.value.toLowerCase(),
 )
 const summary = computed(() => {
   const n = exportedClips.value.length
-  return n ? `${n} clip${n === 1 ? '' : 's'} exported so far, one sub-folder per game.` : 'Nothing exported yet. The folder is created with your first export.'
+  return n
+    ? `${n} clip${n === 1 ? '' : 's'} exported so far, one sub-folder per game.`
+    : 'Nothing exported yet. The folder is created with your first export.'
 })
-
 </script>
 
 <template>
   <div class="stack">
     <SettingsPanel title="Clips folder" :description="summary" flush>
       <template #actions>
-        <UButton icon="i-lucide-folder-search" label="Change…" color="primary" @click="chooseClipsDir()" />
+        <UButton
+          icon="i-lucide-folder-search"
+          label="Change…"
+          color="primary"
+          @click="chooseClipsDir()"
+        />
       </template>
 
       <SettingsRow
@@ -58,7 +66,13 @@ const summary = computed(() => {
         <p class="folder-path truncate" :title="clipsFolder.path">{{ clipsFolder.path }}</p>
 
         <template #trailing>
-          <UBadge color="neutral" variant="soft" size="sm" :label="`${exportedClips.length} clips`" class="mono count" />
+          <UBadge
+            color="neutral"
+            variant="soft"
+            size="sm"
+            :label="`${exportedClips.length} clips`"
+            class="mono count"
+          />
           <UTooltip text="Open in Explorer">
             <UButton
               icon="i-lucide-folder-open"

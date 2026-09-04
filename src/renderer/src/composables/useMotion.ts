@@ -40,8 +40,8 @@ export function staggerIn(elements: Element[]): void {
       ease: 'back.out(1.4)',
       stagger: { each: 0.028, from: 'start', grid: 'auto' },
       overwrite: true,
-      clearProps: 'opacity,transform'
-    }
+      clearProps: 'opacity,transform',
+    },
   )
 }
 
@@ -65,7 +65,7 @@ export function flipFrom(el: HTMLElement, from: Rect | null, onDone?: () => void
       y: from.top - to.top,
       scaleX: from.width / to.width,
       scaleY: from.height / to.height,
-      opacity: 0.6
+      opacity: 0.6,
     },
     {
       x: 0,
@@ -76,8 +76,8 @@ export function flipFrom(el: HTMLElement, from: Rect | null, onDone?: () => void
       duration: 0.46,
       ease: 'power3.out',
       clearProps: 'transform,opacity',
-      onComplete: onDone
-    }
+      onComplete: onDone,
+    },
   )
 }
 
@@ -96,7 +96,7 @@ export function flipTo(el: HTMLElement, to: Rect | null, onDone: () => void): vo
     opacity: 0,
     duration: 0.3,
     ease: 'power2.in',
-    onComplete: onDone
+    onComplete: onDone,
   })
 }
 

@@ -7,15 +7,7 @@ import { view } from './useLibrary'
  * section table so a new pane only has to be described once.
  */
 export type SettingsTab =
-  | 'folders'
-  | 'clips'
-  | 'indexing'
-  | 'playback'
-  | 'themes'
-  | 'os'
-  | 'stats'
-  | 'storage'
-  | 'info'
+  'folders' | 'clips' | 'indexing' | 'playback' | 'themes' | 'os' | 'stats' | 'storage' | 'info'
 
 export interface SettingsSection {
   id: SettingsTab
@@ -43,30 +35,30 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
         icon: 'i-lucide-folder',
         description:
           'Where Sift looks for recordings. Clips are indexed where they live — never copied, moved or renamed.',
-        keywords: 'add folder path drive shadowplay videos rescan remove'
+        keywords: 'add folder path drive shadowplay videos rescan remove',
       },
       {
         id: 'clips',
         label: 'Clips',
         icon: 'i-lucide-scissors',
         description: 'Where trimmed clips are exported to, one sub-folder per game.',
-        keywords: 'export trim output folder cut mute clips directory save'
+        keywords: 'export trim output folder cut mute clips directory save',
       },
       {
         id: 'indexing',
         label: 'Indexing & previews',
         icon: 'i-lucide-radar',
         description: 'How new recordings are picked up, and how their poster frames get built.',
-        keywords: 'watch thumbnails ffmpeg workers concurrency scan cache'
+        keywords: 'watch thumbnails ffmpeg workers concurrency scan cache',
       },
       {
         id: 'playback',
         label: 'Playback',
         icon: 'i-lucide-list-video',
         description: 'What happens when you hover a card, and when a clip reaches its end.',
-        keywords: 'hover scrub autoplay next animations motion transitions'
-      }
-    ]
+        keywords: 'hover scrub autoplay next animations motion transitions',
+      },
+    ],
   },
   {
     label: 'Appearance',
@@ -76,9 +68,9 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
         label: 'Themes',
         icon: 'i-lucide-palette',
         description: 'The colours the chrome is painted in. Thumbnails and clips are never tinted.',
-        keywords: 'theme colour color oled black dark amoled accent palette appearance look'
-      }
-    ]
+        keywords: 'theme colour color oled black dark amoled accent palette appearance look',
+      },
+    ],
   },
   {
     label: 'System',
@@ -87,10 +79,12 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
         id: 'os',
         label: 'OS settings',
         icon: 'i-lucide-app-window',
-        description: 'What closing the window does, and whether Sift keeps working once it is out of sight.',
-        keywords: 'os tray background close minimize hide quit exit taskbar windows notification area system'
-      }
-    ]
+        description:
+          'What closing the window does, and whether Sift keeps working once it is out of sight.',
+        keywords:
+          'os tray background close minimize hide quit exit taskbar windows notification area system',
+      },
+    ],
   },
   {
     label: 'Insights',
@@ -100,16 +94,16 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
         label: 'Stats',
         icon: 'i-lucide-chart-column',
         description: 'What Sift has indexed, and what the library is made of.',
-        keywords: 'clips games playtime activity months codecs resolution formats totals'
+        keywords: 'clips games playtime activity months codecs resolution formats totals',
       },
       {
         id: 'storage',
         label: 'Storage',
         icon: 'i-lucide-hard-drive',
         description: 'What sits on your disk, and how much of it actually belongs to Sift.',
-        keywords: 'disk space cache database app data free drive size'
-      }
-    ]
+        keywords: 'disk space cache database app data free drive size',
+      },
+    ],
   },
   {
     label: 'About',
@@ -120,10 +114,10 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
         icon: 'i-lucide-info',
         description: 'This build, keeping it current, and what it keeps to itself.',
         keywords:
-          'version electron chromium node memory uptime ffmpeg platform privacy update updates upgrade release changelog download install restart beta channel'
-      }
-    ]
-  }
+          'version electron chromium node memory uptime ffmpeg platform privacy update updates upgrade release changelog download install restart beta channel',
+      },
+    ],
+  },
 ]
 
 const ALL_SECTIONS = SETTINGS_GROUPS.flatMap((g) => g.sections)
@@ -132,7 +126,7 @@ export const settingsTab = ref<SettingsTab>('folders')
 export const settingsQuery = ref('')
 
 export const activeSection = computed<SettingsSection>(
-  () => ALL_SECTIONS.find((s) => s.id === settingsTab.value) ?? ALL_SECTIONS[0]
+  () => ALL_SECTIONS.find((s) => s.id === settingsTab.value) ?? ALL_SECTIONS[0],
 )
 
 /** Rail groups narrowed by the search box; a group with no hits drops out. */
@@ -145,8 +139,8 @@ export const matchedGroups = computed<SettingsGroup[]>(() => {
       (s) =>
         s.label.toLowerCase().includes(q) ||
         s.description.toLowerCase().includes(q) ||
-        s.keywords.includes(q)
-    )
+        s.keywords.includes(q),
+    ),
   })).filter((g) => g.sections.length > 0)
 })
 

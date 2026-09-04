@@ -2,7 +2,13 @@
 import { computed } from 'vue'
 import type { Clip } from '@shared/types'
 import { clipsFolder, copyClipPath, getClip, revealClip } from '@/composables/useLibrary'
-import { formatBytes, formatDuration, formatFull, formatResolution, formatTimecode } from '@/utils/format'
+import {
+  formatBytes,
+  formatDuration,
+  formatFull,
+  formatResolution,
+  formatTimecode,
+} from '@/utils/format'
 import { bitrate, formatBitrate, qualityTier } from '@/utils/quality'
 
 const props = withDefaults(
@@ -13,7 +19,7 @@ const props = withDefaults(
     /** File name the export will get, with extension. */
     exportName?: string
   }>(),
-  { editing: false, exportName: '' }
+  { editing: false, exportName: '' },
 )
 defineEmits<{ close: []; rename: []; remove: []; edit: []; source: [] }>()
 
@@ -33,7 +39,7 @@ const CODEC_LABELS: Record<string, string> = {
   av1: 'AV1',
   vp9: 'VP9',
   vp8: 'VP8',
-  mpeg4: 'MPEG-4'
+  mpeg4: 'MPEG-4',
 }
 
 const pending = computed(() => props.clip.probeState === 'pending')
@@ -44,7 +50,9 @@ const codec = computed(() => {
   const c = props.clip.vcodec
   return c ? (CODEC_LABELS[c] ?? c.toUpperCase()) : ''
 })
-const resolution = computed(() => formatResolution(props.clip.width, props.clip.height, props.clip.fps))
+const resolution = computed(() =>
+  formatResolution(props.clip.width, props.clip.height, props.clip.fps),
+)
 const folder = computed(() => {
   const i = Math.max(props.clip.path.lastIndexOf('/'), props.clip.path.lastIndexOf('\\'))
   return i > 0 ? props.clip.path.slice(0, i) : props.clip.path
@@ -52,17 +60,26 @@ const folder = computed(() => {
 
 const isExport = computed(() => Boolean(props.clip.sourceId))
 const sourceClip = computed(() => (props.clip.sourceId ? getClip(props.clip.sourceId) : undefined))
-const destination = computed(() => `${clipsFolder.value?.name ?? 'Sift Clips'}\\${props.clip.game}\\${props.exportName}`)
+const destination = computed(
+  () => `${clipsFolder.value?.name ?? 'Sift Clips'}\\${props.clip.game}\\${props.exportName}`,
+)
 
 const videoRows = computed<Row[]>(() => {
   const c = props.clip
   return [
     { label: 'Duration', value: c.duration ? formatDuration(c.duration) : '', mono: true },
-    { label: 'Dimensions', value: c.width && c.height ? `${c.width} × ${c.height}` : '', mono: true },
+    {
+      label: 'Dimensions',
+      value: c.width && c.height ? `${c.width} × ${c.height}` : '',
+      mono: true,
+    },
     { label: 'Frame rate', value: c.fps ? `${Math.round(c.fps)} fps` : '', mono: true },
     { label: 'Codec', value: codec.value },
     { label: 'Bitrate', value: formatBitrate(bitrate(c)), mono: true },
-    { label: 'Audio', value: c.probeState === 'ok' ? (c.hasAudio ? 'Included' : c.muted ? 'Removed' : 'None') : '' }
+    {
+      label: 'Audio',
+      value: c.probeState === 'ok' ? (c.hasAudio ? 'Included' : c.muted ? 'Removed' : 'None') : '',
+    },
   ]
 })
 
@@ -73,7 +90,7 @@ const fileRows = computed<Row[]>(() => {
     { label: 'Format', value: c.ext.replace('.', '').toUpperCase() },
     { label: 'Game', value: c.game },
     { label: 'Recorded', value: formatFull(c.recordedAtMs) },
-    { label: 'Modified', value: formatFull(c.mtimeMs) }
+    { label: 'Modified', value: formatFull(c.mtimeMs) },
   ]
 })
 
@@ -81,8 +98,12 @@ const sourceRows = computed<Row[]>(() => {
   const c = props.clip
   return [
     { label: 'Cut from', value: sourceClip.value?.title ?? 'No longer in the library' },
-    { label: 'Trimmed', value: `${formatTimecode(c.trimStart)} – ${formatTimecode(c.trimEnd)}`, mono: true },
-    { label: 'Exported', value: c.createdAtMs ? formatFull(c.createdAtMs) : '' }
+    {
+      label: 'Trimmed',
+      value: `${formatTimecode(c.trimStart)} – ${formatTimecode(c.trimEnd)}`,
+      mono: true,
+    },
+    { label: 'Exported', value: c.createdAtMs ? formatFull(c.createdAtMs) : '' },
   ]
 })
 </script>
@@ -108,10 +129,23 @@ const sourceRows = computed<Row[]>(() => {
       <p class="filename" :title="clip.name + clip.ext">{{ clip.name + clip.ext }}</p>
 
       <div class="chips">
-        <UBadge :color="tier.color" variant="soft" size="sm" icon="i-lucide-gauge" :label="tier.label" />
+        <UBadge
+          :color="tier.color"
+          variant="soft"
+          size="sm"
+          icon="i-lucide-gauge"
+          :label="tier.label"
+        />
         <UBadge v-if="resolution" color="neutral" variant="subtle" size="sm" :label="resolution" />
         <UBadge v-if="codec" color="neutral" variant="subtle" size="sm" :label="codec" />
-        <UBadge v-if="isExport" color="primary" variant="subtle" size="sm" icon="i-lucide-scissors" label="Clip" />
+        <UBadge
+          v-if="isExport"
+          color="primary"
+          variant="subtle"
+          size="sm"
+          icon="i-lucide-scissors"
+          label="Clip"
+        />
       </div>
 
       <UAlert
@@ -128,8 +162,8 @@ const sourceRows = computed<Row[]>(() => {
         <h4>Export</h4>
         <p class="path" :title="destination">{{ destination }}</p>
         <p class="note">
-          Stream copy, no re-encode. The start snaps to the keyframe just before it, so the clip can begin a
-          fraction of a second early.
+          Stream copy, no re-encode. The start snaps to the keyframe just before it, so the clip can
+          begin a fraction of a second early.
         </p>
       </section>
 

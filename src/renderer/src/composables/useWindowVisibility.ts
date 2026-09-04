@@ -16,19 +16,21 @@ import { startClock, stopClock } from './useLibrary'
 export const visible = ref(true)
 
 export function initWindowVisibility(): void {
-  window.api.on('window:visible', async (v) => {
-    if (v === visible.value) return
-    visible.value = v
-    if (v) {
-      startClock()
-      return
-    }
-    stopClock()
-    // Order matters: let Vue detach the rows, the covers and the video source
-    // first, so the cache entries they were holding are actually droppable.
-    // nextTick and not requestAnimationFrame — rAF is paused for a hidden
-    // window, so a frame callback scheduled here would never run.
-    await nextTick()
-    window.api.window.clearCache()
-  })
+  window.api.on('window:visible', (v) => void applyVisibility(v))
+}
+
+async function applyVisibility(v: boolean): Promise<void> {
+  if (v === visible.value) return
+  visible.value = v
+  if (v) {
+    startClock()
+    return
+  }
+  stopClock()
+  // Order matters: let Vue detach the rows, the covers and the video source
+  // first, so the cache entries they were holding are actually droppable.
+  // nextTick and not requestAnimationFrame — rAF is paused for a hidden
+  // window, so a frame callback scheduled here would never run.
+  await nextTick()
+  window.api.window.clearCache()
 }

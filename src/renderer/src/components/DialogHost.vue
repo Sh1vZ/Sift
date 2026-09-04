@@ -7,7 +7,7 @@ const open = computed({
   get: () => dialog.value !== null,
   set: (v: boolean) => {
     if (!v) closeDialog()
-  }
+  },
 })
 
 const isPrompt = computed(() => dialog.value?.kind === 'prompt')
@@ -15,7 +15,7 @@ const danger = computed(() => dialog.value?.kind === 'confirm' && dialog.value.d
 const detail = computed(() => (dialog.value?.kind === 'confirm' ? dialog.value.detail : undefined))
 const alt = computed(() => (dialog.value?.kind === 'confirm' ? dialog.value.alt : undefined))
 const detailIcon = computed(() =>
-  dialog.value?.kind === 'confirm' ? (dialog.value.detailIcon ?? 'i-lucide-file') : 'i-lucide-file'
+  dialog.value?.kind === 'confirm' ? (dialog.value.detailIcon ?? 'i-lucide-file') : 'i-lucide-file',
 )
 const canSubmit = computed(() => !isPrompt.value || value.value.trim().length > 0)
 
@@ -55,12 +55,19 @@ watch(open, (v) => {
       content: alt ? 'max-w-lg' : 'max-w-md',
       header: 'pe-12 sm:pe-12',
       title: 'font-heading text-base',
-      footer: 'flex-nowrap justify-end gap-2'
+      footer: 'flex-nowrap justify-end gap-2',
     }"
   >
     <template v-if="isPrompt || detail" #body>
       <UFormField v-if="isPrompt" :label="dialog?.kind === 'prompt' ? dialog.label : ''">
-        <UInput v-model="value" class="w-full" size="lg" autofocus spellcheck="false" @keydown.enter.prevent="submit()" />
+        <UInput
+          v-model="value"
+          class="w-full"
+          size="lg"
+          autofocus
+          spellcheck="false"
+          @keydown.enter.prevent="submit()"
+        />
       </UFormField>
       <p v-else class="detail">
         <UIcon :name="detailIcon" class="detail-icon" />

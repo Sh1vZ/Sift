@@ -11,12 +11,14 @@ import {
   installUpdate,
   releaseUrl,
   update,
-  updateReady
+  updateReady,
 } from '@/composables/useUpdates'
 import { formatBytes, formatRelative, formatSpan } from '@/utils/format'
 
 const measuredLabel = computed(() =>
-  appStats.value ? `Measured ${formatRelative(appStats.value.generatedAtMs, now.value).toLowerCase()}` : 'Measuring…'
+  appStats.value
+    ? `Measured ${formatRelative(appStats.value.generatedAtMs, now.value).toLowerCase()}`
+    : 'Measuring…',
 )
 
 const updateIcon = computed(() => {
@@ -78,7 +80,9 @@ const updateDescription = computed(() => {
 
 /** Only worth showing while an update is actually on the table. */
 const showNotes = computed(
-  () => Boolean(update.value.notes) && ['available', 'downloading', 'downloaded'].includes(update.value.status)
+  () =>
+    Boolean(update.value.notes) &&
+    ['available', 'downloading', 'downloaded'].includes(update.value.status),
 )
 
 onMounted(() => {
@@ -116,7 +120,13 @@ onMounted(() => {
         :description="updateDescription"
       >
         <template #trailing>
-          <UBadge v-if="updateReady" color="primary" variant="subtle" size="sm" :label="update.version" />
+          <UBadge
+            v-if="updateReady"
+            color="primary"
+            variant="subtle"
+            size="sm"
+            :label="update.version"
+          />
           <UBadge
             v-else-if="update.status === 'up-to-date'"
             color="neutral"
@@ -140,7 +150,9 @@ onMounted(() => {
           </div>
           <!-- target=_blank so setWindowOpenHandler sends it to the browser; a
                plain link would navigate the app window. -->
-          <a class="notes-link" :href="releaseUrl" target="_blank" rel="noreferrer">View full changelog</a>
+          <a class="notes-link" :href="releaseUrl" target="_blank" rel="noreferrer"
+            >View full changelog</a
+          >
         </template>
       </SettingsRow>
 
@@ -183,7 +195,14 @@ onMounted(() => {
             icon="i-lucide-triangle-alert"
             title="Could not read the runtime details"
             :description="statsError"
-            :actions="[{ label: 'Try again', color: 'neutral', variant: 'subtle', onClick: () => refreshStats() }]"
+            :actions="[
+              {
+                label: 'Try again',
+                color: 'neutral',
+                variant: 'subtle',
+                onClick: () => refreshStats(),
+              },
+            ]"
           />
           <div v-else-if="!appStats" key="loading" class="skeletons">
             <div v-for="i in 4" :key="i" class="skeleton-row">
@@ -202,7 +221,13 @@ onMounted(() => {
               :description="`Electron ${appStats.runtime.electron} · Chromium ${appStats.runtime.chrome} · Node ${appStats.runtime.node}`"
             >
               <template #trailing>
-                <UBadge color="neutral" variant="subtle" size="sm" :label="appStats.runtime.platform" class="mono" />
+                <UBadge
+                  color="neutral"
+                  variant="subtle"
+                  size="sm"
+                  :label="appStats.runtime.platform"
+                  class="mono"
+                />
               </template>
             </SettingsRow>
 
@@ -244,7 +269,11 @@ onMounted(() => {
       </div>
     </SettingsPanel>
 
-    <SettingsPanel title="Local-first" description="What Sift does and does not do with your recordings." flush>
+    <SettingsPanel
+      title="Local-first"
+      description="What Sift does and does not do with your recordings."
+      flush
+    >
       <SettingsRow
         icon="hard-drive"
         title="Files stay put"

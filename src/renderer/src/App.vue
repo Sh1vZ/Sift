@@ -42,7 +42,10 @@ onMounted(async () => {
 </script>
 
 <template>
-  <UApp :toaster="{ position: 'bottom-right', duration: 4500, expand: true }" :tooltip="{ delayDuration: 250 }">
+  <UApp
+    :toaster="{ position: 'bottom-right', duration: 4500, expand: true }"
+    :tooltip="{ delayDuration: 250 }"
+  >
     <div class="app">
       <TitleBar />
       <Transition name="fade">

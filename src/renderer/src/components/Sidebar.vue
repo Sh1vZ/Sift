@@ -2,7 +2,15 @@
 import { computed } from 'vue'
 import ShinyText from './bits/ShinyText.vue'
 import { motionEnabled } from '@/composables/useMotion'
-import { exportedClips, games, goClips, goGames, scan, screen, view } from '@/composables/useLibrary'
+import {
+  exportedClips,
+  games,
+  goClips,
+  goGames,
+  scan,
+  screen,
+  view,
+} from '@/composables/useLibrary'
 import { exportLabel } from '@/composables/useExports'
 import { openSettings, settingsTab } from '@/composables/useSettings'
 
@@ -25,15 +33,15 @@ const libraryItems = computed<NavItem[]>(() => [
     icon: 'i-lucide-gamepad-2',
     active: screen.value === 'games' || screen.value === 'game',
     tooltip: { text: `Games · ${games.value.length}` },
-    onSelect: () => goGames()
+    onSelect: () => goGames(),
   },
   {
     label: 'Clips',
     icon: 'i-lucide-scissors',
     active: screen.value === 'clips',
     tooltip: { text: `Clips · ${exportedClips.value.length}` },
-    onSelect: () => goClips()
-  }
+    onSelect: () => goClips(),
+  },
 ])
 
 const footerItems = computed<NavItem[]>(() => [
@@ -41,8 +49,8 @@ const footerItems = computed<NavItem[]>(() => [
     label: 'Settings',
     icon: 'i-lucide-sliders-horizontal',
     active: view.value === 'settings',
-    onSelect: () => openSettings(settingsTab.value)
-  }
+    onSelect: () => openSettings(settingsTab.value),
+  },
 ])
 
 const scanLabel = computed(() => {
@@ -56,7 +64,7 @@ const scanLabel = computed(() => {
    and the focus ring both follow the link box. */
 const navUi = {
   link: 'h-10 justify-center px-0 rounded-lg',
-  linkLeadingIcon: 'size-5'
+  linkLeadingIcon: 'size-5',
 }
 </script>
 

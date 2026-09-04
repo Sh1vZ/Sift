@@ -47,13 +47,13 @@ export function createTray(opts: {
         click: () => {
           show()
           opts.onSettings()
-        }
+        },
       },
       { type: 'separator' },
       // Goes through `before-quit`, which flushes the library and stops the
       // watchers before the process actually exits.
-      { label: 'Quit Sift', click: () => app.quit() }
-    ])
+      { label: 'Quit Sift', click: () => app.quit() },
+    ]),
   )
   // Windows convention: a plain left click on the icon brings the app back.
   tray.on('click', show)
@@ -66,9 +66,10 @@ export function createTray(opts: {
         icon: full,
         iconType: 'custom',
         title: 'Sift is still running',
-        content: 'The window closed to the tray, so new recordings keep being indexed. Right-click the tray icon to quit.'
+        content:
+          'The window closed to the tray, so new recordings keep being indexed. Right-click the tray icon to quit.',
       })
     },
-    destroy: () => tray.destroy()
+    destroy: () => tray.destroy(),
   }
 }

@@ -15,7 +15,7 @@ import {
   settingsQuery,
   settingsTab,
   type SettingsGroup,
-  type SettingsTab
+  type SettingsTab,
 } from '@/composables/useSettings'
 
 interface RailGroup {
@@ -34,15 +34,15 @@ const railGroups = computed<RailGroup[]>(() =>
       label: s.label,
       icon: s.icon,
       active: settingsTab.value === s.id,
-      onSelect: () => select(s.id)
-    }))
-  }))
+      onSelect: () => select(s.id),
+    })),
+  })),
 )
 
 const navUi = {
   link: 'h-9 px-2.5 gap-2.5 text-sm font-medium rounded-lg',
   linkLeadingIcon: 'size-4',
-  linkLabel: 'truncate'
+  linkLabel: 'truncate',
 }
 
 /** Enter jumps to the first match so the search box alone can drive the rail. */

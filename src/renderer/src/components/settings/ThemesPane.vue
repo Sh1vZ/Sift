@@ -69,7 +69,13 @@ const isActive = (t: ThemeDef): boolean => t.id === activeTheme.value.id
           <span class="meta">
             <span class="name-row">
               <span class="name">{{ t.name }}</span>
-              <UBadge v-if="t.id === DEFAULT_ID" color="neutral" variant="subtle" size="xs" label="Default" />
+              <UBadge
+                v-if="t.id === DEFAULT_ID"
+                color="neutral"
+                variant="subtle"
+                size="xs"
+                label="Default"
+              />
               <UIcon v-if="isActive(t)" name="i-lucide-check" class="check" />
             </span>
             <span class="desc">{{ t.description }}</span>

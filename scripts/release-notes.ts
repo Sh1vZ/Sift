@@ -15,7 +15,7 @@ const root = process.cwd()
 function packageVersion(): string {
   const raw: unknown = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
   if (typeof raw !== 'object' || raw === null || !('version' in raw)) return ''
-  const version = (raw as { version: unknown }).version
+  const version = raw.version
   return typeof version === 'string' ? version : ''
 }
 
@@ -28,14 +28,18 @@ function main(): void {
 
   const section = changelogSection(readFileSync(join(root, 'CHANGELOG.md'), 'utf8'), version)
   if (!section) {
-    console.error(`release-notes: CHANGELOG.md has no "## [${version}]" section. Add one before tagging.`)
+    console.error(
+      `release-notes: CHANGELOG.md has no "## [${version}]" section. Add one before tagging.`,
+    )
     process.exit(1)
   }
 
   const out = join(root, 'build', 'release-notes.md')
   mkdirSync(dirname(out), { recursive: true })
   writeFileSync(out, `${section}\n`, 'utf8')
-  console.log(`release-notes: wrote ${section.split('\n').length} line(s) for ${version} to build/release-notes.md`)
+  console.log(
+    `release-notes: wrote ${section.split('\n').length} line(s) for ${version} to build/release-notes.md`,
+  )
 }
 
 main()

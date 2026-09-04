@@ -50,7 +50,7 @@ const status = computed(() => {
         :ui="{
           link: 'text-xs font-heading font-semibold uppercase tracking-wider gap-1.5',
           linkLeadingIcon: 'size-3.5',
-          separatorIcon: 'size-3 text-dimmed'
+          separatorIcon: 'size-3 text-dimmed',
         }"
       />
     </div>

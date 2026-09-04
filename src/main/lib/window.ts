@@ -36,8 +36,8 @@ export function createMainWindow({ autoShow = true }: { autoShow?: boolean } = {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
-      spellcheck: false
-    }
+      spellcheck: false,
+    },
   })
 
   win.on('ready-to-show', () => {
@@ -92,8 +92,8 @@ export function createMainWindow({ autoShow = true }: { autoShow?: boolean } = {
     return { action: 'deny' }
   })
 
-  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
-    void win.loadURL(process.env['ELECTRON_RENDERER_URL'])
+  if (is.dev && process.env.ELECTRON_RENDERER_URL) {
+    void win.loadURL(process.env.ELECTRON_RENDERER_URL)
   } else {
     void win.loadFile(join(import.meta.dirname, '../renderer/index.html'))
   }

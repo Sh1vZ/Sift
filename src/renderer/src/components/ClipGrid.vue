@@ -12,7 +12,7 @@ import {
   renameClip,
   revealClip,
   settings,
-  type Section
+  type Section,
 } from '@/composables/useLibrary'
 import { cancelExport, dismissExport } from '@/composables/useExports'
 import { staggerIn, type Rect } from '@/composables/useMotion'
@@ -30,14 +30,18 @@ const props = withDefaults(
     /** Export jobs, keyed by id, for the `job:<id>` placeholder cards the Clips view mixes in. */
     jobsById?: Record<string, ExportJob>
   }>(),
-  { variant: 'recording', jobsById: () => ({}) }
+  { variant: 'recording', jobsById: () => ({}) },
 )
 
 const JOB_PREFIX = 'job:'
 
 const scroller = ref<HTMLElement | null>(null)
 const gridSize = computed(() => settings.value.gridSize)
-const { layout, visibleRows, scrollToTop } = useVirtualGrid(scroller, toRef(props, 'sections'), gridSize)
+const { layout, visibleRows, scrollToTop } = useVirtualGrid(
+  scroller,
+  toRef(props, 'sections'),
+  gridSize,
+)
 
 const pad = `${GRID_PAD_X}px`
 const from = computed(() => (props.variant === 'export' ? 'clips' : 'library'))
@@ -53,7 +57,7 @@ watch(
   () => {
     scrollToTop()
     void animateIn()
-  }
+  },
 )
 onMounted(() => void animateIn())
 
@@ -61,7 +65,11 @@ const jobOf = (clip: Clip): ExportJob | undefined =>
   clip.id.startsWith(JOB_PREFIX) ? props.jobsById[clip.id.slice(JOB_PREFIX.length)] : undefined
 
 function onOpen(clip: Clip, rect: DOMRect): void {
-  openClip(clip, { left: rect.left, top: rect.top, width: rect.width, height: rect.height }, from.value)
+  openClip(
+    clip,
+    { left: rect.left, top: rect.top, width: rect.width, height: rect.height },
+    from.value,
+  )
 }
 
 function rectOf(clip: Clip): Rect | null {
@@ -70,25 +78,36 @@ function rectOf(clip: Clip): Rect | null {
 }
 
 async function rename(clip: Clip): Promise<void> {
-  const name = await prompt({ title: 'Rename clip', label: 'File name', value: clip.name, confirmLabel: 'Rename' })
-  if (name !== null && name.trim() && name !== clip.name) await renameClip(clip, name)
+  const name = await prompt({
+    title: 'Rename clip',
+    label: 'File name',
+    value: clip.name,
+    confirmLabel: 'Rename',
+  })
+  if (name?.trim() && name !== clip.name) await renameClip(clip, name)
 }
 
 async function remove(clip: Clip): Promise<void> {
   const choice = await confirmWithAlt({
     title: 'Delete this clip?',
-    message: 'It goes to the Recycle Bin, so you can still restore it from there. Deleting permanently erases the file from disk right away.',
+    message:
+      'It goes to the Recycle Bin, so you can still restore it from there. Deleting permanently erases the file from disk right away.',
     detail: clip.name + clip.ext,
     detailIcon: 'i-lucide-file-video',
     confirmLabel: 'Delete',
     danger: true,
-    alt: { label: 'Delete permanently', danger: true }
+    alt: { label: 'Delete permanently', danger: true },
   })
   if (choice !== 'cancel') await deleteClip(clip, choice === 'alt')
 }
 
 function showSource(clip: Clip): void {
-  if (!openSource(clip)) toast('error', 'Source not found', 'The recording this clip was cut from is no longer in the library.')
+  if (!openSource(clip))
+    toast(
+      'error',
+      'Source not found',
+      'The recording this clip was cut from is no longer in the library.',
+    )
 }
 
 /** Right-click menu per card, rendered by Nuxt UI's <UContextMenu>. */
@@ -99,20 +118,29 @@ function menuItems(clip: Clip) {
     return [
       [
         active
-          ? { label: 'Cancel export', icon: 'i-lucide-x', color: 'error' as const, onSelect: () => void cancelExport(job.id) }
-          : { label: 'Dismiss', icon: 'i-lucide-x', onSelect: () => dismissExport(job.id) }
-      ]
+          ? {
+              label: 'Cancel export',
+              icon: 'i-lucide-x',
+              color: 'error' as const,
+              onSelect: () => void cancelExport(job.id),
+            }
+          : { label: 'Dismiss', icon: 'i-lucide-x', onSelect: () => dismissExport(job.id) },
+      ],
     ]
   }
   const trim = {
     label: 'Trim & export',
     icon: 'i-lucide-scissors',
     disabled: clip.probeState !== 'ok' || !clip.duration,
-    onSelect: () => openClip(clip, rectOf(clip), from.value, true)
+    onSelect: () => openClip(clip, rectOf(clip), from.value, true),
   }
   const main = [
-    { label: 'Play', icon: 'i-lucide-play', onSelect: () => openClip(clip, rectOf(clip), from.value) },
-    trim
+    {
+      label: 'Play',
+      icon: 'i-lucide-play',
+      onSelect: () => openClip(clip, rectOf(clip), from.value),
+    },
+    trim,
   ]
   if (props.variant === 'export') {
     main.push(
@@ -120,22 +148,32 @@ function menuItems(clip: Clip) {
         label: 'Open source recording',
         icon: 'i-lucide-link',
         disabled: !clip.sourceId || !getClip(clip.sourceId),
-        onSelect: () => showSource(clip)
+        onSelect: () => showSource(clip),
       },
       {
         label: 'Go to game',
         icon: 'i-lucide-gamepad-2',
         disabled: !games.value.some((g) => g.name === clip.game),
-        onSelect: () => openGame(clip.game)
-      }
+        onSelect: () => openGame(clip.game),
+      },
     )
   }
   main.push(
     { label: 'Show in Explorer', icon: 'i-lucide-folder-open', onSelect: () => revealClip(clip) },
     { label: 'Copy path', icon: 'i-lucide-copy', onSelect: () => void copyClipPath(clip) },
-    { label: 'Rename', icon: 'i-lucide-pencil', onSelect: () => void rename(clip) }
+    { label: 'Rename', icon: 'i-lucide-pencil', onSelect: () => void rename(clip) },
   )
-  return [main, [{ label: 'Delete', icon: 'i-lucide-trash-2', color: 'error' as const, onSelect: () => void remove(clip) }]]
+  return [
+    main,
+    [
+      {
+        label: 'Delete',
+        icon: 'i-lucide-trash-2',
+        color: 'error' as const,
+        onSelect: () => void remove(clip),
+      },
+    ],
+  ]
 }
 </script>
 
@@ -158,10 +196,15 @@ function menuItems(clip: Clip) {
           :style="{
             transform: `translateY(${row.top}px)`,
             left: pad,
-            gridTemplateColumns: `repeat(${layout.cols}, ${row.cardWidth}px)`
+            gridTemplateColumns: `repeat(${layout.cols}, ${row.cardWidth}px)`,
           }"
         >
-          <UContextMenu v-for="clip in row.clips" :key="clip.id" :items="menuItems(clip)" :ui="{ content: 'min-w-48' }">
+          <UContextMenu
+            v-for="clip in row.clips"
+            :key="clip.id"
+            :items="menuItems(clip)"
+            :ui="{ content: 'min-w-48' }"
+          >
             <ClipCard :clip="clip" :variant="variant" :job="jobOf(clip)" @open="onOpen" />
           </UContextMenu>
         </div>

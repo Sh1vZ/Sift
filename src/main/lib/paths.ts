@@ -50,7 +50,10 @@ export function ensureDirs(): void {
  * is there — the window falls back to the exe icon, the tray is simply skipped.
  */
 export function appIconPath(): string | undefined {
-  for (const p of [join(process.resourcesPath, 'icon.png'), join(import.meta.dirname, '../../build/icon.png')]) {
+  for (const p of [
+    join(process.resourcesPath, 'icon.png'),
+    join(import.meta.dirname, '../../build/icon.png'),
+  ]) {
     if (existsSync(p)) return p
   }
   return undefined

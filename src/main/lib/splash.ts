@@ -56,8 +56,8 @@ export function createSplash(getMainWindow: () => BrowserWindow | null): Splash 
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
-      spellcheck: false
-    }
+      spellcheck: false,
+    },
   })
 
   let paintedAt = 0
@@ -83,8 +83,8 @@ export function createSplash(getMainWindow: () => BrowserWindow | null): Splash 
     win.showInactive()
   })
 
-  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
-    void win.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/splash.html`)
+  if (is.dev && process.env.ELECTRON_RENDERER_URL) {
+    void win.loadURL(`${process.env.ELECTRON_RENDERER_URL}/splash.html`)
   } else {
     void win.loadFile(join(import.meta.dirname, '../renderer/splash.html'))
   }
@@ -125,7 +125,7 @@ export function createSplash(getMainWindow: () => BrowserWindow | null): Splash 
           if (!win.isDestroyed()) win.close()
         }, FADE_MS)
       }, wait)
-    }
+    },
   }
 
   cap = setTimeout(() => splash.finish(), MAX_VISIBLE_MS)

@@ -10,7 +10,7 @@ const api = window.api
 export const exportJobs = ref<ExportJob[]>([])
 
 export const activeExports = computed(() =>
-  exportJobs.value.filter((j) => j.state === 'queued' || j.state === 'running')
+  exportJobs.value.filter((j) => j.state === 'queued' || j.state === 'running'),
 )
 
 /** One line for the title bar and sidebar: what is exporting right now. Empty when idle. */
@@ -22,7 +22,7 @@ export const exportLabel = computed<string>(() => {
 })
 
 export const jobsById = computed<Record<string, ExportJob>>(() =>
-  Object.fromEntries(exportJobs.value.map((j) => [j.id, j]))
+  Object.fromEntries(exportJobs.value.map((j) => [j.id, j])),
 )
 
 /**
@@ -41,7 +41,7 @@ function apply(list: ExportJob[]): void {
         onClick: () => {
           closePlayer()
           goClips()
-        }
+        },
       })
     } else if (j.state === 'failed') {
       toast('error', 'Export failed', j.error || 'ffmpeg reported an error.')

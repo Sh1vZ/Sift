@@ -3,16 +3,16 @@ import type { ChangelogBlock } from '@shared/changelog'
 import ChangelogInline from './ChangelogInline.vue'
 import ChangelogList from './ChangelogList.vue'
 
+defineProps<{ blocks: ChangelogBlock[] }>()
+
 const ACCENTS: Record<string, string> = {
   added: 'var(--success)',
   changed: 'var(--secondary)',
   deprecated: 'var(--fg-dim)',
   removed: 'var(--destructive)',
   fixed: 'var(--warning)',
-  security: 'var(--accent)'
+  security: 'var(--accent)',
 }
-
-defineProps<{ blocks: ChangelogBlock[] }>()
 
 function accent(text: string): string {
   return ACCENTS[text.trim().toLowerCase()] ?? 'var(--fg-dim)'
@@ -22,7 +22,11 @@ function accent(text: string): string {
 <template>
   <div class="blocks">
     <template v-for="(block, i) in blocks" :key="i">
-      <h3 v-if="block.kind === 'heading'" class="group" :style="{ '--group-accent': accent(block.text) }">
+      <h3
+        v-if="block.kind === 'heading'"
+        class="group"
+        :style="{ '--group-accent': accent(block.text) }"
+      >
         <span class="dot" aria-hidden="true" />
         {{ block.text }}
       </h3>

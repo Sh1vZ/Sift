@@ -26,7 +26,11 @@ export interface WalkOptions {
  * Depth-first walk that yields video paths as it finds them. Directory
  * listing is cheap; the expensive work (probing) happens in the media queue.
  */
-export async function* walkVideos(root: string, opts: WalkOptions = {}, depth = 0): AsyncGenerator<string> {
+export async function* walkVideos(
+  root: string,
+  opts: WalkOptions = {},
+  depth = 0,
+): AsyncGenerator<string> {
   const { signal, skip } = opts
   if (depth > MAX_DEPTH || signal?.aborted || skip?.(root)) return
   let dir

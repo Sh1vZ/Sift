@@ -46,7 +46,7 @@ export const updatePill = computed(() => {
       return {
         label: `Updating · ${Math.round(update.value.progress * 100)}%`,
         icon: 'i-lucide-cloud-download',
-        ready: false
+        ready: false,
       }
     case 'downloaded':
       return { label: 'Restart to update', icon: 'i-lucide-circle-arrow-up', ready: true }
@@ -61,7 +61,7 @@ export const updatePill = computed(() => {
  * `shell.openExternal` — a plain link would navigate the app window instead.
  */
 export const releaseUrl = computed(() =>
-  update.value.version ? `${RELEASES_URL}/tag/v${update.value.version}` : RELEASES_URL
+  update.value.version ? `${RELEASES_URL}/tag/v${update.value.version}` : RELEASES_URL,
 )
 
 export async function initUpdates(): Promise<void> {
@@ -76,7 +76,7 @@ export async function initUpdates(): Promise<void> {
     if (next.status === 'downloaded' && was !== 'downloaded') {
       toast('success', `Sift ${next.version} is ready`, 'Restart to finish installing.', {
         label: 'Restart now',
-        onClick: () => api.updates.install()
+        onClick: () => api.updates.install(),
       })
     }
   })

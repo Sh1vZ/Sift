@@ -3,7 +3,14 @@ import { computed } from 'vue'
 import type { LibraryFolder } from '@shared/types'
 import SettingsPanel from './SettingsPanel.vue'
 import SettingsRow from './SettingsRow.vue'
-import { addFolder, folders, recordings, removeFolder, rescan, scan } from '@/composables/useLibrary'
+import {
+  addFolder,
+  folders,
+  recordings,
+  removeFolder,
+  rescan,
+  scan,
+} from '@/composables/useLibrary'
 import { confirm } from '@/composables/useDialogs'
 
 /** The clips folder has its own pane; this list is the recording roots only. */
@@ -22,7 +29,7 @@ async function remove(folder: LibraryFolder): Promise<void> {
     detail: folder.path,
     detailIcon: 'i-lucide-folder',
     confirmLabel: 'Remove',
-    danger: true
+    danger: true,
   })
   if (ok) await removeFolder(folder)
 }
@@ -32,7 +39,12 @@ async function remove(folder: LibraryFolder): Promise<void> {
   <div class="stack">
     <SettingsPanel title="Watched folders" :description="summary" flush>
       <template #actions>
-        <UButton icon="i-lucide-folder-plus" label="Add folder" color="primary" @click="addFolder()" />
+        <UButton
+          icon="i-lucide-folder-plus"
+          label="Add folder"
+          color="primary"
+          @click="addFolder()"
+        />
       </template>
 
       <div class="slot">
@@ -46,7 +58,9 @@ async function remove(folder: LibraryFolder): Promise<void> {
             description="Add the one ShadowPlay records to — usually your Videos folder."
             variant="subtle"
             size="sm"
-            :actions="[{ label: 'Add folder', icon: 'i-lucide-folder-plus', onClick: () => addFolder() }]"
+            :actions="[
+              { label: 'Add folder', icon: 'i-lucide-folder-plus', onClick: () => addFolder() },
+            ]"
           />
           <ul v-else key="rows" class="rows">
             <SettingsRow
@@ -60,7 +74,13 @@ async function remove(folder: LibraryFolder): Promise<void> {
               <template #title>
                 <div class="folder-name">
                   <span class="truncate">{{ f.name }}</span>
-                  <UBadge v-if="!f.available" color="warning" variant="subtle" size="sm" label="Not reachable" />
+                  <UBadge
+                    v-if="!f.available"
+                    color="warning"
+                    variant="subtle"
+                    size="sm"
+                    label="Not reachable"
+                  />
                   <UBadge
                     v-else-if="scan.active && scan.folder === f.name"
                     color="primary"
@@ -76,7 +96,13 @@ async function remove(folder: LibraryFolder): Promise<void> {
               <p class="folder-path truncate" :title="f.path">{{ f.path }}</p>
 
               <template #trailing>
-                <UBadge color="neutral" variant="soft" size="sm" :label="`${f.clipCount} clips`" class="mono count" />
+                <UBadge
+                  color="neutral"
+                  variant="soft"
+                  size="sm"
+                  :label="`${f.clipCount} clips`"
+                  class="mono count"
+                />
                 <UTooltip text="Rescan this folder">
                   <UButton
                     icon="i-lucide-refresh-cw"
@@ -106,7 +132,10 @@ async function remove(folder: LibraryFolder): Promise<void> {
       </div>
     </SettingsPanel>
 
-    <SettingsPanel title="Rescan" description="Walks every reachable folder again and picks up anything the watcher missed.">
+    <SettingsPanel
+      title="Rescan"
+      description="Walks every reachable folder again and picks up anything the watcher missed."
+    >
       <UButton
         icon="i-lucide-refresh-cw"
         label="Rescan all folders"

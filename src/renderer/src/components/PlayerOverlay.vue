@@ -3,7 +3,13 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import ElasticSlider from './bits/ElasticSlider.vue'
 import PlayerDetails from './PlayerDetails.vue'
 import TrimBar from './TrimBar.vue'
-import { deleteClip, renameClip, revealClip, settings, updateSettings } from '@/composables/useLibrary'
+import {
+  deleteClip,
+  renameClip,
+  revealClip,
+  settings,
+  updateSettings,
+} from '@/composables/useLibrary'
 import {
   closePlayer,
   current,
@@ -14,7 +20,7 @@ import {
   openSource,
   originRect,
   pendingEdit,
-  prevClip
+  prevClip,
 } from '@/composables/usePlayer'
 import {
   canExport,
@@ -30,7 +36,7 @@ import {
   setIn,
   setOut,
   submit,
-  submitting
+  submitting,
 } from '@/composables/useEditor'
 import { fadeOut, flipFrom, flipTo } from '@/composables/useMotion'
 import { activeTheme } from '@/composables/useTheme'
@@ -44,7 +50,7 @@ import {
   formatFull,
   formatResolution,
   formatTimecode,
-  fractionAcross
+  fractionAcross,
 } from '@/utils/format'
 import { bitrate, formatBitrate } from '@/utils/quality'
 
@@ -70,17 +76,19 @@ const suspended = ref(false)
 /** Where playback was when the window went away, or -1 for nothing to restore. */
 let resumeAt = -1
 const src = computed(() => (suspended.value ? undefined : api.mediaUrl(clip.value.id)))
-const ratio = computed(() => (clip.value.width && clip.value.height ? clip.value.width / clip.value.height : 16 / 9))
+const ratio = computed(() =>
+  clip.value.width && clip.value.height ? clip.value.width / clip.value.height : 16 / 9,
+)
 const meta = computed(() =>
   [
     clip.value.game,
     formatFull(clip.value.recordedAtMs),
     formatResolution(clip.value.width, clip.value.height, clip.value.fps),
     formatBitrate(bitrate(clip.value)),
-    formatBytes(clip.value.size)
+    formatBytes(clip.value.size),
   ]
     .filter(Boolean)
-    .join(' · ')
+    .join(' · '),
 )
 
 const playing = ref(false)
@@ -103,21 +111,33 @@ const details = ref(settings.value.detailsPane)
 const flash = ref<{ icon: string; key: number } | null>(null)
 const stageSize = ref({ width: 0, height: 0 })
 
-const playedPct = computed(() => (duration.value ? `${(time.value / duration.value) * 100}%` : '0%'))
-const bufferedPct = computed(() => (duration.value ? `${(buffered.value / duration.value) * 100}%` : '0%'))
+const playedPct = computed(() =>
+  duration.value ? `${(time.value / duration.value) * 100}%` : '0%',
+)
+const bufferedPct = computed(() =>
+  duration.value ? `${(buffered.value / duration.value) * 100}%` : '0%',
+)
 const volumeIcon = computed(() =>
   muted.value || volume.value === 0
     ? 'i-lucide-volume-x'
     : volume.value < 0.5
       ? 'i-lucide-volume-1'
-      : 'i-lucide-volume-2'
+      : 'i-lucide-volume-2',
 )
 
 /** Trimming needs the probed duration; without it the handles have nothing to measure against. */
-const canEdit = computed(() => clip.value.probeState === 'ok' && clip.value.duration > 0 && !failed.value)
-const outExt = computed(() => (KEEP_EXT.has(clip.value.ext.toLowerCase()) ? clip.value.ext.toLowerCase() : '.mp4'))
+const canEdit = computed(
+  () => clip.value.probeState === 'ok' && clip.value.duration > 0 && !failed.value,
+)
+const outExt = computed(() =>
+  KEEP_EXT.has(clip.value.ext.toLowerCase()) ? clip.value.ext.toLowerCase() : '.mp4',
+)
 const editHint = computed(() =>
-  canEdit.value ? (editing.value ? 'Leave edit mode' : 'Trim & export') : 'Media info still loading'
+  canEdit.value
+    ? editing.value
+      ? 'Leave edit mode'
+      : 'Trim & export'
+    : 'Media info still loading',
 )
 
 const failedActions = computed(() => [
@@ -126,8 +146,8 @@ const failedActions = computed(() => [
     icon: 'i-lucide-folder-open',
     color: 'neutral' as const,
     variant: 'subtle' as const,
-    onClick: () => revealClip(clip.value)
-  }
+    onClick: () => revealClip(clip.value),
+  },
 ])
 
 // ------------------------------------------------------------- sizing
@@ -204,7 +224,7 @@ function persistVolume(): void {
   window.clearTimeout(volumeTimer)
   volumeTimer = window.setTimeout(
     () => void updateSettings({ volume: volume.value, muted: muted.value }),
-    400
+    400,
   )
 }
 function setVolume(value: number): void {
@@ -268,7 +288,7 @@ function onTimeUpdate(): void {
 }
 function onProgress(): void {
   const v = video.value
-  if (!v || !v.buffered.length) return
+  if (!v?.buffered.length) return
   for (let i = 0; i < v.buffered.length; i++) {
     if (v.buffered.start(i) <= v.currentTime && v.currentTime <= v.buffered.end(i)) {
       buffered.value = v.buffered.end(i)
@@ -335,7 +355,12 @@ async function exportNow(): Promise<void> {
 }
 
 function goToSource(): void {
-  if (!openSource(clip.value)) toast('error', 'Source not found', 'The recording this clip was cut from is no longer in the library.')
+  if (!openSource(clip.value))
+    toast(
+      'error',
+      'Source not found',
+      'The recording this clip was cut from is no longer in the library.',
+    )
 }
 
 // ------------------------------------------------------------- actions
@@ -359,8 +384,13 @@ function close(): void {
 
 async function rename(): Promise<void> {
   const c = clip.value
-  const name = await prompt({ title: 'Rename clip', label: 'File name', value: c.name, confirmLabel: 'Rename' })
-  if (name === null || !name.trim() || name === c.name) return
+  const name = await prompt({
+    title: 'Rename clip',
+    label: 'File name',
+    value: c.name,
+    confirmLabel: 'Rename',
+  })
+  if (!name?.trim() || name === c.name) return
   const next = await renameClip(c, name)
   // Swap in place so prev/next keep walking the same list.
   if (next) current.value = next
@@ -370,12 +400,13 @@ async function remove(): Promise<void> {
   const c = clip.value
   const choice = await confirmWithAlt({
     title: 'Delete this clip?',
-    message: 'It goes to the Recycle Bin, so you can still restore it from there. Deleting permanently erases the file from disk right away.',
+    message:
+      'It goes to the Recycle Bin, so you can still restore it from there. Deleting permanently erases the file from disk right away.',
     detail: c.name + c.ext,
     detailIcon: 'i-lucide-file-video',
     confirmLabel: 'Delete',
     danger: true,
-    alt: { label: 'Delete permanently', danger: true }
+    alt: { label: 'Delete permanently', danger: true },
   })
   if (choice === 'cancel') return
   exitEdit()
@@ -522,7 +553,7 @@ watch(
     buffering.value = false
     consumePendingEdit()
     poke()
-  }
+  },
 )
 
 // A clip opened straight into edit mode may still be probing; enter as soon as it can.
@@ -594,14 +625,22 @@ onBeforeUnmount(() => {
       'with-details': details && !fullscreen,
       'is-editing': editing,
       'no-cursor': !controls && playing,
-      'controls-hidden': !controls
+      'controls-hidden': !controls,
     }"
     @mousemove="poke"
     @mouseleave="controls = true"
   >
     <header class="top">
       <UTooltip text="Back" :kbds="['Esc']">
-        <UButton icon="i-lucide-chevron-left" color="neutral" variant="ghost" square size="lg" aria-label="Close player" @click="close" />
+        <UButton
+          icon="i-lucide-chevron-left"
+          color="neutral"
+          variant="ghost"
+          square
+          size="lg"
+          aria-label="Close player"
+          @click="close"
+        />
       </UTooltip>
       <div class="heading">
         <h2 class="truncate" :title="clip.name + clip.ext">{{ clip.title }}</h2>
@@ -691,8 +730,22 @@ onBeforeUnmount(() => {
 
           <Transition name="pop">
             <div v-if="ended && !loop && !failed && !editing" class="ended" @click.stop>
-              <UButton icon="i-lucide-rotate-ccw" label="Replay" color="neutral" variant="subtle" size="lg" @click="replay" />
-              <UButton v-if="hasNext" icon="i-lucide-skip-forward" label="Next clip" color="primary" size="lg" @click="nextClip" />
+              <UButton
+                icon="i-lucide-rotate-ccw"
+                label="Replay"
+                color="neutral"
+                variant="subtle"
+                size="lg"
+                @click="replay"
+              />
+              <UButton
+                v-if="hasNext"
+                icon="i-lucide-skip-forward"
+                label="Next clip"
+                color="primary"
+                size="lg"
+                @click="nextClip"
+              />
             </div>
           </Transition>
 
@@ -804,7 +857,9 @@ onBeforeUnmount(() => {
                 @click="setIn(time)"
               />
             </UTooltip>
-            <span class="len mono" :title="'Selection length'">{{ formatTimecode(selectionLength) }}</span>
+            <span class="len mono" :title="'Selection length'">{{
+              formatTimecode(selectionLength)
+            }}</span>
             <UTooltip text="Set end to the playhead" :kbds="[']']">
               <UButton
                 class="mono point"
@@ -818,11 +873,22 @@ onBeforeUnmount(() => {
               />
             </UTooltip>
             <UTooltip text="Reset range" :kbds="['Shift', 'R']">
-              <UButton icon="i-lucide-rotate-ccw" color="neutral" variant="ghost" square size="sm" aria-label="Reset range" @click="resetRange" />
+              <UButton
+                icon="i-lucide-rotate-ccw"
+                color="neutral"
+                variant="ghost"
+                square
+                size="sm"
+                aria-label="Reset range"
+                @click="resetRange"
+              />
             </UTooltip>
           </div>
 
-          <UTooltip :text="clip.hasAudio ? 'Drop the audio from the export' : 'Source has no audio'" :kbds="['Shift', 'M']">
+          <UTooltip
+            :text="clip.hasAudio ? 'Drop the audio from the export' : 'Source has no audio'"
+            :kbds="['Shift', 'M']"
+          >
             <UButton
               :icon="exportMuted ? 'i-lucide-volume-x' : 'i-lucide-volume-2'"
               :label="exportMuted ? 'Muted' : 'Mute'"
@@ -873,18 +939,52 @@ onBeforeUnmount(() => {
         <div class="group">
           <div class="transport">
             <UTooltip text="Previous" :kbds="['P']">
-              <UButton icon="i-lucide-skip-back" color="neutral" variant="ghost" square size="lg" :disabled="!hasPrev || editing" aria-label="Previous clip" @click="prevClip" />
+              <UButton
+                icon="i-lucide-skip-back"
+                color="neutral"
+                variant="ghost"
+                square
+                size="lg"
+                :disabled="!hasPrev || editing"
+                aria-label="Previous clip"
+                @click="prevClip"
+              />
             </UTooltip>
             <UTooltip :text="playing ? 'Pause' : 'Play'" :kbds="['Space']">
-              <UButton class="play" :icon="playing ? 'i-lucide-pause' : 'i-lucide-play'" color="primary" square size="xl" :aria-label="playing ? 'Pause' : 'Play'" @click="togglePlay" />
+              <UButton
+                class="play"
+                :icon="playing ? 'i-lucide-pause' : 'i-lucide-play'"
+                color="primary"
+                square
+                size="xl"
+                :aria-label="playing ? 'Pause' : 'Play'"
+                @click="togglePlay"
+              />
             </UTooltip>
             <UTooltip text="Next" :kbds="['N']">
-              <UButton icon="i-lucide-skip-forward" color="neutral" variant="ghost" square size="lg" :disabled="!hasNext || editing" aria-label="Next clip" @click="nextClip" />
+              <UButton
+                icon="i-lucide-skip-forward"
+                color="neutral"
+                variant="ghost"
+                square
+                size="lg"
+                :disabled="!hasNext || editing"
+                aria-label="Next clip"
+                @click="nextClip"
+              />
             </UTooltip>
           </div>
           <div class="volume">
             <UTooltip :text="muted ? 'Unmute' : 'Mute'" :kbds="['M']">
-              <UButton :icon="volumeIcon" color="neutral" variant="ghost" square size="lg" :aria-label="muted ? 'Unmute' : 'Mute'" @click="setMuted(!muted)" />
+              <UButton
+                :icon="volumeIcon"
+                color="neutral"
+                variant="ghost"
+                square
+                size="lg"
+                :aria-label="muted ? 'Unmute' : 'Mute'"
+                @click="setMuted(!muted)"
+              />
             </UTooltip>
             <!-- No side icons: the mute button beside it already shows the volume state. -->
             <ElasticSlider
@@ -897,20 +997,44 @@ onBeforeUnmount(() => {
             />
           </div>
           <span class="time mono">
-            {{ editing ? formatTimecode(time) : formatDuration(time) }}<span class="dim"> / {{ formatDuration(duration) }}</span>
+            {{ editing ? formatTimecode(time) : formatDuration(time)
+            }}<span class="dim"> / {{ formatDuration(duration) }}</span>
           </span>
         </div>
         <div class="group">
           <template v-if="editing">
             <UTooltip text="Previous frame" :kbds="[',']">
-              <UButton icon="i-lucide-chevron-left" color="neutral" variant="ghost" square size="lg" aria-label="Previous frame" @click="stepFrame(-1)" />
+              <UButton
+                icon="i-lucide-chevron-left"
+                color="neutral"
+                variant="ghost"
+                square
+                size="lg"
+                aria-label="Previous frame"
+                @click="stepFrame(-1)"
+              />
             </UTooltip>
             <UTooltip text="Next frame" :kbds="['.']">
-              <UButton icon="i-lucide-chevron-right" color="neutral" variant="ghost" square size="lg" aria-label="Next frame" @click="stepFrame(1)" />
+              <UButton
+                icon="i-lucide-chevron-right"
+                color="neutral"
+                variant="ghost"
+                square
+                size="lg"
+                aria-label="Next frame"
+                @click="stepFrame(1)"
+              />
             </UTooltip>
           </template>
           <UTooltip text="Playback speed">
-            <UButton class="rate mono" :label="`${rate}×`" color="neutral" variant="ghost" size="md" @click="cycleRate" />
+            <UButton
+              class="rate mono"
+              :label="`${rate}×`"
+              color="neutral"
+              variant="ghost"
+              size="md"
+              @click="cycleRate"
+            />
           </UTooltip>
           <UTooltip v-if="!editing" text="Loop">
             <UButton

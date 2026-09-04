@@ -17,7 +17,7 @@ const MIME: Record<string, string> = {
   '.wmv': 'video/x-ms-wmv',
   '.flv': 'video/x-flv',
   '.ts': 'video/mp2t',
-  '.jpg': 'image/jpeg'
+  '.jpg': 'image/jpeg',
 }
 
 const CHUNK = 1 << 20
@@ -27,8 +27,14 @@ export function registerScheme(): void {
   protocol.registerSchemesAsPrivileged([
     {
       scheme: SCHEME,
-      privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, bypassCSP: true }
-    }
+      privileges: {
+        standard: true,
+        secure: true,
+        supportFetchAPI: true,
+        stream: true,
+        bypassCSP: true,
+      },
+    },
   ])
 }
 
@@ -46,7 +52,7 @@ export function installProtocol(resolveClipPath: (id: string) => string | undefi
     if (url.hostname === 'thumb') {
       if (!key || key !== basename(key) || !key.endsWith('.jpg')) return bad(400)
       return serveFile(join(cacheDir(), key), request, {
-        'Cache-Control': 'private, max-age=31536000, immutable'
+        'Cache-Control': 'private, max-age=31536000, immutable',
       })
     }
     if (url.hostname === 'media') {
@@ -65,7 +71,7 @@ function bad(status: number): Response {
 async function serveFile(
   filePath: string,
   request: Request,
-  extra: Record<string, string>
+  extra: Record<string, string>,
 ): Promise<Response> {
   let size: number
   try {
@@ -76,7 +82,7 @@ async function serveFile(
   const headers: Record<string, string> = {
     'Content-Type': MIME[extname(filePath).toLowerCase()] ?? 'application/octet-stream',
     'Accept-Ranges': 'bytes',
-    ...extra
+    ...extra,
   }
 
   const range = request.headers.get('range')
@@ -97,21 +103,21 @@ async function serveFile(
       headers: {
         ...headers,
         'Content-Range': `bytes ${start}-${end}/${size}`,
-        'Content-Length': String(end - start + 1)
-      }
+        'Content-Length': String(end - start + 1),
+      },
     })
   }
 
   return new Response(toWeb(filePath, request, {}), {
     status: 200,
-    headers: { ...headers, 'Content-Length': String(size) }
+    headers: { ...headers, 'Content-Length': String(size) },
   })
 }
 
 function toWeb(
   filePath: string,
   request: Request,
-  range: { start?: number; end?: number }
+  range: { start?: number; end?: number },
 ): ReadableStream {
   const stream = createReadStream(filePath, { ...range, highWaterMark: CHUNK })
   // The player seeks constantly; tear the file handle down the moment Chromium

@@ -6,7 +6,7 @@
  */
 withDefaults(defineProps<{ title: string; description?: string; flush?: boolean }>(), {
   description: '',
-  flush: false
+  flush: false,
 })
 </script>
 

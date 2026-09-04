@@ -48,11 +48,11 @@ if (!app.requestSingleInstanceLock()) {
     if (tray) return
     tray = createTray({
       getWindow: () => mainWindow,
-      onSettings: () => mainWindow?.webContents.send('app:open-settings', null)
+      onSettings: () => mainWindow?.webContents.send('app:open-settings', null),
     })
   }
 
-  app.whenReady().then(async () => {
+  void app.whenReady().then(async () => {
     electronApp.setAppUserModelId('com.sift.app')
     ensureDirs()
 
@@ -75,7 +75,7 @@ if (!app.requestSingleInstanceLock()) {
       emit: (name, payload) => {
         if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(name, payload)
       },
-      quit: () => app.quit()
+      quit: () => app.quit(),
     })
 
     installProtocol((id) => library?.clipPath(id))
@@ -87,7 +87,7 @@ if (!app.requestSingleInstanceLock()) {
         syncTray(s.minimizeToTray)
         updater?.setAutoCheck(s.autoCheckUpdates)
       },
-      updater
+      updater,
     )
     updater.setAutoCheck(library.settings.autoCheckUpdates)
 
@@ -119,7 +119,10 @@ if (!app.requestSingleInstanceLock()) {
       setInterval(() => {
         for (const m of app.getAppMetrics()) {
           const ws = Math.round((m.memory?.workingSetSize ?? 0) / 1024)
-          console.log(`[perf] ${m.type}#${m.pid} cpu=${m.cpu.percentCPUUsage.toFixed(1)}% ws=${ws}MB`)
+          // eslint-disable-next-line no-console -- SIFT_PERF_LOG exists to print this
+          console.log(
+            `[perf] ${m.type}#${m.pid} cpu=${m.cpu.percentCPUUsage.toFixed(1)}% ws=${ws}MB`,
+          )
         }
       }, 5000)
     }

@@ -5,7 +5,7 @@ import {
   changelogSection,
   parseChangelog,
   type ChangelogBlock,
-  type ChangelogRelease
+  type ChangelogRelease,
 } from '@shared/changelog'
 
 /**
@@ -20,7 +20,7 @@ import {
 function candidates(): string[] {
   return [
     join(process.resourcesPath, 'CHANGELOG.md'),
-    join(import.meta.dirname, '../../CHANGELOG.md')
+    join(import.meta.dirname, '../../CHANGELOG.md'),
   ]
 }
 

@@ -12,10 +12,7 @@
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "bundler",
-    "types": [
-      "electron-vite/node",
-      "node"
-    ],
+    "types": ["electron-vite/node", "node"],
     "strict": true,
     "noUnusedLocals": true,
     "skipLibCheck": true,
@@ -24,9 +21,7 @@
     "noEmit": true,
     "baseUrl": ".",
     "paths": {
-      "@shared/*": [
-        "src/shared/*"
-      ]
+      "@shared/*": ["src/shared/*"]
     }
   }
 }

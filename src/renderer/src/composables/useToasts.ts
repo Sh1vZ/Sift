@@ -23,7 +23,12 @@ export interface Toast {
 export const pending = ref<Toast[]>([])
 let seq = 0
 
-export function toast(kind: ToastKind, title: string, message?: string, action?: ToastAction): void {
+export function toast(
+  kind: ToastKind,
+  title: string,
+  message?: string,
+  action?: ToastAction,
+): void {
   pending.value = [...pending.value, { id: ++seq, kind, title, message, action }]
 }
 

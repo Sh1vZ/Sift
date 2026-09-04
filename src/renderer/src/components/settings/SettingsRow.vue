@@ -17,7 +17,7 @@ withDefaults(
     /** `li` when the rows are a real list, e.g. the folder list. */
     tag?: string
   }>(),
-  { description: '', value: '', tone: 'default', tag: 'div' }
+  { description: '', value: '', tone: 'default', tag: 'div' },
 )
 </script>
 

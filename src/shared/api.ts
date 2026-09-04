@@ -11,7 +11,7 @@ import type {
   LibrarySnapshot,
   Settings,
   UpdateState,
-  WhatsNew
+  WhatsNew,
 } from './types'
 
 /** The surface exposed to the renderer as `window.api`. */

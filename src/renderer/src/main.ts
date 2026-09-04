@@ -10,4 +10,5 @@ import './styles/tokens.css'
 import './styles/base.css'
 import App from './App.vue'
 
+// eslint-disable-next-line @typescript-eslint/no-unsafe-argument -- .vue modules are untyped to eslint; vue-tsc type-checks this
 createApp(App).use(ui).mount('#app')

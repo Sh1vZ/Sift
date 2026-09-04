@@ -66,7 +66,7 @@ async function collectStorage(): Promise<StorageStats> {
     fileSize(`${db}-wal`),
     fileSize(`${db}-shm`),
     dirUsage(cacheDir()),
-    dirUsage(userDataDir())
+    dirUsage(userDataDir()),
   ])
   const databaseBytes = dbBytes + walBytes + shmBytes
 
@@ -87,7 +87,7 @@ async function collectStorage(): Promise<StorageStats> {
     cacheFiles: cache.files,
     otherBytes: Math.max(0, total.bytes - databaseBytes - cache.bytes),
     diskFreeBytes,
-    diskTotalBytes
+    diskTotalBytes,
   }
 }
 
@@ -103,7 +103,7 @@ function collectRuntime(): RuntimeStats {
     // getAppMetrics reports working sets in KiB.
     memoryBytes: metrics.reduce((sum, m) => sum + (m.memory?.workingSetSize ?? 0), 0) * 1024,
     processCount: metrics.length,
-    ffmpeg: ffmpegAvailable()
+    ffmpeg: ffmpegAvailable(),
   }
 }
 
@@ -112,6 +112,6 @@ export async function collectStats(): Promise<AppStats> {
   return {
     storage: await collectStorage(),
     runtime: collectRuntime(),
-    generatedAtMs: Date.now()
+    generatedAtMs: Date.now(),
   }
 }

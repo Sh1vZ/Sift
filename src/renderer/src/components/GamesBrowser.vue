@@ -10,7 +10,7 @@ import {
   now,
   openGame,
   type GameSort,
-  type GameSummary
+  type GameSummary,
 } from '@/composables/useLibrary'
 import { motionEnabled } from '@/composables/useMotion'
 import { activeTheme } from '@/composables/useTheme'
@@ -23,7 +23,7 @@ const api = window.api
 const sortOptions: Array<{ label: string; value: GameSort; icon: string }> = [
   { label: 'Recent activity', value: 'recent', icon: 'i-lucide-clock' },
   { label: 'Name', value: 'name', icon: 'i-lucide-arrow-up-down' },
-  { label: 'Most clips', value: 'count', icon: 'i-lucide-film' }
+  { label: 'Most clips', value: 'count', icon: 'i-lucide-film' },
 ]
 
 function onKey(e: KeyboardEvent): void {
@@ -54,20 +54,42 @@ const open = (g: GameSummary): void => openGame(g.name)
         @keydown="onKey"
       >
         <template v-if="gameQuery" #trailing>
-          <UButton color="neutral" variant="link" size="sm" icon="i-lucide-x" aria-label="Clear search" @click="gameQuery = ''" />
+          <UButton
+            color="neutral"
+            variant="link"
+            size="sm"
+            icon="i-lucide-x"
+            aria-label="Clear search"
+            @click="gameQuery = ''"
+          />
         </template>
       </UInput>
 
       <div class="kbds" aria-hidden="true">
-        <UKbd value="arrowup" /><UKbd value="arrowdown" /><UKbd value="arrowleft" /><UKbd value="arrowright" />
+        <UKbd value="arrowup" /><UKbd value="arrowdown" /><UKbd value="arrowleft" /><UKbd
+          value="arrowright"
+        />
         <span>move</span>
         <UKbd value="enter" />
         <span>open</span>
       </div>
 
-      <USelect v-model="gameSort" :items="sortOptions" size="lg" icon="i-lucide-arrow-up-down" class="w-48" aria-label="Sort games" />
+      <USelect
+        v-model="gameSort"
+        :items="sortOptions"
+        size="lg"
+        icon="i-lucide-arrow-up-down"
+        class="w-48"
+        aria-label="Sort games"
+      />
 
-      <UBadge color="neutral" variant="subtle" size="md" :label="`${filteredGames.length} of ${games.length}`" class="mono" />
+      <UBadge
+        color="neutral"
+        variant="subtle"
+        size="md"
+        :label="`${filteredGames.length} of ${games.length}`"
+        class="mono"
+      />
     </div>
 
     <div class="stage">
@@ -96,18 +118,31 @@ const open = (g: GameSummary): void => openGame(g.name)
                      them while the window is away is the bulk of what a hidden
                      Games screen was holding; the box keeps its aspect ratio, so
                      falling back to the placeholder shifts nothing. -->
-                <img v-if="g.cover && windowVisible" :src="api.thumbUrl(g.cover)" alt="" loading="lazy" decoding="async" />
+                <img
+                  v-if="g.cover && windowVisible"
+                  :src="api.thumbUrl(g.cover)"
+                  alt=""
+                  loading="lazy"
+                  decoding="async"
+                />
                 <Icon v-else name="gamepad" :size="24" :stroke="1.6" />
               </span>
               <span class="text">
                 <span class="name truncate">{{ g.name }}</span>
                 <span class="stats">
-                  <UBadge color="primary" variant="soft" size="sm" :label="`${g.count} clip${g.count === 1 ? '' : 's'}`" />
+                  <UBadge
+                    color="primary"
+                    variant="soft"
+                    size="sm"
+                    :label="`${g.count} clip${g.count === 1 ? '' : 's'}`"
+                  />
                   <span class="mono">{{ formatDuration(g.totalDuration) }}</span>
                   <span class="dot">·</span>
                   <span>{{ formatBytes(g.totalSize) }}</span>
                 </span>
-                <span class="last truncate">Last clip {{ formatRelative(g.latestMs, now).toLowerCase() }}</span>
+                <span class="last truncate"
+                  >Last clip {{ formatRelative(g.latestMs, now).toLowerCase() }}</span
+                >
               </span>
               <Icon name="chevron-right" :size="20" class="chev" />
             </SpotlightCard>
@@ -121,7 +156,14 @@ const open = (g: GameSummary): void => openGame(g.name)
           icon="i-lucide-search"
           :title="`No games match “${gameQuery}”`"
           description="Try a shorter name — the search also ignores spaces and punctuation."
-          :actions="[{ label: 'Clear search', color: 'neutral', variant: 'subtle', onClick: () => (gameQuery = '') }]"
+          :actions="[
+            {
+              label: 'Clear search',
+              color: 'neutral',
+              variant: 'subtle',
+              onClick: () => (gameQuery = ''),
+            },
+          ]"
         />
       </Transition>
     </div>

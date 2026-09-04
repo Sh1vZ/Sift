@@ -14,11 +14,18 @@ export const pendingEdit = ref(false)
 export const isOpen = computed(() => current.value !== null)
 
 const list = computed(() => (source.value === 'clips' ? orderedExports.value : orderedClips.value))
-const index = computed(() => (current.value ? list.value.findIndex((c) => c.id === current.value!.id) : -1))
+const index = computed(() =>
+  current.value ? list.value.findIndex((c) => c.id === current.value!.id) : -1,
+)
 export const hasPrev = computed(() => index.value > 0)
 export const hasNext = computed(() => index.value >= 0 && index.value < list.value.length - 1)
 
-export function openClip(clip: Clip, rect: Rect | null = null, from: PlayerSource = 'library', edit = false): void {
+export function openClip(
+  clip: Clip,
+  rect: Rect | null = null,
+  from: PlayerSource = 'library',
+  edit = false,
+): void {
   originRect.value = rect
   source.value = from
   pendingEdit.value = edit
@@ -62,7 +69,7 @@ watch(
     const fresh = getClip(cur.id)
     if (!fresh) current.value = null
     else if (fresh !== cur) current.value = fresh
-  }
+  },
 )
 
 /** The clip that should take over if the current one goes away: next, else previous. */

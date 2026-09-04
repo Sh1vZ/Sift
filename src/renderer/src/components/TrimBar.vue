@@ -17,7 +17,11 @@ const props = defineProps<{
   sprite: string
   frames: number
 }>()
-const emit = defineEmits<{ 'update:in': [seconds: number]; 'update:out': [seconds: number]; seek: [seconds: number] }>()
+const emit = defineEmits<{
+  'update:in': [seconds: number]
+  'update:out': [seconds: number]
+  seek: [seconds: number]
+}>()
 
 type Target = 'in' | 'out' | 'head'
 
@@ -30,7 +34,8 @@ const dragging = ref<Target | null>(null)
 const hoverPct = ref<number | null>(null)
 const headHover = ref(false)
 
-const pct = (s: number): number => (props.duration ? (clamp(s, 0, props.duration) / props.duration) * 100 : 0)
+const pct = (s: number): number =>
+  props.duration ? (clamp(s, 0, props.duration) / props.duration) * 100 : 0
 const inPct = computed(() => pct(props.inSec))
 const outPct = computed(() => pct(props.outSec))
 const headPct = computed(() => pct(props.time))
@@ -54,8 +59,8 @@ const cells = computed(() => {
     style: {
       backgroundImage: `url("${props.sprite}")`,
       backgroundSize: `${n * 100}% 100%`,
-      backgroundPosition: n > 1 ? `${(i / (n - 1)) * 100}% 0` : '0 0'
-    }
+      backgroundPosition: n > 1 ? `${(i / (n - 1)) * 100}% 0` : '0 0',
+    },
   }))
 })
 
@@ -154,7 +159,12 @@ const tipPct = computed(() => {
           :class="{ major: t.label !== null }"
           :style="{ left: `${t.pct}%` }"
         >
-          <span v-if="t.label !== null" class="label mono" :class="{ first: t.pct === 0, last: t.pct === 100 }">{{ t.label }}</span>
+          <span
+            v-if="t.label !== null"
+            class="label mono"
+            :class="{ first: t.pct === 0, last: t.pct === 100 }"
+            >{{ t.label }}</span
+          >
         </span>
       </div>
 
@@ -166,7 +176,10 @@ const tipPct = computed(() => {
 
         <div class="dim" :style="{ left: 0, width: `${inPct}%` }" />
         <div class="dim" :style="{ left: `${outPct}%`, right: 0 }" />
-        <div class="frame" :style="{ left: `${inPct}%`, width: `${Math.max(0, outPct - inPct)}%` }" />
+        <div
+          class="frame"
+          :style="{ left: `${inPct}%`, width: `${Math.max(0, outPct - inPct)}%` }"
+        />
 
         <div
           class="handle in"
@@ -201,7 +214,11 @@ const tipPct = computed(() => {
       </div>
 
       <!-- Runs the full height; the tab above the ruler is where you take hold of it. -->
-      <div class="playhead" :class="{ 'is-grabbed': dragging === 'head' }" :style="{ left: `${headPct}%` }">
+      <div
+        class="playhead"
+        :class="{ 'is-grabbed': dragging === 'head' }"
+        :style="{ left: `${headPct}%` }"
+      >
         <span class="line" aria-hidden="true" />
         <div
           class="grab"
@@ -293,7 +310,11 @@ const tipPct = computed(() => {
 }
 .film.blank {
   background:
-    repeating-linear-gradient(90deg, transparent 0 calc(10% - 1px), rgba(255, 255, 255, 0.08) calc(10% - 1px) 10%),
+    repeating-linear-gradient(
+      90deg,
+      transparent 0 calc(10% - 1px),
+      rgba(255, 255, 255, 0.08) calc(10% - 1px) 10%
+    ),
     var(--bg-3);
 }
 .cell {

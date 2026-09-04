@@ -87,7 +87,11 @@ export interface LongJobOptions {
  * caller can read `-progress` output, the stall timer resets on every line,
  * and the last couple of KB of stderr come back for the error toast.
  */
-export function runLong(bin: string, args: string[], opts: LongJobOptions): Promise<{ code: number; stderrTail: string }> {
+export function runLong(
+  bin: string,
+  args: string[],
+  opts: LongJobOptions,
+): Promise<{ code: number; stderrTail: string }> {
   return new Promise((resolve, reject) => {
     const child = spawn(bin, args, { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] })
     active.add(child)
@@ -165,7 +169,7 @@ export async function probe(filePath: string): Promise<ProbeResult> {
     // disposition/tag dumps ffprobe would otherwise serialise.
     '-show_entries',
     'format=duration:stream=codec_type,codec_name,width,height,avg_frame_rate,r_frame_rate,duration',
-    filePath
+    filePath,
   ])
   if (code !== 0) throw new Error(`ffprobe exited with ${code}`)
   const json = JSON.parse(stdout) as FfprobeJson
@@ -178,7 +182,7 @@ export async function probe(filePath: string): Promise<ProbeResult> {
     height: video?.height ?? 0,
     fps: parseFps(video?.avg_frame_rate) || parseFps(video?.r_frame_rate),
     vcodec: video?.codec_name ?? '',
-    hasAudio: Boolean(audio)
+    hasAudio: Boolean(audio),
   }
 }
 
@@ -230,7 +234,7 @@ function seekInput(path: string, at: number): string[] {
     '-ss',
     at.toFixed(2),
     '-i',
-    path
+    path,
   ]
 }
 
@@ -272,7 +276,11 @@ export async function makeArtifacts(clip: Clip, duration: number): Promise<Artif
   for (let i = 0; i < times.length; i++) {
     const inSprite = needSprite && i < frames
     if (i === posterIdx && inSprite) {
-      graph.push(`[${i}:v]split[p][s]`, scaleTo(THUMB_WIDTH, 'p', 'poster'), scaleTo(SPRITE_FRAME_WIDTH, 's', `f${i}`))
+      graph.push(
+        `[${i}:v]split[p][s]`,
+        scaleTo(THUMB_WIDTH, 'p', 'poster'),
+        scaleTo(SPRITE_FRAME_WIDTH, 's', `f${i}`),
+      )
     } else if (i === posterIdx) {
       graph.push(scaleTo(THUMB_WIDTH, `${i}:v`, 'poster'))
     } else {
@@ -282,8 +290,10 @@ export async function makeArtifacts(clip: Clip, duration: number): Promise<Artif
   }
   if (needSprite) graph.push(`${stacked}hstack=inputs=${frames}[sprite]`)
   args.push('-filter_complex', graph.join(';'))
-  if (needThumb) args.push('-map', '[poster]', '-frames:v', '1', '-threads', '1', '-q:v', '4', thumbPath)
-  if (needSprite) args.push('-map', '[sprite]', '-frames:v', '1', '-threads', '1', '-q:v', '5', spritePath)
+  if (needThumb)
+    args.push('-map', '[poster]', '-frames:v', '1', '-threads', '1', '-q:v', '4', thumbPath)
+  if (needSprite)
+    args.push('-map', '[sprite]', '-frames:v', '1', '-threads', '1', '-q:v', '5', spritePath)
 
   const { code } = await run(FFMPEG, args)
   if (code !== 0) {
@@ -324,7 +334,7 @@ export class MediaQueue {
   constructor(
     private readonly runner: JobRunner,
     private readonly onDone: (patch: ClipPatch) => void,
-    concurrency?: number
+    concurrency?: number,
   ) {
     this.concurrency = concurrency ?? Math.max(1, Math.min(2, Math.floor(cpus().length / 4)))
   }

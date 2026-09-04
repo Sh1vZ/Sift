@@ -1,6 +1,12 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
-import { changelog, changelogLoading, dismissWhatsNew, loadChangelog, whatsNew } from '@/composables/useUpdates'
+import {
+  changelog,
+  changelogLoading,
+  dismissWhatsNew,
+  loadChangelog,
+  whatsNew,
+} from '@/composables/useUpdates'
 import ChangelogBlocks from './changelog/ChangelogBlocks.vue'
 
 /**
@@ -16,14 +22,14 @@ const open = computed({
   get: () => whatsNew.value !== null,
   set: (v: boolean) => {
     if (!v) dismissWhatsNew()
-  }
+  },
 })
 
 type View = 'version' | 'all'
 
 const VIEWS: { value: View; label: string; icon: string }[] = [
   { value: 'version', label: 'This version', icon: 'i-lucide-sparkles' },
-  { value: 'all', label: 'Full changelog', icon: 'i-lucide-history' }
+  { value: 'all', label: 'Full changelog', icon: 'i-lucide-history' },
 ]
 
 const view = ref<View>('version')
@@ -35,13 +41,17 @@ function show(next: View): void {
 }
 
 const releases = computed(() => changelog.value ?? [])
-const historyEmpty = computed(() => !changelogLoading.value && changelog.value !== null && releases.value.length === 0)
+const historyEmpty = computed(
+  () => !changelogLoading.value && changelog.value !== null && releases.value.length === 0,
+)
 
 const title = computed(() =>
-  view.value === 'version' ? `What's new in Sift ${whatsNew.value?.version ?? ''}` : 'Changelog'
+  view.value === 'version' ? `What's new in Sift ${whatsNew.value?.version ?? ''}` : 'Changelog',
 )
 const description = computed(() =>
-  view.value === 'version' ? 'Sift updated itself since you last used it.' : 'Every release, newest first.'
+  view.value === 'version'
+    ? 'Sift updated itself since you last used it.'
+    : 'Every release, newest first.',
 )
 
 /** `2026-09-03` -> `3 Sep 2026`, parsed as a local date so it cannot slip a day. */
@@ -82,7 +92,7 @@ watch([scroller, view, changelog, changelogLoading], () => void nextTick(sync))
       content: 'max-w-xl',
       header: 'pe-12 sm:pe-12',
       title: 'font-heading text-base',
-      body: 'p-0 sm:p-0'
+      body: 'p-0 sm:p-0',
     }"
   >
     <template #body>
@@ -106,7 +116,12 @@ watch([scroller, view, changelog, changelogLoading], () => void nextTick(sync))
           <ChangelogBlocks v-if="view === 'version'" :blocks="whatsNew?.blocks ?? []" />
 
           <div v-else-if="changelogLoading" class="loading">
-            <USkeleton v-for="n in 6" :key="n" class="h-4" :class="n % 3 === 0 ? 'w-2/3' : 'w-full'" />
+            <USkeleton
+              v-for="n in 6"
+              :key="n"
+              class="h-4"
+              :class="n % 3 === 0 ? 'w-2/3' : 'w-full'"
+            />
           </div>
 
           <UEmpty
@@ -120,7 +135,13 @@ watch([scroller, view, changelog, changelogLoading], () => void nextTick(sync))
             <section v-for="release in releases" :key="release.version" class="release">
               <header class="release-head">
                 <h3 class="version mono">{{ release.version }}</h3>
-                <UBadge v-if="release.version === whatsNew?.version" size="sm" color="primary" variant="soft" label="Installed" />
+                <UBadge
+                  v-if="release.version === whatsNew?.version"
+                  size="sm"
+                  color="primary"
+                  variant="soft"
+                  label="Installed"
+                />
                 <span v-if="release.date" class="date">{{ releaseDate(release.date) }}</span>
               </header>
               <ChangelogBlocks :blocks="release.blocks" />
@@ -149,7 +170,7 @@ watch([scroller, view, changelog, changelogLoading], () => void nextTick(sync))
 
 .viewport::before,
 .viewport::after {
-  content: "";
+  content: '';
   position: absolute;
   left: 0;
   right: 0;

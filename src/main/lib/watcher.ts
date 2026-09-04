@@ -14,7 +14,11 @@ export interface WatchHandlers {
  * event, so a predicate that reads live state (the clips folder path) keeps
  * working after that state changes without restarting the watcher.
  */
-export function watchFolder(root: string, handlers: WatchHandlers, ignored?: (path: string) => boolean): FSWatcher {
+export function watchFolder(
+  root: string,
+  handlers: WatchHandlers,
+  ignored?: (path: string) => boolean,
+): FSWatcher {
   const watcher = chokidar.watch(root, {
     ignoreInitial: true,
     depth: 8,
@@ -25,7 +29,7 @@ export function watchFolder(root: string, handlers: WatchHandlers, ignored?: (pa
       if (name.startsWith('.') || name.startsWith('~')) return true
       if (ignored?.(p)) return true
       return Boolean(stats?.isFile()) && !isVideoFile(p)
-    }
+    },
   })
   watcher.on('add', (p) => isVideoFile(p) && handlers.onAdd(p))
   watcher.on('change', (p) => isVideoFile(p) && handlers.onChange(p))

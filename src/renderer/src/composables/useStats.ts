@@ -79,7 +79,7 @@ export const libraryTotals = computed<LibraryTotals>(() => {
     avgDuration: 0,
     avgBitrate: 0,
     largest: null,
-    longest: null
+    longest: null,
   }
   // Unprobed clips carry no duration, so they sit out of the bitrate average
   // rather than dragging it toward zero.
@@ -119,7 +119,10 @@ export interface Breakdown {
   share: number
 }
 
-function ranked(rows: Map<string, { label: string; count: number; bytes: number }>, by: 'bytes' | 'count'): Breakdown[] {
+function ranked(
+  rows: Map<string, { label: string; count: number; bytes: number }>,
+  by: 'bytes' | 'count',
+): Breakdown[] {
   const list = [...rows.entries()].map(([key, r]) => ({ key, ...r, share: 0 }))
   list.sort((a, b) => b[by] - a[by] || a.label.localeCompare(b.label))
   const top = list[0]?.[by] ?? 0
@@ -129,7 +132,8 @@ function ranked(rows: Map<string, { label: string; count: number; bytes: number 
 
 export const topGames = computed<Breakdown[]>(() => {
   const rows = new Map<string, { label: string; count: number; bytes: number }>()
-  for (const g of games.value) rows.set(g.name, { label: g.name, count: g.count, bytes: g.totalSize })
+  for (const g of games.value)
+    rows.set(g.name, { label: g.name, count: g.count, bytes: g.totalSize })
   return ranked(rows, 'bytes').slice(0, TOP_GAMES)
 })
 
@@ -203,7 +207,7 @@ export const monthlyActivity = computed<MonthBar[]>(() => {
       title: `${monthLabel.format(d)} ${d.getFullYear()}`,
       count: 0,
       bytes: 0,
-      share: 0
+      share: 0,
     }
     bars.push(bar)
     index.set(key, bar)

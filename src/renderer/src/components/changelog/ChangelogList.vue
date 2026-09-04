@@ -36,7 +36,7 @@ defineProps<{ items: ChangelogItem[]; nested?: boolean }>()
 }
 
 .item::before {
-  content: "";
+  content: '';
   position: absolute;
   left: 3px;
   top: 0.62em;

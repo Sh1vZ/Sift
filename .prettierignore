@@ -1,0 +1,16 @@
+node_modules
+out
+dist
+build
+.vite
+design-system
+package-lock.json
+CHANGELOG.md
+*.min.js
+*.min.css
+src/renderer/src/components/bits
+
+# Curated content, not app source: agent skill definitions and docs.
+.agents
+.claude
+*.md
