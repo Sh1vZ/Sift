@@ -2,8 +2,11 @@ name: Release
 
 # Tag a version to ship it:
 #   1. write the CHANGELOG.md section for the new version
-#   2. bump package.json to match
-#   3. git tag v<version> && git push --follow-tags
+#   2. npm run release -- <beta|stable|patch|minor|major|x.y.z>
+#
+# scripts/release.ts does the bump, the commit, the annotated tag and the push,
+# and runs the checks below locally first. The steps here repeat them anyway: a
+# tag can also arrive by hand.
 on:
   push:
     tags:

@@ -41,17 +41,17 @@ Output lands in `dist/`. `npm run build:unpack` produces an unpacked folder for 
 
 ## Publish a release
 
-`.github/workflows/release.yml` builds and publishes on any `v*` tag, so shipping is three steps:
-
-1. Add the section for the new version to `CHANGELOG.md` — it becomes the GitHub release body, the notes shown next to a pending update, and the in-app "What's new". CI fails without it.
-2. Set the same version in `package.json`. CI fails if the tag and `package.json` disagree.
-3. Tag and push:
+`.github/workflows/release.yml` builds and publishes on any `v*` tag. Write the section for the new version in `CHANGELOG.md` — it becomes the GitHub release body, the notes shown next to a pending update, and the in-app "What's new" — then hand the rest to `scripts/release.ts`:
 
 ```bash
-git commit -am "chore(release): 1.0.0-beta.2" && git tag -a v1.0.0-beta.2 -m "Sift 1.0.0-beta.2" && git push --follow-tags
+npm run release -- beta --dry-run
 ```
 
-`-a` matters: `--follow-tags` pushes annotated tags only, so a lightweight `git tag v…` is skipped silently and the workflow never fires. Check with `git ls-remote --tags origin` if a release does not start.
+The dry run changes nothing and reports what would happen. Drop `--dry-run` to bump `package.json` and `package-lock.json`, typecheck, test, commit `chore(release): <version>`, create the annotated tag and push it. Takes `beta`, `stable`, `patch`, `minor`, `major` or an exact version; `--no-push` stops at the tag, `--yes` skips the confirmation prompt.
+
+It refuses to start on a dirty tree, off `main`, behind `origin/main`, on an existing tag, without a changelog section, or when `releaseType` in `electron-builder.yml` disagrees with the version — all of which are cheaper to hit now than after a six-minute build. Everything up to the push prints its own undo.
+
+The tag is annotated on purpose: `--follow-tags` pushes annotated tags only, so a lightweight `git tag v…` is skipped silently and the workflow never fires. Check with `git ls-remote --tags origin` if a release does not start.
 
 Beta versions carry a `-beta.N` suffix and the GitHub release is flagged as a prerelease; a build whose own version is a prerelease opts into those, a stable build only sees stable releases. Beta users are still offered a later stable release, so promoting the line is just `releaseType: prerelease` → `release` in `electron-builder.yml` alongside dropping the suffix.
 
