@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import Icon from './Icon.vue'
 import AnimatedList from './bits/AnimatedList.vue'
 import SpotlightCard from './bits/SpotlightCard.vue'
@@ -50,7 +50,7 @@ onBeforeUnmount(() => offSearch?.())
 const keyOf = (g: GameSummary): string => g.name
 const open = (g: GameSummary): void => openGame(g.name)
 
-/** Right-click on a game: what you can do to it without stepping in. */
+/** A game's actions: what you can do to it without stepping in. */
 function gameMenu(g: GameSummary) {
   const newest = newestClipOf(g.name)
   return [
@@ -75,6 +75,20 @@ function gameMenu(g: GameSummary) {
     ],
   ]
 }
+
+/**
+ * Built once per list rather than per card: `newestClipOf` walks every
+ * recording, and the list re-renders on each hover as the selection follows the
+ * pointer. Two menus per card off the same map costs nothing.
+ */
+const gameMenus = computed(() => {
+  const menus: Record<string, ReturnType<typeof gameMenu>> = {}
+  for (const g of filteredGames.value) menus[g.name] = gameMenu(g)
+  return menus
+})
+
+// Arrow keys belong to an open menu while one is up, not to the list underneath.
+const menuOpen = ref(false)
 </script>
 
 <template>
@@ -140,54 +154,81 @@ function gameMenu(g: GameSummary) {
           key="list"
           :items="filteredGames"
           :item-key="keyOf"
-          :active="!playerOpen"
+          :active="!playerOpen && !menuOpen"
           :animated="motionEnabled"
           :gradient-color="activeTheme.colors.bg1"
           class-name="games-list"
           @item-selected="open"
         >
           <template #default="{ item: g, selected }">
-            <UContextMenu :items="gameMenu(g)" :ui="{ content: 'min-w-52' }">
-              <SpotlightCard
-                as="button"
-                class="game"
-                :class="{ 'is-selected': selected }"
-                :spotlight-color="activeTheme.spotlight"
-                :title="g.name"
-              >
-                <span class="cover">
-                  <!-- The list is not windowed, so every cover stays decoded. Dropping
+            <UContextMenu
+              :items="gameMenus[g.name]"
+              :ui="{ content: 'min-w-52' }"
+              @update:open="menuOpen = $event"
+            >
+              <!-- The card is a <button>, so the menu button cannot sit inside
+                   it; it rides alongside and follows the card's nudge. -->
+              <div class="game-slot">
+                <SpotlightCard
+                  as="button"
+                  class="game"
+                  :class="{ 'is-selected': selected }"
+                  :spotlight-color="activeTheme.spotlight"
+                  :title="g.name"
+                >
+                  <span class="cover">
+                    <!-- The list is not windowed, so every cover stays decoded. Dropping
                        them while the window is away is the bulk of what a hidden
                        Games screen was holding; the box keeps its aspect ratio, so
                        falling back to the placeholder shifts nothing. -->
-                  <img
-                    v-if="g.cover && windowVisible"
-                    :src="api.thumbUrl(g.cover)"
-                    alt=""
-                    loading="lazy"
-                    decoding="async"
-                  />
-                  <Icon v-else name="gamepad" :size="24" :stroke="1.6" />
-                </span>
-                <span class="text">
-                  <span class="name truncate">{{ g.name }}</span>
-                  <span class="stats">
-                    <UBadge
-                      color="primary"
-                      variant="soft"
-                      size="md"
-                      :label="`${g.count} clip${g.count === 1 ? '' : 's'}`"
+                    <img
+                      v-if="g.cover && windowVisible"
+                      :src="api.thumbUrl(g.cover)"
+                      alt=""
+                      loading="lazy"
+                      decoding="async"
                     />
-                    <span class="mono">{{ formatDuration(g.totalDuration) }}</span>
-                    <span class="dot">·</span>
-                    <span>{{ formatBytes(g.totalSize) }}</span>
+                    <Icon v-else name="gamepad" :size="24" :stroke="1.6" />
                   </span>
-                  <span class="last truncate"
-                    >Last clip {{ formatRelative(g.latestMs, now).toLowerCase() }}</span
-                  >
-                </span>
-                <Icon name="chevron-right" :size="20" class="chev" />
-              </SpotlightCard>
+                  <span class="text">
+                    <span class="name truncate">{{ g.name }}</span>
+                    <span class="stats">
+                      <UBadge
+                        color="primary"
+                        variant="soft"
+                        size="md"
+                        :label="`${g.count} clip${g.count === 1 ? '' : 's'}`"
+                      />
+                      <span class="mono">{{ formatDuration(g.totalDuration) }}</span>
+                      <span class="dot">·</span>
+                      <span>{{ formatBytes(g.totalSize) }}</span>
+                    </span>
+                    <span class="last truncate"
+                      >Last clip {{ formatRelative(g.latestMs, now).toLowerCase() }}</span
+                    >
+                  </span>
+                  <Icon name="chevron-right" :size="20" class="chev" />
+                </SpotlightCard>
+
+                <UDropdownMenu
+                  :items="gameMenus[g.name]"
+                  :content="{ align: 'end' }"
+                  :ui="{ content: 'min-w-52' }"
+                  @update:open="menuOpen = $event"
+                >
+                  <UButton
+                    class="kebab"
+                    icon="i-lucide-ellipsis-vertical"
+                    color="neutral"
+                    variant="ghost"
+                    square
+                    size="sm"
+                    :aria-label="`More actions for ${g.name}`"
+                    @click.stop
+                    @keydown.enter.stop
+                  />
+                </UDropdownMenu>
+              </div>
             </UContextMenu>
           </template>
         </AnimatedList>
@@ -272,6 +313,34 @@ function gameMenu(g: GameSummary) {
   align-content: start;
   gap: var(--s-3);
   padding: var(--s-1) 28px var(--s-12);
+}
+
+/* Holds the card and the menu button that cannot live inside it. */
+.game-slot {
+  position: relative;
+  height: 100%;
+}
+/* Above the card's spotlight wash, clear of the chevron, and dim until the row
+   is under the pointer or holds focus. */
+.game-slot .kebab {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 2;
+  opacity: 0.5;
+  transition:
+    opacity var(--dur-fast) var(--ease-out),
+    transform var(--dur) var(--ease-out);
+}
+.game-slot:hover .kebab,
+.game-slot:focus-within .kebab {
+  opacity: 1;
+}
+/* The card slides a little when it is the selected row; the button rides with
+   it rather than hanging off the edge it left behind. */
+.game.is-selected ~ .kebab,
+.game:focus-visible ~ .kebab {
+  transform: translateX(4px);
 }
 
 .game {

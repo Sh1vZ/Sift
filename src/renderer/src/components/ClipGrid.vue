@@ -73,7 +73,7 @@ function rectOf(clip: Clip): Rect | null {
   return el ? el.getBoundingClientRect() : null
 }
 
-/** Right-click menu per card, rendered by Nuxt UI's <UContextMenu>. */
+/** A card's actions: the same list behind its right-click and its ⋯ button. */
 const menuItems = (clip: Clip) =>
   clipMenuItems(clip, { variant: props.variant, job: jobOf(clip), rectOf })
 </script>
@@ -110,6 +110,7 @@ const menuItems = (clip: Clip) =>
               :clip="clip"
               :variant="variant"
               :job="jobOf(clip)"
+              :menu="menuItems(clip)"
               :upload="uploadByClip[clip.id]"
               :pending="pendingByClip[clip.id]"
               @open="onOpen"

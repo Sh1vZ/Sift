@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import type { Clip, ExportJob } from '@shared/types'
 import type { UploadJob } from '@shared/youtube'
+import type { ClipMenuItem } from '@/composables/useClipMenu'
 import FavouriteButton from './FavouriteButton.vue'
 import Icon from './Icon.vue'
 import { now, settings, type PendingAction } from '@/composables/useLibrary'
@@ -25,14 +26,17 @@ const props = withDefaults(
     upload?: UploadJob
     /** A slow action on this clip (delete, rename, remove from YouTube) still running. */
     pending?: PendingAction
+    /** The card's actions, the same list its right-click menu shows. */
+    menu?: ClipMenuItem[][]
   }>(),
-  { variant: 'recording', job: undefined, upload: undefined, pending: undefined },
+  { variant: 'recording', job: undefined, upload: undefined, pending: undefined, menu: () => [] },
 )
 const emit = defineEmits<{ open: [clip: Clip, rect: DOMRect]; cancelUpload: [jobId: string] }>()
 
 const api = window.api
 const thumbEl = ref<HTMLElement | null>(null)
 const hovering = ref(false)
+const menuOpen = ref(false)
 const frame = ref(0)
 const posterLoaded = ref(false)
 const spriteLoaded = ref(false)
@@ -270,18 +274,45 @@ const seen = computed(() => Boolean(props.clip.seenAtMs) && !veil.value)
       </div>
 
       <div class="meta">
-        <h3 class="title truncate" :title="clip.name + clip.ext">{{ clip.title }}</h3>
-        <p class="sub truncate">
-          <template v-if="variant === 'export'">
-            <span class="game truncate">{{ clip.game }}</span>
-            <span class="dot">·</span>
-          </template>
-          <span>{{ job ? jobLabel : when }}</span>
-          <template v-if="clip.size">
-            <span class="dot">·</span>
-            <span>{{ formatBytes(clip.size) }}</span>
-          </template>
-        </p>
+        <div class="text">
+          <h3 class="title truncate" :title="clip.name + clip.ext">{{ clip.title }}</h3>
+          <p class="sub truncate">
+            <template v-if="variant === 'export'">
+              <span class="game truncate">{{ clip.game }}</span>
+              <span class="dot">·</span>
+            </template>
+            <span>{{ job ? jobLabel : when }}</span>
+            <template v-if="clip.size">
+              <span class="dot">·</span>
+              <span>{{ formatBytes(clip.size) }}</span>
+            </template>
+          </p>
+        </div>
+
+        <!-- The same list the right-click menu carries. Right-click is faster
+             once you know it is there; this is how you find out, and it is the
+             only way in on a card you reached with the keyboard. -->
+        <UDropdownMenu
+          v-if="menu.length"
+          :items="menu"
+          :content="{ align: 'end' }"
+          :ui="{ content: 'min-w-52' }"
+          @update:open="menuOpen = $event"
+        >
+          <UButton
+            class="kebab"
+            :class="{ 'is-open': menuOpen }"
+            icon="i-lucide-ellipsis-vertical"
+            color="neutral"
+            variant="ghost"
+            square
+            size="sm"
+            :aria-label="`More actions for ${clip.title}`"
+            @click.stop
+            @keydown.enter.stop
+            @keydown.space.stop
+          />
+        </UDropdownMenu>
       </div>
     </div>
   </article>
@@ -540,7 +571,29 @@ const seen = computed(() => Boolean(props.clip.seenAtMs) && !veil.value)
 /* Inset on every side: the hover ring sits on the card's edge, so the title and
    the date line need room before it. Keep in step with META_H in useVirtualGrid. */
 .meta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   padding: 12px 10px;
+}
+/* The two lines take whatever the menu button leaves; `min-width: 0` is what
+   keeps their `truncate` honest inside a flex row. */
+.text {
+  flex: 1;
+  min-width: 0;
+}
+/* Dim at rest so a wall of cards is not a wall of dots, but never hidden: an
+   affordance you cannot see is one you cannot find. */
+.kebab {
+  flex: 0 0 auto;
+  opacity: 0.5;
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+.clip-card:hover .kebab,
+.clip-card:focus-within .kebab,
+.kebab.is-open,
+.kebab:focus-visible {
+  opacity: 1;
 }
 .title {
   font-size: var(--text-md);
