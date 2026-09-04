@@ -7,6 +7,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 uses [semantic versioning](https://semver.org/spec/v2.0.0.html) — beta builds carry a
 `-beta.N` suffix and update from the beta channel.
 
+## [1.0.0-beta.3] - 2026-09-03
+
+### Fixed
+
+- Sift can find its updates again. The previous build was published as two releases
+  sharing one tag with its files split between them, so the app had nothing to read
+  and Settings → About reported "No update feed for this build yet". If your copy is
+  still saying that, install this version by hand once — every check after it works
+  on its own.
+
 ## [1.0.0-beta.2] - 2026-09-03
 
 ### Added
