@@ -4,7 +4,13 @@ import type { UploadJob } from '@shared/youtube'
 import { activityCount, activityItems } from '@/composables/useActivity'
 import { cancelExport, dismissExport } from '@/composables/useExports'
 import { getClip, openYouTube } from '@/composables/useLibrary'
-import { cancelUpload, dismissUpload, progressText } from '@/composables/useUploads'
+import {
+  cancelUpload,
+  checkUploadNow,
+  dismissUpload,
+  progressText,
+  stageText,
+} from '@/composables/useUploads'
 
 /**
  * Every job main is running, in one list: exports, uploads and the scan. The
@@ -13,6 +19,19 @@ import { cancelUpload, dismissUpload, progressText } from '@/composables/useUplo
  */
 const liveExport = (j: ExportJob): boolean => j.state === 'queued' || j.state === 'running'
 const liveUpload = (j: UploadJob): boolean => j.state === 'queued' || j.state === 'uploading'
+/** Sift has stopped asking, so the row offers the question as a button instead. */
+const stalled = (j: UploadJob): boolean => j.state === 'processing' && j.checksStopped
+
+/**
+ * Determinate only where there is a real number to show: the bytes Sift sent,
+ * or the parts YouTube says it has done. It often reports neither, and an
+ * indeterminate bar is honest where a 0% one is not.
+ */
+function barValue(j: UploadJob): number | null {
+  if (j.state === 'uploading') return Math.round(j.progress * 100)
+  if (j.state === 'processing' && j.stageProgress >= 0) return Math.round(j.stageProgress * 100)
+  return null
+}
 
 function exportLine(j: ExportJob): string {
   switch (j.state) {
@@ -29,17 +48,21 @@ function exportLine(j: ExportJob): string {
   }
 }
 
+// Every arm is spelled out: a `default` here would quietly render the next
+// UploadState as "Cancelled" instead of failing to compile.
 function uploadLine(j: UploadJob): string {
   switch (j.state) {
     case 'queued':
       return 'Waiting to upload…'
     case 'uploading':
       return `Uploading · ${progressText(j)}`
+    case 'processing':
+      return stageText(j)
     case 'done':
-      return j.accountLabel ? `Uploaded · via ${j.accountLabel}` : 'Uploaded'
+      return stageText(j) || (j.accountLabel ? `Uploaded · via ${j.accountLabel}` : 'Uploaded')
     case 'failed':
       return j.error || 'Upload failed'
-    default:
+    case 'cancelled':
       return 'Cancelled'
   }
 }
@@ -59,7 +82,7 @@ function openUploaded(j: UploadJob): void {
         color="primary"
         variant="soft"
         size="md"
-        :label="`${activityCount} running`"
+        :label="`${activityCount} active`"
       />
     </header>
 
@@ -130,13 +153,11 @@ function openUploaded(j: UploadJob): void {
             <p class="title truncate" :title="item.job.title">{{ item.job.title }}</p>
             <p class="line truncate">{{ uploadLine(item.job) }}</p>
             <UProgress
-              v-if="liveUpload(item.job)"
+              v-if="liveUpload(item.job) || item.job.state === 'processing'"
               class="bar"
               size="xs"
               color="primary"
-              :model-value="
-                item.job.state === 'uploading' ? Math.round(item.job.progress * 100) : null
-              "
+              :model-value="barValue(item.job)"
               :aria-label="uploadLine(item.job)"
             />
           </div>
@@ -149,7 +170,18 @@ function openUploaded(j: UploadJob): void {
             @click="cancelUpload(item.job.id)"
           />
           <template v-else>
-            <UTooltip v-if="item.job.state === 'done'" text="Open on YouTube">
+            <UTooltip v-if="stalled(item.job)" text="Ask YouTube now">
+              <UButton
+                icon="i-lucide-refresh-cw"
+                color="neutral"
+                variant="ghost"
+                size="sm"
+                square
+                aria-label="Check on YouTube now"
+                @click="checkUploadNow(item.job)"
+              />
+            </UTooltip>
+            <UTooltip v-if="item.job.videoId" text="Open on YouTube">
               <UButton
                 icon="i-lucide-external-link"
                 color="neutral"
@@ -166,7 +198,7 @@ function openUploaded(j: UploadJob): void {
               variant="ghost"
               size="sm"
               square
-              aria-label="Dismiss"
+              :aria-label="item.job.state === 'processing' ? 'Stop checking' : 'Dismiss'"
               @click="dismissUpload(item.job.id)"
             />
           </template>

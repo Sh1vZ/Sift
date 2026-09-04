@@ -49,6 +49,7 @@ export function registerIpc(
     // Unknown theme ids would leave the renderer on no theme block at all.
     if (p.theme !== undefined && !THEME_IDS.includes(p.theme)) delete p.theme
     if (p.autoCheckUpdates !== undefined) p.autoCheckUpdates = p.autoCheckUpdates === true
+    if (p.youtubeCheckStatus !== undefined) p.youtubeCheckStatus = p.youtubeCheckStatus === true
     if (p.lastSeenVersion !== undefined) p.lastSeenVersion = str(p.lastSeenVersion)
     // Capped: an unbounded list of dismissals would grow with every rescan.
     if (p.dismissedGameMerges !== undefined)
@@ -56,6 +57,9 @@ export function registerIpc(
         ? p.dismissedGameMerges.map(str).filter(Boolean).slice(-50)
         : []
     const settings = library.setSettings(p)
+    // Switching the checks back on has to start a tick; nothing else would
+    // until the next upload.
+    if (p.youtubeCheckStatus !== undefined) youtube.setCheckStatus(settings.youtubeCheckStatus)
     onSettingsApplied(settings)
     return settings
   })
@@ -101,6 +105,7 @@ export function registerIpc(
   ipcMain.handle('clip:open-youtube', (_e, id) => youtube.openVideo(str(id)))
   ipcMain.handle('clip:copy-youtube-link', (_e, id) => youtube.copyLink(str(id)))
   ipcMain.handle('clip:remove-youtube', (_e, id) => youtube.removeVideo(str(id)))
+  ipcMain.handle('clip:check-youtube', (_e, id) => youtube.checkVideo(str(id)))
   ipcMain.handle('clip:set-favourite', (_e, id, favourite) =>
     library.setFavourite(str(id), favourite === true),
   )

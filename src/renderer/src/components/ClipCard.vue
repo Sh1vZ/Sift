@@ -47,7 +47,7 @@ const frames = computed(() => props.clip.spriteFrames)
 const canScrub = computed(
   () =>
     !props.job &&
-    !props.upload &&
+    !veil.value &&
     !props.pending &&
     settings.value.hoverPreview &&
     Boolean(sprite.value) &&
@@ -107,6 +107,10 @@ const veil = computed<Veil | null>(() => {
   }
   const u = props.upload
   if (!u) return null
+  // YouTube's own processing can run for an hour. Veiling the card that long
+  // would cost the poster, the hover scrub and every other badge for something
+  // the user is only waiting on, so that stage gets a chip instead (see below).
+  if (u.state === 'processing') return null
   const pct = Math.round(u.progress * 100)
   const failed = u.state === 'failed' || u.state === 'cancelled'
   const busy = u.state === 'queued' || u.state === 'uploading'
@@ -126,6 +130,50 @@ const veil = computed<Veil | null>(() => {
     bar: u.state === 'uploading' ? pct : u.state === 'queued' ? null : undefined,
     failed,
     busy,
+  }
+})
+
+/**
+ * The YouTube chip in the corner, once the clip has a video. It carries what
+ * YouTube last said, in the palette the card already uses: the reserved rose
+ * for a video that is up and fine, amber for one it would not publish.
+ */
+const ytBadge = computed(() => {
+  const clip = props.clip
+  if (!clip.youtubeId || veil.value) return null
+  switch (clip.youtubeStage) {
+    case 'processing': {
+      // Only spin while Sift is actually asking. Once it has stopped, a badge
+      // that keeps spinning promises progress nothing is watching for.
+      const watching = clip.youtubeWatchUntilMs > now.value
+      return {
+        label: 'Processing',
+        icon: watching ? 'i-lucide-loader-circle' : 'i-lucide-clock',
+        tone: 'busy',
+        spin: watching,
+        title: watching
+          ? 'YouTube is processing this video'
+          : 'YouTube was still processing this video when Sift last asked',
+      }
+    }
+    case 'rejected':
+      return {
+        label: 'Rejected',
+        icon: 'i-lucide-triangle-alert',
+        tone: 'bad',
+        spin: false,
+        title: clip.youtubeReason || 'YouTube rejected this video',
+      }
+    case 'failed':
+      return {
+        label: 'Failed',
+        icon: 'i-lucide-triangle-alert',
+        tone: 'bad',
+        spin: false,
+        title: clip.youtubeReason || 'YouTube could not process this video',
+      }
+    default:
+      return { label: 'YouTube', icon: 'i-lucide-youtube', tone: 'up', title: 'On YouTube' }
   }
 })
 
@@ -248,16 +296,18 @@ const seen = computed(() => Boolean(props.clip.seenAtMs) && !veil.value)
         <!-- The right-hand corner carries what has happened to a clip; the left
              carries what it is. Grouped, so neither has to know the other is
              there and the pair stays inside the thumbnail on a compact card. -->
-        <div v-if="seen || (clip.youtubeId && !veil)" class="badges-tr">
+        <div v-if="seen || ytBadge" class="badges-tr">
           <UBadge v-if="seen" class="badge seen" size="sm" icon="i-lucide-check" label="Watched" />
           <UBadge
-            v-if="clip.youtubeId && !veil"
+            v-if="ytBadge"
             class="badge yt"
+            :class="`is-${ytBadge.tone}`"
             size="sm"
-            icon="i-lucide-youtube"
-            label="YouTube"
-            aria-label="On YouTube"
-            title="On YouTube"
+            :icon="ytBadge.icon"
+            :label="ytBadge.label"
+            :aria-label="ytBadge.title"
+            :title="ytBadge.title"
+            :ui="ytBadge.spin ? { leadingIcon: 'animate-spin' } : undefined"
           />
         </div>
         <UBadge
@@ -517,6 +567,14 @@ const seen = computed(() => Boolean(props.clip.seenAtMs) && !veil.value)
 .badge.yt {
   color: var(--accent);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent);
+}
+/* The rose says "this is on YouTube and it is fine". A video YouTube is still
+   working on, or would not publish, borrows the amber every other unfinished
+   or unhappy state in the app already uses rather than inventing a colour. */
+.badge.yt.is-busy,
+.badge.yt.is-bad {
+  color: var(--warning);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--warning) 40%, transparent);
 }
 /* A flat wash rather than `.poster { opacity }`: the poster already owns an
    opacity transition for its load-in and the two would fight. */

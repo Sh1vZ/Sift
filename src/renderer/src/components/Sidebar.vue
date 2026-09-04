@@ -4,7 +4,7 @@ import ShinyText from './bits/ShinyText.vue'
 import ActivityPanel from './ActivityPanel.vue'
 import { motionEnabled } from '@/composables/useMotion'
 import { exportedClips, games, goClips, goGames, screen, view } from '@/composables/useLibrary'
-import { activityCount, activityOpen } from '@/composables/useActivity'
+import { activityBusy, activityCount, activityOpen } from '@/composables/useActivity'
 import { openSettings, settingsTab } from '@/composables/useSettings'
 
 /**
@@ -109,17 +109,17 @@ const navUi = {
           inset
         >
           <UTooltip
-            :text="activityCount ? `Activity · ${activityCount} running` : 'Activity'"
+            :text="activityCount ? `Activity · ${activityCount} active` : 'Activity'"
             :content="{ side: 'right' }"
           >
             <UButton
               class="activity"
-              :icon="activityCount ? 'i-lucide-loader-circle' : 'i-lucide-activity'"
+              :icon="activityBusy ? 'i-lucide-loader-circle' : 'i-lucide-activity'"
               :color="activityCount ? 'primary' : 'neutral'"
               variant="ghost"
               square
               size="lg"
-              :ui="{ leadingIcon: activityCount ? 'animate-spin size-6' : 'size-6' }"
+              :ui="{ leadingIcon: activityBusy ? 'animate-spin size-6' : 'size-6' }"
               aria-label="Activity"
               :aria-expanded="activityOpen"
             />

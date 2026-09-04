@@ -76,6 +76,11 @@ function placeholder(job: ExportJob): Clip {
     muted: job.muted,
     createdAtMs: job.createdAtMs,
     youtubeId: '',
+    youtubeAccountId: '',
+    youtubeStage: '',
+    youtubeReason: '',
+    youtubeCheckedAtMs: 0,
+    youtubeWatchUntilMs: 0,
     favourite: false,
     seenAtMs: 0,
   }

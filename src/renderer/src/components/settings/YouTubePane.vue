@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { now } from '@/composables/useLibrary'
+import { now, settings, updateSettings } from '@/composables/useLibrary'
+import { processingUploads, stageText } from '@/composables/useUploads'
 import {
   accounts,
   addAccount,
@@ -23,6 +24,7 @@ import {
   GOOGLE_CONSOLE_CREDENTIALS_URL,
   GOOGLE_CONSOLE_URL,
   GOOGLE_CONSOLE_YOUTUBE_API_URL,
+  QUOTA_COST,
   QUOTA_UNITS_PER_DAY,
   YOUTUBE_AUDIT_FORM_URL,
   formatUntil,
@@ -37,6 +39,21 @@ const CLIENT_SECRET_MAX_BYTES = 64 * 1024
 
 const showGuide = ref(false)
 const guideOpen = computed(() => accounts.value.length === 0 || showGuide.value)
+
+/**
+ * Names the cost outright. The user asked for no quota counting anywhere in
+ * Sift, so the honest thing is to say what a check is worth and let them judge.
+ */
+const checkDescription = computed(() =>
+  [
+    `Ask YouTube how an uploaded video is doing until it is ready — one unit a check against the ${QUOTA_UNITS_PER_DAY.toLocaleString()} a day, batched across videos, against ${QUOTA_COST.videosInsert.toLocaleString()} for the upload itself.`,
+    'Sift asks more often at first, then every few minutes, and stops after two hours; Check now asks again after that.',
+  ].join(' '),
+)
+
+const processingLine = computed(() =>
+  processingUploads.value.map((j) => `${j.title} · ${stageText(j)}`).join(' — '),
+)
 
 const summary = computed(() => {
   const n = accounts.value.length
@@ -234,6 +251,38 @@ const initials = (label: string): string =>
         title="No projects yet"
         description="Each Google Cloud project you add is its own daily upload budget."
       />
+    </SettingsPanel>
+
+    <SettingsPanel
+      title="After the upload"
+      description="Sending the file is only half of it — YouTube still has to process the video, and it can still refuse it."
+      flush
+    >
+      <SettingsRow icon="radar" title="Check processing status" :description="checkDescription">
+        <template #trailing>
+          <USwitch
+            :model-value="settings.youtubeCheckStatus"
+            size="lg"
+            aria-label="Check processing status"
+            @update:model-value="(v: boolean) => updateSettings({ youtubeCheckStatus: v })"
+          />
+        </template>
+      </SettingsRow>
+      <SettingsRow
+        v-if="processingUploads.length"
+        icon="loader"
+        title="Being processed now"
+        :description="processingLine"
+      >
+        <template #trailing>
+          <UBadge
+            color="primary"
+            variant="soft"
+            size="lg"
+            :label="String(processingUploads.length)"
+          />
+        </template>
+      </SettingsRow>
     </SettingsPanel>
 
     <SettingsPanel

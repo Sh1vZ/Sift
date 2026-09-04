@@ -28,6 +28,7 @@ const api: Api = {
     openYouTube: (id) => ipcRenderer.invoke('clip:open-youtube', id),
     copyYouTubeLink: (id) => ipcRenderer.invoke('clip:copy-youtube-link', id),
     removeFromYouTube: (id) => ipcRenderer.invoke('clip:remove-youtube', id),
+    checkOnYouTube: (id) => ipcRenderer.invoke('clip:check-youtube', id),
     setFavourite: (id, favourite) =>
       ipcRenderer.invoke('clip:set-favourite', id, favourite === true),
     setSeen: (id, seen) => ipcRenderer.invoke('clip:set-seen', id, seen === true),

@@ -1,7 +1,7 @@
 /** Types shared between the main process, the preload bridge and the renderer. */
 
 import type { ChangelogBlock } from './changelog'
-import type { UploadJob, YouTubeState } from './youtube'
+import type { UploadJob, VideoStage, YouTubeState } from './youtube'
 
 export type ProbeState = 'pending' | 'ok' | 'failed'
 
@@ -48,6 +48,16 @@ export interface Clip {
   createdAtMs: number
   /** YouTube video id once uploaded from Sift; '' otherwise. */
   youtubeId: string
+  /** The Google project that uploaded it — the only one whose token can ask after it. */
+  youtubeAccountId: string
+  /** What YouTube last said about the video; '' when Sift has never asked. */
+  youtubeStage: VideoStage | ''
+  /** YouTube's reason for a rejected or failed video, already phrased; '' otherwise. */
+  youtubeReason: string
+  /** When Sift last asked YouTube; 0 = never. */
+  youtubeCheckedAtMs: number
+  /** Automatic checks stop once this passes; 0 when Sift is not watching the video. */
+  youtubeWatchUntilMs: number
   /** User-set: pinned to the top of grids and reachable from the Favourites filter. */
   favourite: boolean
   /** When playback last passed the seen threshold; 0 when never watched. */
@@ -161,6 +171,12 @@ export interface Settings {
   minimizeToTray: boolean
   /** Look for a new version on launch and every few hours. Manual checks work either way. */
   autoCheckUpdates: boolean
+  /**
+   * Keep asking YouTube how an uploaded video is doing until it is live. One
+   * API unit a check, batched across videos; off means the stage never moves
+   * past "Uploaded" unless the user presses Check now.
+   */
+  youtubeCheckStatus: boolean
   /** Internal: the one-time `still running` tray balloon has been shown. Never surfaced in the UI. */
   trayHintShown: boolean
   /**
@@ -360,6 +376,7 @@ export const DEFAULT_SETTINGS: Settings = {
   concurrency: 2,
   minimizeToTray: false,
   autoCheckUpdates: true,
+  youtubeCheckStatus: true,
   trayHintShown: false,
   lastSeenVersion: '',
   dismissedGameMerges: [],

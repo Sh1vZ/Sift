@@ -11,9 +11,13 @@ import { existsSync } from 'node:fs'
 import { stat } from 'node:fs/promises'
 import type { ActionResult, Clip, ClipPatch } from '@shared/types'
 import {
+  WATCH_WINDOW_MS,
+  isStageTerminal,
+  stageSentence,
   validateUploadRequest,
   type UploadJob,
   type UploadRequest,
+  type VideoStatus,
   type YouTubePrivacy,
 } from '@shared/youtube'
 import type { Emit } from '../library'
@@ -31,13 +35,26 @@ const MAX_BYTES = 256 * 1024 ** 3
 
 const isTerminal = (j: UploadJob): boolean =>
   j.state === 'done' || j.state === 'failed' || j.state === 'cancelled'
-const isLive = (j: UploadJob): boolean => j.state === 'queued' || j.state === 'uploading'
+/**
+ * Bytes are moving, or about to. `processing` is deliberately neither this nor
+ * terminal: the file is gone, there is nothing left to cancel, and quitting or
+ * disconnecting a project costs nothing — so a job that YouTube is still
+ * chewing on must not block quit, disconnect, removal or a second upload.
+ */
+const isSending = (j: UploadJob): boolean => j.state === 'queued' || j.state === 'uploading'
 
 export interface UploadsDeps {
   emit: Emit
   accounts: YouTubeAccounts
   getClip(id: string): Clip | undefined
   patchClip(patch: ClipPatch): void
+  /**
+   * Hand the finished video to the watcher. Returns false when Sift is not
+   * going to ask after it — the setting is off — and the job is simply done.
+   */
+  watch(clipId: string, videoId: string, accountId: string, watchUntilMs: number): boolean
+  /** Stop asking about a clip's video, for a dismissed processing row. */
+  unwatch(clipId: string): void
 }
 
 export class YouTubeUploads {
@@ -54,13 +71,13 @@ export class YouTubeUploads {
   }
 
   hasActive(): boolean {
-    return [...this.jobs.values()].some(isLive)
+    return [...this.jobs.values()].some(isSending)
   }
 
   hasActiveFor(accountId: string): boolean {
     return [...this.jobs.values()].some(
       (j) =>
-        isLive(j) && (j.accountId === accountId || (j.accountId === '' && j.state === 'queued')),
+        isSending(j) && (j.accountId === accountId || (j.accountId === '' && j.state === 'queued')),
     )
   }
 
@@ -79,7 +96,7 @@ export class YouTubeUploads {
       return { ok: false, error: 'This clip has not been read yet. Try again in a moment.' }
     if (!existsSync(clip.path)) return { ok: false, error: 'The file is no longer on disk.' }
     if (clip.size > MAX_BYTES) return { ok: false, error: 'YouTube accepts files up to 256 GB.' }
-    if ([...this.jobs.values()].some((j) => isLive(j) && j.clipId === clip.id))
+    if ([...this.jobs.values()].some((j) => isSending(j) && j.clipId === clip.id))
       return { ok: false, error: 'This clip is already being uploaded.' }
     if (req.accountId && accounts.isExhausted(req.accountId))
       return {
@@ -111,6 +128,11 @@ export class YouTubeUploads {
       bytesSent: 0,
       bytesPerSecond: 0,
       videoId: '',
+      stage: 'unknown',
+      stageProgress: -1,
+      stageEtaMs: 0,
+      checkedAtMs: 0,
+      checksStopped: false,
       privacyDowngraded: false,
       playlistError: '',
       error: '',
@@ -133,13 +155,22 @@ export class YouTubeUploads {
       this.pruneLater(job)
     } else if (job.state === 'uploading') {
       this.abort?.abort(new Error('Upload cancelled.'))
+    } else if (job.state === 'processing') {
+      // The file is already on YouTube; there is nothing left here to stop.
+      return {
+        ok: false,
+        error: 'The upload has finished. Remove the video from YouTube to undo it.',
+      }
     }
     return { ok: true }
   }
 
+  /** Clears a finished row, or stops asking about one YouTube is still processing. */
   dismiss(id: string): void {
     const job = this.jobs.get(id)
-    if (!job || !isTerminal(job)) return
+    if (!job) return
+    if (job.state === 'processing') this.deps.unwatch(job.clipId)
+    else if (!isTerminal(job)) return
     this.jobs.delete(id)
     this.scheduleEmit(true)
   }
@@ -232,7 +263,14 @@ export class YouTubeUploads {
       job.bytesSent = job.size
       const got = video.status?.privacyStatus as YouTubePrivacy | undefined
       job.privacyDowngraded = Boolean(got && got !== req.privacy)
-      this.deps.patchClip({ id: clip.id, youtubeId: video.id })
+      const watchUntilMs = Date.now() + WATCH_WINDOW_MS
+      this.deps.patchClip({
+        id: clip.id,
+        youtubeId: video.id,
+        // Which project sent it: the only token that may ask after it later.
+        youtubeAccountId: job.accountId,
+        youtubeReason: '',
+      })
       if (req.playlistId) {
         try {
           await addToPlaylist(accounts.ctx(job.accountId, abort.signal), req.playlistId, video.id)
@@ -240,7 +278,22 @@ export class YouTubeUploads {
           job.playlistError = friendlyError(err, job.accountLabel)
         }
       }
-      job.state = 'done'
+      // The bytes are up, but YouTube has not finished with them. The job only
+      // reaches `done` when YouTube says the video is playable — or when Sift
+      // is not going to ask, in which case sending it is the whole story and
+      // the clip is left saying nothing rather than "processing" for ever.
+      const watched = this.deps.watch(clip.id, video.id, job.accountId, watchUntilMs)
+      if (watched) {
+        job.stage = 'processing'
+        job.state = 'processing'
+        this.deps.patchClip({
+          id: clip.id,
+          youtubeStage: 'processing',
+          youtubeWatchUntilMs: watchUntilMs,
+        })
+      } else {
+        job.state = 'done'
+      }
     } catch (err) {
       if (abort.signal.aborted) {
         job.state = 'cancelled'
@@ -252,8 +305,97 @@ export class YouTubeUploads {
       this.abort = null
       this.requests.delete(job.id)
       this.scheduleEmit(true)
-      this.pruneLater(job)
+      // A processing job prunes when YouTube answers, not on a timer.
+      if (job.state !== 'processing') this.pruneLater(job)
     }
+  }
+
+  /**
+   * What the watcher learned about one clip's video. A null status means Sift
+   * has simply stopped asking, so the job keeps whatever it last knew.
+   */
+  setStatus(
+    clipId: string,
+    status: VideoStatus | null,
+    checkedAtMs: number,
+    stopped: boolean,
+  ): void {
+    const job = this.newestFor(clipId)
+    if (job?.state !== 'processing') return
+    if (status) {
+      job.stage = status.stage
+      job.stageProgress = status.progress
+      job.stageEtaMs = status.etaMs
+      job.checkedAtMs = checkedAtMs
+    }
+    job.checksStopped = stopped
+    if (status && isStageTerminal(status.stage)) {
+      if (status.stage === 'ready') {
+        job.state = 'done'
+      } else {
+        job.state = 'failed'
+        job.error = stageSentence(status)
+      }
+    } else if (stopped) {
+      // The bytes are up and the video exists; Sift just has nothing more to add.
+      job.state = 'done'
+    }
+    this.scheduleEmit(job.state !== 'processing')
+    if (job.state !== 'processing') this.pruneLater(job)
+  }
+
+  /**
+   * Puts back the rows for videos the last run was still watching, so the
+   * Activity panel carries on across a restart. The bytes are long gone, so
+   * these jobs show a full bar and no rate.
+   */
+  restore(clips: readonly Clip[]): void {
+    const { accounts } = this.deps
+    for (const clip of clips) {
+      const stage = clip.youtubeStage || 'processing'
+      this.jobs.set(clip.youtubeId, {
+        // The video id is stable and unique, and it keeps a relaunch from
+        // colliding with a row the same session already holds.
+        id: clip.youtubeId,
+        clipId: clip.id,
+        clipTitle: clip.title,
+        thumb: clip.thumb,
+        game: clip.game,
+        size: clip.size,
+        title: clip.title,
+        privacy: 'private',
+        playlistId: '',
+        playlistTitle: '',
+        accountId: clip.youtubeAccountId,
+        accountLabel: accounts.label(clip.youtubeAccountId),
+        channelTitle: accounts.channelTitle(clip.youtubeAccountId),
+        state: 'processing',
+        progress: 1,
+        bytesSent: clip.size,
+        bytesPerSecond: 0,
+        videoId: clip.youtubeId,
+        stage: stage === 'unknown' ? 'processing' : stage,
+        stageProgress: -1,
+        stageEtaMs: 0,
+        checkedAtMs: clip.youtubeCheckedAtMs,
+        checksStopped: false,
+        privacyDowngraded: false,
+        playlistError: '',
+        error: '',
+        createdAtMs: clip.youtubeCheckedAtMs || Date.now(),
+      })
+    }
+    if (clips.length) this.scheduleEmit(true)
+  }
+
+  /** The job to speak for a clip: the one still running, else the most recent. */
+  private newestFor(clipId: string): UploadJob | undefined {
+    let best: UploadJob | undefined
+    for (const j of this.jobs.values()) {
+      if (j.clipId !== clipId) continue
+      if (!best || j.state === 'processing' || j.createdAtMs > best.createdAtMs) best = j
+    }
+    return best
   }
 
   private pruneLater(job: UploadJob): void {

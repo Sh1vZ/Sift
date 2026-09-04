@@ -744,6 +744,11 @@ export class Library {
         muted: job.muted,
         createdAtMs: Date.now(),
         youtubeId: '',
+        youtubeAccountId: '',
+        youtubeStage: '',
+        youtubeReason: '',
+        youtubeCheckedAtMs: 0,
+        youtubeWatchUntilMs: 0,
         // A clip you just cut is neither starred nor watched yet.
         favourite: false,
         seenAtMs: 0,
@@ -885,8 +890,14 @@ export class Library {
       muted: previous?.muted ?? false,
       createdAtMs:
         previous?.createdAtMs ?? (folder.kind === 'clips' ? st.birthtimeMs || st.mtimeMs : 0),
-      // A re-probed file is still the video that was uploaded.
+      // A re-probed file is still the video that was uploaded, and YouTube is
+      // still doing whatever it was doing with it.
       youtubeId: previous?.youtubeId ?? '',
+      youtubeAccountId: previous?.youtubeAccountId ?? '',
+      youtubeStage: previous?.youtubeStage ?? '',
+      youtubeReason: previous?.youtubeReason ?? '',
+      youtubeCheckedAtMs: previous?.youtubeCheckedAtMs ?? 0,
+      youtubeWatchUntilMs: previous?.youtubeWatchUntilMs ?? 0,
       // User state outlives a re-index: a file that grew by a byte is still the
       // clip you starred and the one you already watched.
       favourite: previous?.favourite ?? false,

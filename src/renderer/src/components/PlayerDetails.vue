@@ -3,23 +3,26 @@ import { computed, ref, watch } from 'vue'
 import type { Clip } from '@shared/types'
 import FavouriteButton from './FavouriteButton.vue'
 import {
+  checkOnYouTube,
   clipsFolder,
   copyClipFile,
   copyClipPath,
   copyYouTubeLink,
   getClip,
+  now,
   openYouTube,
   pendingByClip,
   renameClip,
   revealClip,
 } from '@/composables/useLibrary'
-import { cancelUpload, progressText, uploadByClip } from '@/composables/useUploads'
+import { cancelUpload, progressText, stageText, uploadByClip } from '@/composables/useUploads'
 import { youtubeUrl } from '@shared/youtube'
 import {
   dirname,
   formatBytes,
   formatDuration,
   formatFull,
+  formatRelative,
   formatResolution,
   formatTimecode,
 } from '@/utils/format'
@@ -105,6 +108,55 @@ function onUploadButton(): void {
   else emit('upload')
 }
 const videoUrl = computed(() => (props.clip.youtubeId ? youtubeUrl(props.clip.youtubeId) : ''))
+
+/** What YouTube last said about the video, in the same words the cards use. */
+const stage = computed(() => {
+  const clip = props.clip
+  if (!clip.youtubeId) return null
+  const job = upload.value
+  if (job && (job.state === 'processing' || job.state === 'done' || job.state === 'failed')) {
+    const line = stageText(job)
+    if (line)
+      return {
+        line,
+        bad: job.state === 'failed',
+        busy: job.state === 'processing' && !job.checksStopped,
+      }
+  }
+  switch (clip.youtubeStage) {
+    case 'processing':
+      // Spin only while Sift is still asking; a stopped check is a clock, not a loader.
+      return {
+        line:
+          clip.youtubeWatchUntilMs > now.value
+            ? 'Processing on YouTube'
+            : 'Still processing on YouTube',
+        bad: false,
+        busy: clip.youtubeWatchUntilMs > now.value,
+      }
+    case 'ready':
+      return { line: 'Ready on YouTube', bad: false, busy: false }
+    case 'rejected':
+      return { line: clip.youtubeReason || 'YouTube rejected this video', bad: true, busy: false }
+    case 'failed':
+      return {
+        line: clip.youtubeReason || 'YouTube could not process this video',
+        bad: true,
+        busy: false,
+      }
+    default:
+      return null
+  }
+})
+
+/** "Checked 4 minutes ago", so a stale answer never reads as a fresh one. */
+const checkedLine = computed(() =>
+  props.clip.youtubeCheckedAtMs
+    ? `Checked ${formatRelative(props.clip.youtubeCheckedAtMs, now.value).toLowerCase()}`
+    : '',
+)
+
+const checking = computed(() => pendingAction.value?.kind === 'check-youtube')
 const sourceClip = computed(() => (props.clip.sourceId ? getClip(props.clip.sourceId) : undefined))
 const sourceLine = computed(() => {
   const c = props.clip
@@ -234,11 +286,12 @@ const rows = computed<Row[]>(() => {
         <UBadge v-if="codec" color="neutral" variant="subtle" size="md" :label="codec" />
         <UBadge
           v-if="clip.youtubeId"
-          color="error"
+          :color="stage?.bad ? 'warning' : 'error'"
           variant="subtle"
           size="md"
-          icon="i-lucide-youtube"
-          label="On YouTube"
+          :icon="stage?.busy ? 'i-lucide-loader-circle' : 'i-lucide-youtube'"
+          :label="stage?.busy ? 'Processing' : stage?.bad ? 'Not published' : 'On YouTube'"
+          :ui="stage?.busy ? { leadingIcon: 'animate-spin' } : undefined"
         />
         <UBadge
           v-if="isExport"
@@ -303,6 +356,40 @@ const rows = computed<Row[]>(() => {
 
       <section v-if="videoUrl">
         <h4>YouTube</h4>
+        <!-- The upload is not the end of it: YouTube still has to process the
+             video, and it can still refuse it. This is that answer, so the
+             user never has to open Studio to get it. -->
+        <div v-if="stage" class="link-row static">
+          <UIcon
+            :name="
+              stage.busy
+                ? 'i-lucide-loader-circle'
+                : stage.bad
+                  ? 'i-lucide-triangle-alert'
+                  : 'i-lucide-circle-check'
+            "
+            class="row-icon"
+            :class="{ 'animate-spin': stage.busy, 'is-bad': stage.bad }"
+          />
+          <span class="link-text">
+            <span class="link-title">{{ stage.line }}</span>
+            <span v-if="checkedLine" class="link-sub truncate">{{ checkedLine }}</span>
+          </span>
+          <span class="row-actions">
+            <UTooltip text="Ask YouTube now">
+              <UButton
+                icon="i-lucide-refresh-cw"
+                color="neutral"
+                variant="ghost"
+                square
+                size="md"
+                :loading="checking"
+                aria-label="Check on YouTube now"
+                @click="checkOnYouTube(clip)"
+              />
+            </UTooltip>
+          </span>
+        </div>
         <div class="link-row static">
           <UIcon name="i-lucide-youtube" class="row-icon" />
           <span class="link-text">
@@ -600,6 +687,10 @@ h4 {
 }
 .link-row:disabled .row-icon {
   color: var(--fg-dim);
+}
+/* A video YouTube would not publish; the same amber the cards use for it. */
+.row-icon.is-bad {
+  color: var(--warning);
 }
 .link-text {
   flex: 1;

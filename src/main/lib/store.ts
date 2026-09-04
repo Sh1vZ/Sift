@@ -1,5 +1,6 @@
 import { DatabaseSync, type StatementSync } from 'node:sqlite'
 import { DEFAULT_SETTINGS, type Clip, type LibraryFolder, type Settings } from '@shared/types'
+import { isVideoStage } from '@shared/youtube'
 
 interface LibraryData {
   folders: LibraryFolder[]
@@ -51,6 +52,16 @@ const MIGRATIONS: Array<(db: DatabaseSync) => void> = [
     db.exec("ALTER TABLE clips ADD COLUMN source_game TEXT NOT NULL DEFAULT ''")
     db.exec('UPDATE clips SET source_game = game')
     db.exec(GAME_ALIASES_TABLE)
+  },
+  // v6 -> v7: clips remember what YouTube did with the video after the upload —
+  // the stage survives a restart, and the project id tells Sift whose token may
+  // ask after it. Existing rows keep '' / 0, which reads as "never asked".
+  (db) => {
+    db.exec("ALTER TABLE clips ADD COLUMN youtube_account_id TEXT NOT NULL DEFAULT ''")
+    db.exec("ALTER TABLE clips ADD COLUMN youtube_stage TEXT NOT NULL DEFAULT ''")
+    db.exec("ALTER TABLE clips ADD COLUMN youtube_reason TEXT NOT NULL DEFAULT ''")
+    db.exec('ALTER TABLE clips ADD COLUMN youtube_checked_at_ms REAL NOT NULL DEFAULT 0')
+    db.exec('ALTER TABLE clips ADD COLUMN youtube_watch_until_ms REAL NOT NULL DEFAULT 0')
   },
 ]
 const SCHEMA_VERSION = MIGRATIONS.length + 1
@@ -139,7 +150,12 @@ CREATE TABLE IF NOT EXISTS clips (
   youtube_id     TEXT NOT NULL DEFAULT '',
   favourite      INTEGER NOT NULL DEFAULT 0,
   seen_at_ms     REAL NOT NULL DEFAULT 0,
-  source_game    TEXT NOT NULL DEFAULT ''
+  source_game    TEXT NOT NULL DEFAULT '',
+  youtube_account_id     TEXT NOT NULL DEFAULT '',
+  youtube_stage          TEXT NOT NULL DEFAULT '',
+  youtube_reason         TEXT NOT NULL DEFAULT '',
+  youtube_checked_at_ms  REAL NOT NULL DEFAULT 0,
+  youtube_watch_until_ms REAL NOT NULL DEFAULT 0
 );
 ${YOUTUBE_ACCOUNTS_TABLE}
 ${GAME_ALIASES_TABLE}
@@ -183,6 +199,11 @@ interface ClipRow {
   favourite: number
   seen_at_ms: number
   source_game: string
+  youtube_account_id: string
+  youtube_stage: string
+  youtube_reason: string
+  youtube_checked_at_ms: number
+  youtube_watch_until_ms: number
 }
 
 /** A `youtube_accounts` row as stored. The `_enc` columns hold base64 ciphertext or ''. */
@@ -326,8 +347,10 @@ export class Store {
         INSERT INTO clips (id, path, name, title, ext, folder_id, game, size, mtime_ms, recorded_at_ms,
           duration, width, height, fps, vcodec, has_audio, thumb, sprite, sprite_frames, probe_state,
           source_id, trim_start, trim_end, muted, created_at_ms, youtube_id, favourite, seen_at_ms,
-          source_game)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          source_game, youtube_account_id, youtube_stage, youtube_reason, youtube_checked_at_ms,
+          youtube_watch_until_ms)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+          ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
           path = excluded.path, name = excluded.name, title = excluded.title, ext = excluded.ext,
           folder_id = excluded.folder_id, game = excluded.game, size = excluded.size,
@@ -338,7 +361,11 @@ export class Store {
           source_id = excluded.source_id, trim_start = excluded.trim_start, trim_end = excluded.trim_end,
           muted = excluded.muted, created_at_ms = excluded.created_at_ms,
           youtube_id = excluded.youtube_id, favourite = excluded.favourite,
-          seen_at_ms = excluded.seen_at_ms, source_game = excluded.source_game`),
+          seen_at_ms = excluded.seen_at_ms, source_game = excluded.source_game,
+          youtube_account_id = excluded.youtube_account_id, youtube_stage = excluded.youtube_stage,
+          youtube_reason = excluded.youtube_reason,
+          youtube_checked_at_ms = excluded.youtube_checked_at_ms,
+          youtube_watch_until_ms = excluded.youtube_watch_until_ms`),
       deleteClip: db.prepare('DELETE FROM clips WHERE id = ?'),
       setSetting: db.prepare(
         'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
@@ -557,6 +584,11 @@ export class Store {
       c.favourite ? 1 : 0,
       c.seenAtMs,
       c.sourceGame,
+      c.youtubeAccountId,
+      c.youtubeStage,
+      c.youtubeReason,
+      c.youtubeCheckedAtMs,
+      c.youtubeWatchUntilMs,
     )
   }
 
@@ -613,6 +645,13 @@ function rowToClip(r: ClipRow): Clip {
     muted: Boolean(r.muted),
     createdAtMs: r.created_at_ms,
     youtubeId: r.youtube_id,
+    youtubeAccountId: r.youtube_account_id,
+    // Anything the column does not recognise reads as "never asked", so a row
+    // written by a future build cannot put an unknown stage into the UI.
+    youtubeStage: isVideoStage(r.youtube_stage) ? r.youtube_stage : '',
+    youtubeReason: r.youtube_reason,
+    youtubeCheckedAtMs: r.youtube_checked_at_ms,
+    youtubeWatchUntilMs: r.youtube_watch_until_ms,
     favourite: Boolean(r.favourite),
     seenAtMs: r.seen_at_ms,
   }

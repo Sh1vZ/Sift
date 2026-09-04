@@ -113,8 +113,13 @@ if (!app.requestSingleInstanceLock()) {
       },
       store: lib.store,
       getClip: (id) => lib.clip(id),
+      listClips: () => Object.values(lib.store.data.clips),
       patchClip: (patch) => lib.patchClip(patch),
+      checkStatus: () => lib.store.data.settings.youtubeCheckStatus,
     })
+    // Videos the last run left processing pick up where they stopped. Quitting
+    // is never held up for one: `hasActive()` counts moving bytes only.
+    youtube.resume()
 
     installProtocol((id) => library?.clipPath(id))
     registerIpc(

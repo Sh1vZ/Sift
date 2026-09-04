@@ -3,7 +3,7 @@ import type { ExportJob, ScanState } from '@shared/types'
 import type { UploadJob } from '@shared/youtube'
 import { activeExports, exportJobs, exportLabel } from './useExports'
 import { scan } from './useLibrary'
-import { activeUploads, uploadJobs, uploadLabel } from './useUploads'
+import { activeUploads, processingUploads, uploadJobs, uploadLabel } from './useUploads'
 
 /**
  * The one line of background activity the title bar shows. Jobs the user
@@ -36,7 +36,20 @@ export const activityItems = computed<ActivityItem[]>(() => {
 
 /** Live work only — what the badge on the sidebar counts. Finished jobs wait in the panel. */
 export const activityCount = computed<number>(
-  () => activeExports.value.length + activeUploads.value.length + (scanBusy() ? 1 : 0),
+  () =>
+    activeExports.value.length +
+    activeUploads.value.length +
+    processingUploads.value.length +
+    (scanBusy() ? 1 : 0),
+)
+
+/**
+ * Whether Sift itself is working, which is what may spin. A video YouTube is
+ * processing counts in the badge but not here: it can sit there for an hour,
+ * and an hour of spinning icon reads as a hang, not as progress.
+ */
+export const activityBusy = computed<boolean>(
+  () => activeExports.value.length > 0 || activeUploads.value.length > 0 || scanBusy(),
 )
 
 export const activityOpen = ref(false)

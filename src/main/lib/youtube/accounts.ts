@@ -89,6 +89,11 @@ export interface AccountsDeps {
   openExternal(url: string): void
   /** Whether an upload on that project is queued or running (disconnect/remove refuse then). */
   hasActiveUpload(accountId: string): boolean
+  /**
+   * The project can no longer be asked anything. Nothing else owns a token for
+   * its videos, so whatever is still being watched has to be let go.
+   */
+  onGone(accountId: string): void
 }
 
 export class YouTubeAccounts {
@@ -303,6 +308,7 @@ export class YouTubeAccounts {
     this.accounts.delete(id)
     this.deps.store.deleteYouTubeAccount(id)
     void this.deps.store.flush()
+    this.deps.onGone(id)
     this.scheduleEmit(true)
     return { ok: true }
   }
@@ -322,6 +328,7 @@ export class YouTubeAccounts {
     a.error = ''
     this.persist(a)
     void this.deps.store.flush()
+    this.deps.onGone(id)
     this.scheduleEmit(true)
     return { ok: true }
   }

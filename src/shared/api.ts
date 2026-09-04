@@ -65,6 +65,8 @@ export interface Api {
     copyYouTubeLink(id: string): Promise<ActionResult>
     /** Deletes the video from YouTube (permanent) and forgets the id on the clip. */
     removeFromYouTube(id: string): Promise<ActionResult>
+    /** Ask YouTube once, now, how the clip's video is doing. */
+    checkOnYouTube(id: string): Promise<ActionResult>
     /** Stars the clip, or takes the star off. */
     setFavourite(id: string, favourite: boolean): Promise<ActionResult>
     /** Marks the clip watched (stamping the time) or back to unwatched. */

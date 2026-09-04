@@ -6,8 +6,13 @@
  * its `reason`.
  */
 
-import type { YouTubeChannel, YouTubePlaylist, YouTubePrivacy } from '@shared/youtube'
-import { YOUTUBE_PRIVACIES } from '@shared/youtube'
+import type {
+  RawVideoStatus,
+  YouTubeChannel,
+  YouTubePlaylist,
+  YouTubePrivacy,
+} from '@shared/youtube'
+import { VIDEOS_PER_CALL, YOUTUBE_PRIVACIES } from '@shared/youtube'
 import { OAuthError } from './oauth'
 
 export const API = 'https://www.googleapis.com/youtube/v3'
@@ -211,6 +216,57 @@ export async function deleteVideo(ctx: ApiContext, videoId: string): Promise<boo
     if (err instanceof YouTubeApiError && err.status === 404) return true
     throw err
   }
+}
+
+interface VideoStatusListJson {
+  items?: Array<{
+    id?: string
+    status?: Record<string, unknown>
+    processingDetails?: {
+      processingStatus?: string
+      processingFailureReason?: string
+      processingProgress?: { partsTotal?: string; partsProcessed?: string; timeLeftMs?: string }
+    }
+  }>
+}
+
+/**
+ * What YouTube has done with videos this channel owns, keyed by video id. Ids
+ * that come back missing are gone from the channel.
+ *
+ * One quota unit per call whatever the part list or the number of ids — which
+ * is why the watcher batches up to `VIDEOS_PER_CALL` ids and groups them by
+ * project. Grouping is not only thrift: `status` and `processingDetails` are
+ * only returned to the owner's token, and each project is its own quota bucket.
+ */
+export async function listVideoStatus(
+  ctx: ApiContext,
+  ids: readonly string[],
+): Promise<Map<string, RawVideoStatus>> {
+  const out = new Map<string, RawVideoStatus>()
+  if (!ids.length) return out
+  const u = new URL(`${API}/videos`)
+  u.searchParams.set('part', 'status,processingDetails')
+  u.searchParams.set('id', ids.join(','))
+  u.searchParams.set('maxResults', String(VIDEOS_PER_CALL))
+  const json = await ytJson<VideoStatusListJson>(ctx, u.toString(), { method: 'GET' })
+  for (const item of json.items ?? []) {
+    if (!item.id) continue
+    const s = (item.status ?? {}) as Record<string, string | undefined>
+    const d = item.processingDetails ?? {}
+    out.set(item.id, {
+      uploadStatus: s.uploadStatus,
+      failureReason: s.failureReason,
+      rejectionReason: s.rejectionReason,
+      privacyStatus: s.privacyStatus,
+      processingStatus: d.processingStatus,
+      processingFailureReason: d.processingFailureReason,
+      partsTotal: d.processingProgress?.partsTotal,
+      partsProcessed: d.processingProgress?.partsProcessed,
+      timeLeftMs: d.processingProgress?.timeLeftMs,
+    })
+  }
+  return out
 }
 
 // ---------------------------------------------------------------- playlists

@@ -5,14 +5,25 @@
  * nothing here opens a socket.
  */
 import {
+  VIDEOS_PER_CALL,
+  WATCH_BACKOFF_MS,
+  WATCH_WINDOW_MS,
   formatUntil,
   isExhausted,
+  isStageTerminal,
+  mapVideoStatus,
   nextPacificMidnightMs,
   pacificDayKey,
   parseClientSecretJson,
+  stageLine,
+  stageReason,
+  stageSentence,
   tagsLength,
   validateUploadRequest,
+  watchDelayMs,
   youtubeUrl,
+  type RawVideoStatus,
+  type UploadJob,
   type UploadRequest,
   type YouTubeAccount,
 } from '@shared/youtube'
@@ -221,11 +232,149 @@ function errorCases(): void {
   check(friendlyError(new Error('boom')) === 'boom', 'other errors pass their message through')
 }
 
+/** A raw videos.list item; YouTube sends its counts as strings, so these do too. */
+const raw = (patch: Partial<RawVideoStatus> = {}): RawVideoStatus => ({
+  uploadStatus: 'uploaded',
+  processingStatus: 'processing',
+  ...patch,
+})
+
+function videoStatusCases(): void {
+  const going = mapVideoStatus(raw({ partsTotal: '8', partsProcessed: '3', timeLeftMs: '120000' }))
+  check(
+    going.stage === 'processing' && going.progress === 0.375 && going.etaMs === 120_000,
+    'a processing video reports its parts and the time YouTube says is left',
+  )
+  check(!isStageTerminal(going.stage), 'processing is not a final answer')
+
+  const noParts = mapVideoStatus(raw())
+  check(
+    noParts.stage === 'processing' && noParts.progress === -1 && noParts.etaMs === 0,
+    'YouTube giving no parts reads as unknown progress, never 0% and never NaN',
+  )
+
+  const over = mapVideoStatus(raw({ partsTotal: '8', partsProcessed: '9' }))
+  check(over.progress === 1, 'more parts done than total is clamped to 1')
+
+  const done = mapVideoStatus(raw({ uploadStatus: 'processed', processingStatus: 'succeeded' }))
+  check(
+    done.stage === 'ready' && done.progress === 1 && done.reason === '' && isStageTerminal('ready'),
+    'a processed video is ready, complete and blameless',
+  )
+  check(
+    mapVideoStatus(raw({ uploadStatus: 'processed' })).stage === 'ready',
+    'processed without processingDetails is still ready',
+  )
+
+  const rejected = mapVideoStatus(raw({ uploadStatus: 'rejected', rejectionReason: 'copyright' }))
+  check(
+    rejected.stage === 'rejected' && /copyright/i.test(rejected.reason),
+    'a rejected video names why',
+  )
+  check(
+    mapVideoStatus(raw({ uploadStatus: 'rejected', processingStatus: 'succeeded' })).stage ===
+      'rejected',
+    'uploadStatus wins: a rejected video also reports processing succeeded',
+  )
+
+  const odd = mapVideoStatus(raw({ uploadStatus: 'rejected', rejectionReason: 'somethingNew' }))
+  check(
+    odd.stage === 'rejected' && odd.reason.includes('somethingNew'),
+    'an unknown rejection code surfaces the code rather than undefined',
+  )
+  check(
+    !stageSentence(odd).includes('undefined') && stageSentence(odd).endsWith('.'),
+    'the sentence for an unknown code is still a sentence',
+  )
+
+  check(
+    mapVideoStatus(raw({ uploadStatus: 'failed', failureReason: 'codecs' })).stage === 'failed',
+    'a failed upload is failed',
+  )
+  check(
+    mapVideoStatus(raw({ processingStatus: 'terminated' })).stage === 'failed',
+    'terminated processing counts as failed',
+  )
+  const gone = mapVideoStatus(raw({ uploadStatus: 'deleted' }))
+  check(gone.stage === 'deleted' && isStageTerminal('deleted'), 'a deleted video is final')
+  check(stageReason('') === '', 'no code means no reason fragment')
+}
+
+function watchScheduleCases(): void {
+  const ladder = [0, 1, 2, 3, 4].map((n) => watchDelayMs(n))
+  check(
+    ladder.join() === WATCH_BACKOFF_MS.join(),
+    'the ladder walks 15 s to 5 min as answers come back',
+  )
+  const last = WATCH_BACKOFF_MS[WATCH_BACKOFF_MS.length - 1]
+  check(watchDelayMs(99) === last, 'the ladder saturates rather than growing forever')
+  check(
+    WATCH_BACKOFF_MS.every((v, i) => i === 0 || v > WATCH_BACKOFF_MS[i - 1]),
+    'the ladder only ever widens',
+  )
+  check(watchDelayMs(0, 90_000) === 95_000, "YouTube's own estimate aims the next call")
+  check(watchDelayMs(0, 1) === WATCH_BACKOFF_MS[0], 'a tiny estimate cannot make Sift hot-loop')
+  check(watchDelayMs(0, 3_600_000) === last, 'a huge estimate cannot stall the ladder')
+  check(VIDEOS_PER_CALL === 50, 'one call carries the 50 ids YouTube allows')
+  check(WATCH_WINDOW_MS === 2 * 60 * 60_000, 'automatic checks stop after two hours')
+}
+
+const job = (patch: Partial<UploadJob> = {}): UploadJob =>
+  ({
+    stage: 'processing',
+    stageProgress: -1,
+    stageEtaMs: 0,
+    checkedAtMs: 0,
+    checksStopped: false,
+    error: '',
+    ...patch,
+  }) as UploadJob
+
+function stageLineCases(): void {
+  const now = 1_700_000_000_000
+  check(
+    stageLine(job(), now) === 'Processing on YouTube',
+    'with nothing to report the line is just the stage, never "0%"',
+  )
+  check(
+    stageLine(job({ stageProgress: 0.45 }), now) === 'Processing on YouTube · 45%',
+    'a known fraction is shown as a percentage',
+  )
+  const withEta = stageLine(
+    job({ stageProgress: 0.45, stageEtaMs: 300_000, checkedAtMs: now }),
+    now,
+  )
+  check(
+    withEta === 'Processing on YouTube · 45% · 5 min left',
+    "YouTube's estimate is counted from when it was given",
+  )
+  check(
+    !stageLine(job({ stageProgress: 0.45, stageEtaMs: 20_000, checkedAtMs: now }), now).includes(
+      'left',
+    ),
+    'an estimate under a minute is left off rather than rounded to "now"',
+  )
+  check(
+    stageLine(job({ checksStopped: true }), now) === 'Still processing on YouTube',
+    'once Sift stops asking it says so',
+  )
+  check(stageLine(job({ stage: 'ready' }), now) === 'Ready on YouTube', 'ready is not "live"')
+  check(
+    stageLine(job({ stage: 'rejected', error: 'YouTube rejected this video.' }), now) ===
+      'YouTube rejected this video.',
+    'a bad outcome shows the sentence already built for it',
+  )
+  check(stageLine(job({ stage: 'unknown' }), now) === '', 'nothing known means nothing said')
+}
+
 requestCases()
 clientSecretCases()
 pacificDayCases()
 oauthCases()
 uploadHelperCases()
 errorCases()
+videoStatusCases()
+watchScheduleCases()
+stageLineCases()
 console.log(failed ? `${failed} check(s) failed` : 'ALL OK')
 process.exit(failed ? 1 : 0)

@@ -569,7 +569,7 @@ export async function revealClipsDir(): Promise<void> {
 
 // ------------------------------------------------------------ pending work
 
-export type PendingKind = 'delete' | 'rename' | 'remove-youtube' | 'copy-file'
+export type PendingKind = 'delete' | 'rename' | 'remove-youtube' | 'check-youtube' | 'copy-file'
 
 export interface PendingAction {
   kind: PendingKind
@@ -714,6 +714,17 @@ export async function copyYouTubeLink(clip: Clip): Promise<void> {
   const res = await api.clips.copyYouTubeLink(clip.id)
   if (res.ok) toast('success', 'Link copied', youtubeUrl(clip.youtubeId))
   else toast('error', 'Could not copy the link', res.error)
+}
+
+/**
+ * Asks YouTube where the video is right now. The watcher does this on its own
+ * while an upload is fresh; this is the button for after it has stopped.
+ */
+export async function checkOnYouTube(clip: Clip): Promise<void> {
+  await withPending(clip.id, 'check-youtube', 'Asking YouTube…', async () => {
+    const res = await api.clips.checkOnYouTube(clip.id)
+    if (!res.ok) toast('error', 'Could not check the video', res.error)
+  })
 }
 
 /** Deletes the video on YouTube. Confirmed first: YouTube has no trash to get it back from. */

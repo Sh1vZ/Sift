@@ -76,7 +76,12 @@ export interface UploadRequest {
   accountId: string
 }
 
-export type UploadState = 'queued' | 'uploading' | 'done' | 'failed' | 'cancelled'
+/**
+ * `processing` sits between the last byte and `done`: YouTube has the file and
+ * is transcoding it. Sift only leaves that state when YouTube says the video is
+ * playable, refuses it, or the watch window runs out.
+ */
+export type UploadState = 'queued' | 'uploading' | 'processing' | 'done' | 'failed' | 'cancelled'
 
 export interface UploadJob {
   id: string
@@ -101,6 +106,16 @@ export interface UploadJob {
   bytesPerSecond: number
   /** Set once YouTube returns the video resource. */
   videoId: string
+  /** What YouTube last said about the video itself; 'unknown' until the first check. */
+  stage: VideoStage
+  /** 0..1 through YouTube's processing parts; -1 when it reports none. */
+  stageProgress: number
+  /** YouTube's own estimate of the time left, ms; 0 when it gives none. */
+  stageEtaMs: number
+  /** When Sift last asked YouTube about the video. 0 = never. */
+  checkedAtMs: number
+  /** Sift has stopped asking on its own — the window lapsed, or checks are off. */
+  checksStopped: boolean
   /** YouTube returned a stricter privacyStatus than requested (unverified project). */
   privacyDowngraded: boolean
   /** Set when the upload succeeded but playlistItems.insert did not. */
@@ -108,6 +123,214 @@ export interface UploadJob {
   error: string
   createdAtMs: number
 }
+
+// ------------------------------------------------- what YouTube did with it
+
+/**
+ * Where a video is once YouTube has the bytes; `unknown` means Sift has not
+ * asked yet. Note what is absent: the Data API does not expose Studio's
+ * "Checks" step, so Sift never claims to know about copyright scanning.
+ */
+export type VideoStage = 'unknown' | 'processing' | 'ready' | 'rejected' | 'failed' | 'deleted'
+
+export const VIDEO_STAGES: readonly VideoStage[] = [
+  'unknown',
+  'processing',
+  'ready',
+  'rejected',
+  'failed',
+  'deleted',
+]
+
+export const isVideoStage = (value: string): value is VideoStage =>
+  VIDEO_STAGES.includes(value as VideoStage)
+
+export const isStageTerminal = (stage: VideoStage): boolean =>
+  stage === 'ready' || stage === 'rejected' || stage === 'failed' || stage === 'deleted'
+
+/**
+ * The `status` and `processingDetails` fields of one video, flattened, as
+ * YouTube sends them. Its `unsigned long`s arrive as strings, so the counts are
+ * typed loosely here and coerced in `mapVideoStatus`.
+ */
+export interface RawVideoStatus {
+  uploadStatus?: string
+  failureReason?: string
+  rejectionReason?: string
+  privacyStatus?: string
+  processingStatus?: string
+  processingFailureReason?: string
+  partsTotal?: string | number
+  partsProcessed?: string | number
+  timeLeftMs?: string | number
+}
+
+/** One videos.list item reduced to what Sift shows. */
+export interface VideoStatus {
+  stage: VideoStage
+  /** 0..1 through YouTube's processing parts; -1 when it reports none. */
+  progress: number
+  /** YouTube's own estimate of the time left, ms; 0 when it gives none. */
+  etaMs: number
+  /** A sentence fragment naming why, for rejected and failed; '' otherwise. */
+  reason: string
+}
+
+/** YouTube's `rejectionReason` codes, phrased to follow "because of". */
+const REJECTION_REASONS: Record<string, string> = {
+  claim: 'a copyright claim',
+  copyright: 'a copyright takedown',
+  duplicate: 'it duplicating another video',
+  inappropriate: 'its content',
+  legal: 'a legal complaint',
+  length: 'its length',
+  trademark: 'a trademark complaint',
+  termsOfUse: 'the Terms of Use',
+  uploaderAccountClosed: 'the channel being closed',
+  uploaderAccountSuspended: 'the channel being suspended',
+}
+
+/** YouTube's `failureReason` and `processingFailureReason` codes, same phrasing. */
+const FAILURE_REASONS: Record<string, string> = {
+  codecs: 'an unsupported video codec',
+  conversion: 'a conversion error on YouTube',
+  emptyFile: 'the file being empty',
+  invalidFile: 'the file format',
+  tooSmall: 'the file being too small',
+  uploadAborted: 'the upload being interrupted',
+  transcodeFailed: 'a transcoding error on YouTube',
+  streamingFailed: 'a streaming error on YouTube',
+  other: 'an error on YouTube',
+}
+
+/** A code from either list as readable copy; the code itself when it is a new one. */
+export function stageReason(code: string): string {
+  return REJECTION_REASONS[code] ?? FAILURE_REASONS[code] ?? (code ? `"${code}"` : '')
+}
+
+/** YouTube sends its `unsigned long`s as strings; anything unusable reads as 0. */
+const count = (v: string | number | undefined): number => {
+  const n = typeof v === 'string' ? Number(v) : (v ?? 0)
+  return Number.isFinite(n) ? Math.max(0, n) : 0
+}
+
+/**
+ * What one videos.list item means. `status.uploadStatus` is the verdict and
+ * wins outright: a rejected video still reports `processingStatus: succeeded`.
+ */
+export function mapVideoStatus(raw: RawVideoStatus): VideoStatus {
+  const total = count(raw.partsTotal)
+  const base = {
+    progress: total > 0 ? Math.min(1, count(raw.partsProcessed) / total) : -1,
+    etaMs: count(raw.timeLeftMs),
+    reason: '',
+  }
+  switch (raw.uploadStatus) {
+    case 'rejected':
+      return { ...base, stage: 'rejected', reason: stageReason(raw.rejectionReason ?? '') }
+    case 'failed':
+      return { ...base, stage: 'failed', reason: stageReason(raw.failureReason ?? '') }
+    case 'deleted':
+      return { ...base, stage: 'deleted' }
+  }
+  switch (raw.processingStatus) {
+    case 'failed':
+    case 'terminated':
+      return {
+        ...base,
+        stage: 'failed',
+        reason: stageReason(raw.processingFailureReason || raw.failureReason || ''),
+      }
+    case 'succeeded':
+      return { ...base, stage: 'ready', progress: 1, etaMs: 0 }
+  }
+  // `processed` without processingDetails happens for videos YouTube handled fast.
+  if (raw.uploadStatus === 'processed') return { ...base, stage: 'ready', progress: 1, etaMs: 0 }
+  return { ...base, stage: 'processing' }
+}
+
+/** A whole sentence for a video YouTube would not publish; '' for the good outcomes. */
+export function stageSentence(status: VideoStatus): string {
+  switch (status.stage) {
+    case 'rejected':
+      return status.reason
+        ? `YouTube rejected this video because of ${status.reason}.`
+        : 'YouTube rejected this video.'
+    case 'failed':
+      return status.reason
+        ? `YouTube could not process this video because of ${status.reason}.`
+        : 'YouTube could not process this video.'
+    case 'deleted':
+      return 'This video is no longer on YouTube.'
+    default:
+      return ''
+  }
+}
+
+/**
+ * The one phrase every surface uses for where a video is, so the card, the
+ * Activity row, the player and the toast never word it differently. '' when
+ * there is nothing to say and the caller should fall back to its own copy.
+ *
+ * `stageEtaMs` is what YouTube said at `checkedAtMs`, not a deadline, so it is
+ * counted forward from that moment. Under a minute it is left off: rounding it
+ * to "now" would promise something Sift cannot know.
+ */
+export function stageLine(job: UploadJob, nowMs = Date.now()): string {
+  switch (job.stage) {
+    case 'processing': {
+      if (job.checksStopped) return 'Still processing on YouTube'
+      const parts = ['Processing on YouTube']
+      if (job.stageProgress >= 0) parts.push(`${Math.round(job.stageProgress * 100)}%`)
+      if (job.stageEtaMs >= 60_000)
+        parts.push(`${formatUntil(job.checkedAtMs + job.stageEtaMs, nowMs)} left`)
+      return parts.join(' · ')
+    }
+    case 'ready':
+      // Not "live": a video can be finished and still private.
+      return 'Ready on YouTube'
+    case 'rejected':
+    case 'failed':
+    case 'deleted':
+      // `error` already holds the whole sentence, reason and all.
+      return job.error
+    default:
+      return ''
+  }
+}
+
+// ------------------------------------------------------- the watch schedule
+
+/**
+ * How long Sift waits before each successive check of one video; the last entry
+ * repeats. Frequent at first because a short clip is often done in under a
+ * minute, then slow, because after that YouTube is doing real work.
+ */
+export const WATCH_BACKOFF_MS: readonly number[] = [15_000, 30_000, 60_000, 120_000, 300_000]
+
+/**
+ * How long to wait before asking about a video again. YouTube's own
+ * `timeLeftMs` aims the next call when it offers one, clamped so a wild value
+ * can neither hot-loop nor stall: never sooner than the ladder's current rung,
+ * never later than its last. It reports that figure inconsistently, hence the
+ * ladder underneath.
+ */
+export function watchDelayMs(tries: number, timeLeftMs = 0): number {
+  const step = WATCH_BACKOFF_MS[Math.min(Math.max(0, tries), WATCH_BACKOFF_MS.length - 1)]
+  const ceiling = WATCH_BACKOFF_MS[WATCH_BACKOFF_MS.length - 1]
+  if (timeLeftMs <= 0) return step
+  // A few seconds past YouTube's own estimate: asking exactly on it answers "still going".
+  return Math.min(Math.max(timeLeftMs + 5_000, step), ceiling)
+}
+
+/** Automatic checks stop this long after the upload; past that the user asks. */
+export const WATCH_WINDOW_MS = 2 * 60 * 60_000
+/** One manual check buys this much more automatic watching. */
+export const MANUAL_WATCH_MS = 30 * 60_000
+/** videos.list takes up to 50 ids for the same single unit. */
+export const VIDEOS_PER_CALL = 50
+/** A project that cannot be asked right now is looked at again this much later. */
+export const WATCH_RETRY_MS = 10 * 60_000
 
 /** Google's published figures, for the explanatory copy only; Sift does not count quota. */
 export const QUOTA_UNITS_PER_DAY = 10_000

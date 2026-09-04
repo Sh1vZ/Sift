@@ -64,6 +64,11 @@ const clip = (id: string): Clip => ({
   muted: false,
   createdAtMs: 0,
   youtubeId: '',
+  youtubeAccountId: '',
+  youtubeStage: '',
+  youtubeReason: '',
+  youtubeCheckedAtMs: 0,
+  youtubeWatchUntilMs: 0,
   favourite: false,
   seenAtMs: 0,
 })
@@ -246,8 +251,22 @@ async function migrationCase(): Promise<void> {
     'migration added the user-state columns',
   )
   check(names.includes('source_game'), 'migration added the source_game column')
-  check(version === '6', 'schema version advanced to 6')
+  check(
+    [
+      'youtube_account_id',
+      'youtube_stage',
+      'youtube_reason',
+      'youtube_checked_at_ms',
+      'youtube_watch_until_ms',
+    ].every((c) => names.includes(c)),
+    'migration added the YouTube processing columns',
+  )
+  check(version === '7', 'schema version advanced to 7')
   check(store.data.clips.oc?.youtubeId === '', 'v2 clips migrate with no YouTube id')
+  check(
+    store.data.clips.oc?.youtubeStage === '' && store.data.clips.oc?.youtubeWatchUntilMs === 0,
+    'v2 clips migrate with nothing known about YouTube and nothing being watched',
+  )
   check(
     store.data.clips.oc?.favourite === false && store.data.clips.oc?.seenAtMs === 0,
     'v2 clips migrate unfavourited and unwatched',

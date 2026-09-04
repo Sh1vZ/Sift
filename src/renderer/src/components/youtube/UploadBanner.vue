@@ -4,7 +4,7 @@ import type { Clip } from '@shared/types'
 import type { UploadJob } from '@shared/youtube'
 import Icon from '../Icon.vue'
 import { openYouTube } from '@/composables/useLibrary'
-import { cancelUpload, dismissUpload, formatRate } from '@/composables/useUploads'
+import { cancelUpload, dismissUpload, formatRate, stageText } from '@/composables/useUploads'
 import { formatBytes } from '@/utils/format'
 
 /**
@@ -17,6 +17,18 @@ const props = defineProps<{ job: UploadJob; clip: Clip }>()
 const pct = computed(() => Math.round(props.job.progress * 100))
 const live = computed(() => props.job.state === 'queued' || props.job.state === 'uploading')
 
+/**
+ * Determinate only where there is a real figure: Sift's bytes, or the parts
+ * YouTube says it has done. It often reports neither, and an indeterminate bar
+ * is honest where a 0% one is not.
+ */
+const barValue = computed<number | null>(() => {
+  const j = props.job
+  if (j.state === 'uploading') return pct.value
+  if (j.state === 'processing' && j.stageProgress >= 0) return Math.round(j.stageProgress * 100)
+  return null
+})
+
 /** "12 s left" from the smoothed rate main reports; blank until there is a rate. */
 const eta = computed(() => {
   const j = props.job
@@ -27,17 +39,26 @@ const eta = computed(() => {
   return `${m} min ${s % 60} s left`
 })
 
+// All three switches below spell out every state on purpose: a `default` arm
+// would render the next UploadState as "cancelled" instead of failing to build.
 const title = computed(() => {
-  switch (props.job.state) {
+  const j = props.job
+  switch (j.state) {
     case 'queued':
       return 'Waiting to upload to YouTube'
     case 'uploading':
       return `Uploading to YouTube · ${pct.value}%`
+    case 'processing':
+      return stageText(j)
     case 'done':
-      return 'Uploaded to YouTube'
+      return stageText(j) || 'Uploaded to YouTube'
     case 'failed':
-      return 'Upload failed'
-    default:
+      return j.stage === 'rejected'
+        ? 'YouTube rejected this video'
+        : j.stage === 'failed' || j.stage === 'deleted'
+          ? 'YouTube could not process this video'
+          : 'Upload failed'
+    case 'cancelled':
       return 'Upload cancelled'
   }
 })
@@ -55,24 +76,33 @@ const detail = computed(() => {
         .join(' · ')
     case 'queued':
       return 'Another upload is ahead of this one.'
+    case 'processing':
+      return j.checksStopped
+        ? 'Sift has stopped checking. Open it on YouTube to see how it is doing.'
+        : j.channelTitle
+          ? `On ${j.channelTitle}`
+          : j.accountLabel
     case 'done':
       return j.channelTitle ? `On ${j.channelTitle}` : j.accountLabel
     case 'failed':
       return j.error
-    default:
+    case 'cancelled':
       return ''
   }
 })
 
 const icon = computed(() => {
   switch (props.job.state) {
+    case 'processing':
+      return 'loader'
     case 'done':
       return 'check'
     case 'failed':
       return 'alert'
     case 'cancelled':
       return 'x'
-    default:
+    case 'queued':
+    case 'uploading':
       return 'cloud-upload'
   }
 })
@@ -80,7 +110,13 @@ const icon = computed(() => {
 
 <template>
   <div class="banner" :class="`is-${job.state}`" role="status" @click.stop @dblclick.stop>
-    <Icon :name="icon" :size="18" :stroke="1.9" class="banner-icon" />
+    <Icon
+      :name="icon"
+      :size="18"
+      :stroke="1.9"
+      class="banner-icon"
+      :class="{ 'animate-spin': job.state === 'processing' && !job.checksStopped }"
+    />
     <div class="text">
       <p class="title">{{ title }}</p>
       <p v-if="detail" class="detail truncate" :title="detail">{{ detail }}</p>
@@ -94,7 +130,7 @@ const icon = computed(() => {
       @click="cancelUpload(job.id)"
     />
     <UButton
-      v-else-if="job.state === 'done' && clip.youtubeId"
+      v-else-if="clip.youtubeId && (job.state === 'done' || job.state === 'processing')"
       icon="i-lucide-external-link"
       label="Open"
       color="neutral"
@@ -113,12 +149,12 @@ const icon = computed(() => {
       @click="dismissUpload(job.id)"
     />
     <UProgress
-      v-if="live"
+      v-if="live || job.state === 'processing'"
       class="bar"
-      :model-value="job.state === 'uploading' ? pct : null"
+      :model-value="barValue"
       size="xs"
       color="primary"
-      :aria-label="`Upload progress ${pct}%`"
+      :aria-label="title"
     />
   </div>
 </template>
