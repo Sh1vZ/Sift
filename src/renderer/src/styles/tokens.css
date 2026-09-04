@@ -136,14 +136,17 @@
 
 /* OLED: true-black surfaces so unlit pixels stay off. The ramp keeps its five
    steps but starts at #000, and the borders come up a notch because there is
-   no blue cast left for a 7% hairline to read against. The brand washes stay
-   (the default OLED inherits Sift's) so the ground still glows; only the pixels
-   outside the washes go fully off. Every OLED variant shares this surface block
-   and adds its own brand colours below. */
+   no blue cast left for a 7% hairline to read against. The app washes are the
+   one thing OLED drops: an alpha ramp that ends mid-canvas spans only a couple
+   of 8-bit steps over #000, so its terminal contour reads as a hard grey arc
+   in the corner rather than a glow. The brand still carries through every lit
+   pixel — primary, borders, accents. Every OLED variant shares this block and
+   adds its own brand colours below. */
 html[data-theme="oled"],
 html[data-theme="oled-mint"],
 html[data-theme="oled-frost"],
 html[data-theme="oled-crimson"] {
+  --app-wash: none;
   --bg-0: #000000;
   --bg-1: #000000;
   --bg-2: #090909;
@@ -532,17 +535,6 @@ html[data-theme="oled-mint"] {
   --glow-primary:
     0 0 0 1px rgba(110, 231, 183, 0.35),
     0 12px 32px -8px rgba(16, 185, 129, 0.55);
-  --app-wash:
-    radial-gradient(
-      1200px 600px at 80% -10%,
-      rgba(16, 185, 129, 0.13),
-      transparent 60%
-    ),
-    radial-gradient(
-      800px 500px at -10% 110%,
-      rgba(244, 114, 182, 0.07),
-      transparent 60%
-    );
   --ui-text-toned: #bad0c4;
   --ui-text-highlighted: #f3faf6;
   --ui-color-primary-50: #ecfdf5;
@@ -575,17 +567,6 @@ html[data-theme="oled-frost"] {
   --glow-primary:
     0 0 0 1px rgba(103, 232, 249, 0.35),
     0 12px 32px -8px rgba(6, 182, 212, 0.55);
-  --app-wash:
-    radial-gradient(
-      1200px 600px at 80% -10%,
-      rgba(6, 182, 212, 0.13),
-      transparent 60%
-    ),
-    radial-gradient(
-      800px 500px at -10% 110%,
-      rgba(167, 139, 250, 0.07),
-      transparent 60%
-    );
   --ui-text-toned: #b8ccd4;
   --ui-text-highlighted: #f2f9fb;
   --ui-color-primary-50: #ecfeff;
@@ -618,17 +599,6 @@ html[data-theme="oled-crimson"] {
   --glow-primary:
     0 0 0 1px rgba(252, 165, 165, 0.35),
     0 12px 32px -8px rgba(220, 38, 38, 0.55);
-  --app-wash:
-    radial-gradient(
-      1200px 600px at 80% -10%,
-      rgba(220, 38, 38, 0.14),
-      transparent 60%
-    ),
-    radial-gradient(
-      800px 500px at -10% 110%,
-      rgba(251, 191, 36, 0.06),
-      transparent 60%
-    );
   --ui-text-toned: #d2bfc4;
   --ui-text-highlighted: #fcf5f6;
   --ui-color-primary-50: #fef2f2;
