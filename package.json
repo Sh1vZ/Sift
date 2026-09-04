@@ -1,6 +1,6 @@
 {
   "name": "sift",
-  "version": "1.0.0-beta.3",
+  "version": "1.0.0-beta.4",
   "description": "A local-first clip library for NVIDIA ShadowPlay and other game recordings",
   "main": "./out/main/index.js",
   "author": "ShivZ",
