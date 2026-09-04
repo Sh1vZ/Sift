@@ -92,6 +92,29 @@ jobs:
       - name: Test
         run: npm test
 
+      # electron-builder uploads artifacts concurrently, and each upload creates
+      # the release when it cannot find one. Two uploads finishing in the same
+      # instant therefore produce *two* releases sharing a tag, with the assets
+      # split between them — and GitHub then cannot resolve
+      # /releases/download/<tag>/latest.yml at all. It 404s, and every installed
+      # copy reports "No update feed for this build yet".
+      #
+      # Creating the release first makes electron-builder's lookup succeed, so it
+      # only ever uploads. Idempotent, so a re-run of a failed job is safe.
+      - name: Create the release up front
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          tag='${{ github.ref_name }}'
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "Release $tag already exists — electron-builder will upload into it."
+            exit 0
+          fi
+          # A prerelease version carries a suffix; a stable one becomes "Latest".
+          if [[ "$tag" == *-* ]]; then flag=--prerelease; else flag=--latest; fi
+          gh release create "$tag" "$flag" --title "${tag#v}" --notes-file build/release-notes.md
+
       - name: Build and publish
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
