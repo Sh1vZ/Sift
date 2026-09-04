@@ -90,7 +90,23 @@ const pending = computed(() => pendingByClip.value[clip.value.id])
 const suspended = ref(false)
 /** Where playback was when the window went away, or -1 for nothing to restore. */
 let resumeAt = -1
-const src = computed(() => (suspended.value ? undefined : api.mediaUrl(clip.value.id)))
+/**
+ * True until the open animation has landed. Chromium composites a <video> in a
+ * layer of its own, and for the first frames of an ancestor's transform
+ * animation that layer keeps painting at its untransformed size — inside a
+ * stage scaled down to the card, that reads as a cropped, zoomed-in frame that
+ * then snaps to fit. So the stage carries the poster through the flip and takes
+ * the media on afterwards, which also keeps the decoder off the main thread
+ * while GSAP is driving it.
+ */
+const flipping = ref(true)
+/** Set once the element has a frame to show, which is when the poster can go. */
+const frameReady = ref(false)
+const poster = computed(() => (clip.value.thumb ? api.thumbUrl(clip.value.thumb) : ''))
+const showPoster = computed(() => Boolean(poster.value) && (flipping.value || !frameReady.value))
+const src = computed(() =>
+  suspended.value || flipping.value ? undefined : api.mediaUrl(clip.value.id),
+)
 const ratio = computed(() =>
   clip.value.width && clip.value.height ? clip.value.width / clip.value.height : 16 / 9,
 )
@@ -587,6 +603,8 @@ watch(
     ended.value = false
     failed.value = false
     buffering.value = false
+    // The poster covers the swap so stepping through clips does not flash black.
+    frameReady.value = false
     consumePendingEdit()
     poke()
   },
@@ -633,7 +651,10 @@ onMounted(async () => {
   }
   fitStage()
   await nextTick()
-  if (stage.value) flipFrom(stage.value, originRect.value)
+  // The media is attached from here, so a flip that cannot run (reduced motion,
+  // no origin card) has to release it in the same tick rather than never.
+  if (stage.value) flipFrom(stage.value, originRect.value, () => (flipping.value = false))
+  else flipping.value = false
   consumePendingEdit()
   poke()
 })
@@ -756,6 +777,7 @@ onBeforeUnmount(() => {
             autoplay
             preload="auto"
             @loadedmetadata="onLoadedMetadata"
+            @loadeddata="frameReady = true"
             @timeupdate="onTimeUpdate"
             @progress="onProgress"
             @play="playing = true"
@@ -766,6 +788,12 @@ onBeforeUnmount(() => {
             @ended="onEnded"
             @error="onError"
           />
+
+          <!-- Stands in for the video until it has a frame: through the open
+               flip, and across a clip change, so neither shows black. -->
+          <Transition name="fade">
+            <img v-if="showPoster" class="poster" :src="poster" alt="" draggable="false" />
+          </Transition>
 
           <Transition name="fade">
             <UploadBanner v-if="upload" :key="upload.id" :job="upload" :clip="clip" />
@@ -1275,6 +1303,15 @@ onBeforeUnmount(() => {
   height: 100%;
   object-fit: contain;
   background: #000;
+}
+.poster {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000;
+  pointer-events: none;
 }
 .veil {
   position: absolute;

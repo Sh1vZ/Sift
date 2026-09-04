@@ -16,6 +16,18 @@ const JOB_TIMEOUT_MS = 60_000
 const SCALE_FLAGS = 'area'
 /** Seeks landing within one GOP of the poster time reuse that frame instead of a second decode. */
 const POSTER_REUSE_WINDOW_S = 1
+/**
+ * The clip's own first frame: the card's poster, the still the player stands in
+ * with while it opens, and the frame playback starts on are then all the same
+ * picture, so none of the three hands over to another with a visible change.
+ */
+const POSTER_TIME = 0
+/**
+ * Bumped whenever the frames these files hold change meaning. The name is what
+ * makes a cached artifact a hit, so a library cut by an older build regenerates
+ * once on launch rather than keeping posters this build would not have made.
+ */
+const ARTIFACT_VERSION = 2
 
 export interface ProbeResult {
   duration: number
@@ -188,10 +200,18 @@ export async function probe(filePath: string): Promise<ProbeResult> {
 
 /** Cache names include the mtime so a re-recorded file never shows a stale poster. */
 export function thumbName(clip: Clip): string {
-  return `${clip.id}-${Math.round(clip.mtimeMs)}.jpg`
+  return `${clip.id}-${Math.round(clip.mtimeMs)}-v${ARTIFACT_VERSION}.jpg`
 }
 export function spriteName(clip: Clip): string {
-  return `${clip.id}-${Math.round(clip.mtimeMs)}.sprite.jpg`
+  return `${clip.id}-${Math.round(clip.mtimeMs)}-v${ARTIFACT_VERSION}.sprite.jpg`
+}
+
+/** Cached under a name this build would not write: the frames in it are not the ones it wants. */
+export function artifactsStale(clip: Clip): boolean {
+  return Boolean(
+    (clip.thumb && clip.thumb !== thumbName(clip)) ||
+    (clip.sprite && clip.sprite !== spriteName(clip)),
+  )
 }
 
 async function exists(p: string): Promise<boolean> {
@@ -205,11 +225,6 @@ async function exists(p: string): Promise<boolean> {
 
 export function spriteFrameCount(duration: number): number {
   return Math.max(4, Math.min(SPRITE_FRAMES, Math.floor(duration)))
-}
-
-/** Poster a little way in, skipping the black/loading frames ShadowPlay often starts with. */
-function posterTime(duration: number): number {
-  return Math.min(Math.max(duration * 0.15, 0.5), 8)
 }
 
 /**
@@ -259,13 +274,15 @@ export async function makeArtifacts(clip: Clip, duration: number): Promise<Artif
   const needSprite = !(await exists(spritePath))
   if (!needThumb && !needSprite) return { thumb, sprite, spriteFrames: frames }
 
+  // The strip opens on the first frame and steps through the clip from there.
+  // Dividing by `frames` rather than `frames - 1` keeps the last seek short of
+  // the end, where there is no frame left to land on.
   const times: number[] = []
-  if (needSprite) for (let i = 0; i < frames; i++) times.push((duration * (i + 0.5)) / frames)
+  if (needSprite) for (let i = 0; i < frames; i++) times.push((duration * i) / frames)
   let posterIdx = -1
   if (needThumb) {
-    const at = posterTime(duration)
-    posterIdx = times.findIndex((t) => Math.abs(t - at) < POSTER_REUSE_WINDOW_S)
-    if (posterIdx < 0) posterIdx = times.push(at) - 1
+    posterIdx = times.findIndex((t) => Math.abs(t - POSTER_TIME) < POSTER_REUSE_WINDOW_S)
+    if (posterIdx < 0) posterIdx = times.push(POSTER_TIME) - 1
   }
 
   const args = ['-y', '-v', 'error']

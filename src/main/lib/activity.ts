@@ -6,6 +6,9 @@ import type { Store } from './store'
 /** Several records can land within a frame (a rescan of every folder); one push carries them all. */
 const EMIT_MS = 250
 
+/** A folder scanned again inside this window replaces its row instead of stacking a second one. */
+const SCAN_COLLAPSE_MS = 5 * 60_000
+
 /**
  * The history behind the Activity panel: what Sift finished, kept after the
  * live job is pruned. Electron-free so `npm test` could drive it; `Library`
@@ -29,8 +32,24 @@ export class ActivityLog {
       id: randomUUID().slice(0, 8),
       finishedAtMs: Date.now(),
     }
+    if (record.kind === 'scan') this.collapseScan(record)
     this.store.addActivity(record)
     this.scheduleEmit()
+  }
+
+  /**
+   * A folder gets walked again and again — a launch, a watcher settling, a
+   * click on Rescan — and each pass only restates where that folder stands.
+   * The newer row supersedes the one just above it rather than joining it.
+   */
+  private collapseScan(next: ActivityRecord): void {
+    // Newest first, so this is the last scan of the same folder.
+    const previous = this.store
+      .listActivity()
+      .find((r) => r.kind === 'scan' && r.path === next.path)
+    if (previous && next.finishedAtMs - previous.finishedAtMs < SCAN_COLLAPSE_MS) {
+      this.store.removeActivity(previous.id)
+    }
   }
 
   remove(id: string): void {

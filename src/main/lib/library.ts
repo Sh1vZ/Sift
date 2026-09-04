@@ -36,6 +36,7 @@ import {
 } from './exports'
 import {
   MediaQueue,
+  artifactsStale,
   ffmpegAvailable,
   makeArtifacts,
   probe,
@@ -65,12 +66,6 @@ const MAX_GAME_NAME = 120
 
 const isTerminal = (j: ExportJob): boolean =>
   j.state === 'done' || j.state === 'failed' || j.state === 'cancelled'
-
-/**
- * Why a folder is being walked. A launch scan that changes nothing is not
- * worth a history row — every folder would write one on every start.
- */
-type ScanReason = 'launch' | 'added' | 'rescan'
 
 /** `statSync` for a path that may not exist: null instead of a throw. */
 function statOrNull(path: string): Stats | null {
@@ -140,7 +135,7 @@ export class Library {
       this.store.upsertFolder(folder)
       if (folder.available) {
         this.startWatcher(folder)
-        this.queueScan(folder, 'launch')
+        this.queueScan(folder)
       }
     }
   }
@@ -332,7 +327,7 @@ export class Library {
     this.emitFolders()
     if (folder.available) {
       this.startWatcher(folder)
-      this.queueScan(folder, 'added')
+      this.queueScan(folder)
     }
     return { folder }
   }
@@ -364,7 +359,7 @@ export class Library {
     for (const folder of targets) {
       folder.available = existsSync(folder.path)
       this.store.upsertFolder(folder)
-      if (folder.available) this.queueScan(folder, 'rescan')
+      if (folder.available) this.queueScan(folder)
     }
     this.emitFolders()
     return { ok: true }
@@ -456,7 +451,7 @@ export class Library {
     this.emitFolders()
     if (folder.available) {
       this.startWatcher(folder)
-      this.queueScan(folder, 'added')
+      this.queueScan(folder)
     }
     return { ok: true, folder }
   }
@@ -892,13 +887,11 @@ export class Library {
 
   // --------------------------------------------------------------- scanning
 
-  private queueScan(folder: LibraryFolder, reason: ScanReason): void {
-    this.scanChain = this.scanChain
-      .then(() => this.scanFolder(folder, reason))
-      .catch(() => undefined)
+  private queueScan(folder: LibraryFolder): void {
+    this.scanChain = this.scanChain.then(() => this.scanFolder(folder)).catch(() => undefined)
   }
 
-  private async scanFolder(folder: LibraryFolder, reason: ScanReason): Promise<void> {
+  private async scanFolder(folder: LibraryFolder): Promise<void> {
     if (!this.store.data.folders.some((f) => f.id === folder.id)) return
     const startedAtMs = Date.now()
     this.scanState.active = true
@@ -947,8 +940,11 @@ export class Library {
     this.scanState.folder = ''
     this.scheduleScanEmit(true)
 
-    // The user asked for it, or it changed the index: either is worth a row.
-    if (reason !== 'launch' || found || dropped) {
+    // Only a scan that moved the index is worth a row. A rescan that finds
+    // everything already indexed says nothing the panel does not already show
+    // live, and one row per folder per launch or per click buries the exports
+    // and uploads the history is kept for.
+    if (found || dropped) {
       const parts = [
         found ? `${found} indexed` : '',
         dropped ? `${dropped} removed` : '',
@@ -972,7 +968,10 @@ export class Library {
   private needsWork(clip: Clip): boolean {
     if (clip.probeState === 'pending') return true
     if (clip.probeState === 'failed') return false
-    return this.settings.generateThumbnails && (!clip.thumb || !clip.sprite)
+    // Artifacts an older build cut hold different frames than this one asks for,
+    // so they are as good as missing — the difference being that the clip keeps
+    // showing them until the replacements land.
+    return this.settings.generateThumbnails && (!clip.thumb || !clip.sprite || artifactsStale(clip))
   }
 
   private upsertClip(folder: LibraryFolder, file: string, st: Stats, previous?: Clip): Clip {
@@ -1056,9 +1055,19 @@ export class Library {
     // cached on disk is skipped inside makeArtifacts.
     const current = this.store.data.clips[clip.id]
     if (!current) return { id: clip.id }
-    if (!current.thumb || !current.sprite) {
+    if (!current.thumb || !current.sprite || artifactsStale(current)) {
+      // What it was showing until now: whichever of the two the run replaced
+      // under a new name goes once the replacement is on disk, so the clip is
+      // never without a poster and the cache does not grow a second copy. A
+      // name the run reused is left alone — that file is still the live one.
+      const was = { thumb: current.thumb, sprite: current.sprite }
       try {
-        this.applyPatch({ id: clip.id, ...(await makeArtifacts(current, info.duration)) })
+        const made = await makeArtifacts(current, info.duration)
+        this.applyPatch({ id: clip.id, ...made })
+        await removeArtifacts({
+          thumb: was.thumb === made.thumb ? '' : was.thumb,
+          sprite: was.sprite === made.sprite ? '' : was.sprite,
+        })
       } catch {
         /* the card falls back to a placeholder and hover preview stays off */
       }
