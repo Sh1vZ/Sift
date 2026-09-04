@@ -252,7 +252,10 @@ const tipPct = computed(() => {
   user-select: none;
   --strip-h: 56px;
   --ruler-h: 36px;
-  --head: var(--success);
+  /* The playhead is the theme's punctuation colour, not a status: --success
+     would stay emerald in a crimson or solar player. --accent is the one brand
+     colour guaranteed to read against the white trim brackets. */
+  --head: var(--accent);
 }
 /* Everything positioned by percentage shares this box, so the ruler, the strip
    and the playhead agree on where a given second is. */
@@ -329,7 +332,7 @@ const tipPct = computed(() => {
   position: absolute;
   top: 0;
   bottom: 0;
-  background: rgba(7, 7, 18, 0.72);
+  background: color-mix(in srgb, var(--scrim) 72%, transparent);
   border-radius: 6px;
   pointer-events: none;
 }
@@ -374,7 +377,7 @@ const tipPct = computed(() => {
   width: 2px;
   height: 16px;
   border-radius: 1px;
-  background: rgba(7, 7, 18, 0.55);
+  background: color-mix(in srgb, var(--scrim) 55%, transparent);
 }
 
 /* ---------------------------------------------------------- playhead */
@@ -439,7 +442,12 @@ const tipPct = computed(() => {
 .grip-dots {
   width: 8px;
   height: 8px;
-  background: radial-gradient(circle, rgba(7, 7, 18, 0.65) 1px, transparent 1.3px) 0 0 / 4px 4px;
+  background: radial-gradient(
+      circle,
+      color-mix(in srgb, var(--scrim) 65%, transparent) 1px,
+      transparent 1.3px
+    )
+    0 0 / 4px 4px;
 }
 
 .tip {
@@ -448,7 +456,7 @@ const tipPct = computed(() => {
   transform: translateX(-50%);
   padding: 3px 7px;
   border-radius: 5px;
-  background: rgba(30, 28, 53, 0.95);
+  background: color-mix(in srgb, var(--bg-3) 95%, transparent);
   border: 1px solid var(--border-hover);
   font-size: var(--text-xs);
   pointer-events: none;

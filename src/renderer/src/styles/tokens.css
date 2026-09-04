@@ -18,6 +18,11 @@
   --bg-2: #15152a;
   --bg-3: #1e1c35;
   --bg-4: #27273b;
+  /* Chrome that floats over video (the player shell, its gradients, card
+     hover scrims) is the darkest surface deepened a step, then used at several
+     alphas. Derived from --bg-0 so it follows the theme instead of staying
+     Sift indigo. */
+  --scrim: color-mix(in srgb, var(--bg-0) 72%, #000);
 
   --fg: #e2e8f0;
   --fg-muted: #94a3b8;

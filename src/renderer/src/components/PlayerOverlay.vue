@@ -1135,7 +1135,7 @@ onBeforeUnmount(() => {
   z-index: 50;
   display: flex;
   flex-direction: column;
-  background: rgba(7, 7, 18, 0.97);
+  background: color-mix(in srgb, var(--scrim) 97%, transparent);
   /* The overlay covers the frameless title bar, whose drag strip would
      otherwise swallow every click in the top 40px - the back arrow and the
      details toggle both sit inside it. */
@@ -1183,12 +1183,16 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 14px;
   padding: 14px 18px;
-  background: linear-gradient(180deg, rgba(7, 7, 18, 0.9), transparent);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--scrim) 90%, transparent),
+    transparent
+  );
 }
 .controls {
   bottom: 0;
   padding: var(--s-6) var(--s-5) var(--s-4);
-  background: linear-gradient(0deg, rgba(7, 7, 18, 0.92), transparent);
+  background: linear-gradient(0deg, color-mix(in srgb, var(--scrim) 92%, transparent), transparent);
 }
 .controls-hidden .top {
   opacity: 0;
@@ -1281,10 +1285,10 @@ onBeforeUnmount(() => {
   justify-content: center;
   gap: 10px;
   color: var(--secondary);
-  background: rgba(7, 7, 18, 0.4);
+  background: color-mix(in srgb, var(--scrim) 40%, transparent);
 }
 .veil.failed {
-  background: rgba(7, 7, 18, 0.85);
+  background: color-mix(in srgb, var(--scrim) 85%, transparent);
   padding: 24px;
 }
 .failed-alert {
@@ -1306,7 +1310,7 @@ onBeforeUnmount(() => {
   justify-content: center;
   border-radius: 50%;
   color: #fff;
-  background: rgba(30, 28, 53, 0.75);
+  background: color-mix(in srgb, var(--bg-3) 75%, transparent);
   backdrop-filter: blur(6px);
   pointer-events: none;
 }
@@ -1321,7 +1325,7 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   gap: 10px;
-  background: rgba(7, 7, 18, 0.55);
+  background: color-mix(in srgb, var(--scrim) 55%, transparent);
 }
 .arrow {
   position: absolute;
@@ -1334,7 +1338,7 @@ onBeforeUnmount(() => {
   padding: 0;
   border-radius: 50%;
   color: var(--fg);
-  background: rgba(30, 28, 53, 0.7);
+  background: color-mix(in srgb, var(--bg-3) 70%, transparent);
   border: 1px solid var(--border-hover);
   transition:
     background var(--dur-fast) var(--ease-out),
@@ -1446,7 +1450,7 @@ onBeforeUnmount(() => {
   transform: translateX(-50%);
   padding: 3px 7px;
   border-radius: 5px;
-  background: rgba(30, 28, 53, 0.95);
+  background: color-mix(in srgb, var(--bg-3) 95%, transparent);
   border: 1px solid var(--border-hover);
   font-size: var(--text-xs);
   pointer-events: none;
@@ -1482,7 +1486,7 @@ onBeforeUnmount(() => {
   gap: var(--s-3);
   padding: var(--s-2) var(--s-3);
   border-radius: var(--r-md);
-  background: rgba(30, 28, 53, 0.6);
+  background: color-mix(in srgb, var(--bg-3) 60%, transparent);
   border: 1px solid var(--border);
 }
 .range {
