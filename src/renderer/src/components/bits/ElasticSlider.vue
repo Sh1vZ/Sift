@@ -17,7 +17,17 @@
 
       <div
         ref="sliderRef"
-        class="relative flex w-full max-w-xs flex-grow cursor-grab touch-none select-none items-center py-4"
+        class="relative flex w-full max-w-xs flex-grow cursor-grab touch-none select-none items-center py-4 rounded-full"
+        role="slider"
+        tabindex="0"
+        :aria-label="ariaLabel"
+        :aria-valuemin="startingValue"
+        :aria-valuemax="maxValue"
+        :aria-valuenow="Math.round(value)"
+        :aria-valuetext="`${Math.round(value)}%`"
+        @keydown="handleKey"
+        @focus="focused = true"
+        @blur="focused = false"
         @pointermove="handlePointerMove"
         @pointerdown="handlePointerDown"
         @pointerup="handlePointerUp"
@@ -49,8 +59,11 @@
       </div>
     </div>
 
-    <p v-if="showValue" class="absolute text-gray-400 transform -translate-y-6 font-medium tracking-wide">
-      {{ Math.round(value) }}
+    <p
+      v-if="showValue || focused || hovering"
+      class="absolute -translate-y-6 text-xs font-medium tracking-wide text-muted pointer-events-none"
+    >
+      {{ Math.round(value) }}%
     </p>
   </div>
 </template>
@@ -63,7 +76,9 @@
  * `fillColor` and `showValue` props in place of hard-coded colours. The side
  * icons are also opt-in: upstream always rendered them (falling back to `-`/`+`
  * text), which left dead space when the caller has its own icon beside the
- * slider.
+ * slider. Keyboard and screen-reader support are ours as well: upstream was
+ * pointer-only, so the track is now a focusable `role="slider"` with arrow,
+ * Home and End keys, an `aria-label` prop, and a readout while hovered or focused.
  */
 import { computed, ref, useTemplateRef, watch } from 'vue'
 
@@ -79,6 +94,7 @@ interface Props {
   trackColor?: string
   fillColor?: string
   showValue?: boolean
+  ariaLabel?: string
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -90,7 +106,8 @@ const props = withDefaults(defineProps<Props>(), {
   stepSize: 1,
   trackColor: 'rgba(255,255,255,0.25)',
   fillColor: '#ffffff',
-  showValue: false
+  showValue: false,
+  ariaLabel: 'Value'
 })
 
 const emit = defineEmits<{ 'update:modelValue': [value: number] }>()
@@ -98,6 +115,8 @@ const emit = defineEmits<{ 'update:modelValue': [value: number] }>()
 const sliderRef = useTemplateRef<HTMLDivElement>('sliderRef')
 
 const value = ref(props.modelValue)
+const focused = ref(false)
+const hovering = ref(false)
 const region = ref<'left' | 'middle' | 'right'>('middle')
 const clientX = ref(0)
 const overflow = ref(0)
@@ -242,12 +261,30 @@ const handlePointerUp = (): void => {
 }
 
 const handleMouseEnter = (): void => {
+  hovering.value = true
   if (scaleAnimation) cancelAnimationFrame(scaleAnimation)
   scaleAnimation = animateValue(scale, 1.2, 200)
 }
 
 const handleMouseLeave = (): void => {
+  hovering.value = false
   if (scaleAnimation) cancelAnimationFrame(scaleAnimation)
   scaleAnimation = animateValue(scale, 1, 200)
+}
+
+/** Arrows step a twentieth of the range (or one step when stepped); Home and End jump. */
+const handleKey = (e: KeyboardEvent): void => {
+  const step = props.isStepped ? props.stepSize : (props.maxValue - props.startingValue) / 20
+  let next: number | null = null
+  if (e.key === 'ArrowRight' || e.key === 'ArrowUp') next = value.value + step
+  else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') next = value.value - step
+  else if (e.key === 'Home') next = props.startingValue
+  else if (e.key === 'End') next = props.maxValue
+  if (next === null) return
+  e.preventDefault()
+  e.stopPropagation()
+  next = Math.min(Math.max(next, props.startingValue), props.maxValue)
+  value.value = next
+  emit('update:modelValue', next)
 }
 </script>

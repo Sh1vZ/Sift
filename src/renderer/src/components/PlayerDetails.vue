@@ -94,19 +94,13 @@ const busy = computed(() => Boolean(pendingAction.value))
 const uploading = computed(() =>
   Boolean(upload.value && (upload.value.state === 'queued' || upload.value.state === 'uploading')),
 )
-const uploadLabel = computed(() => {
+/** The live upload's one line, for the progress row above the actions. */
+const uploadStatus = computed(() => {
   const u = upload.value
-  if (u?.state === 'uploading') return `Cancel · ${progressText(u)}`
-  if (u?.state === 'queued') return 'Cancel · waiting'
-  return props.clip.youtubeId ? 'Upload again' : 'Upload to YouTube'
+  if (u?.state === 'uploading') return `Uploading · ${progressText(u)}`
+  if (u?.state === 'queued') return 'Waiting to upload'
+  return ''
 })
-
-/** While a job is live the same button cancels it; otherwise it opens the upload form. */
-function onUploadButton(): void {
-  const u = upload.value
-  if (uploading.value && u) void cancelUpload(u.id)
-  else emit('upload')
-}
 const videoUrl = computed(() => (props.clip.youtubeId ? youtubeUrl(props.clip.youtubeId) : ''))
 
 /** What YouTube last said about the video, in the same words the cards use. */
@@ -374,15 +368,14 @@ const rows = computed<Row[]>(() => {
             <span v-if="checkedLine" class="link-sub truncate">{{ checkedLine }}</span>
           </span>
           <span class="row-actions">
-            <UTooltip text="Ask YouTube now">
+            <UTooltip text="Ask YouTube how the video is doing">
               <UButton
                 icon="i-lucide-refresh-cw"
+                label="Check now"
                 color="neutral"
-                variant="ghost"
-                square
-                size="md"
+                variant="subtle"
+                size="sm"
                 :loading="checking"
-                aria-label="Check on YouTube now"
                 @click="checkOnYouTube(clip)"
               />
             </UTooltip>
@@ -395,105 +388,118 @@ const rows = computed<Row[]>(() => {
             <span class="link-sub mono truncate" :title="videoUrl">{{ videoUrl }}</span>
           </span>
           <span class="row-actions">
-            <UTooltip text="Open on YouTube">
-              <UButton
-                icon="i-lucide-external-link"
-                color="neutral"
-                variant="ghost"
-                square
-                size="md"
-                aria-label="Open on YouTube"
-                @click="openYouTube(clip)"
-              />
-            </UTooltip>
-            <UTooltip text="Copy link">
-              <UButton
-                icon="i-lucide-link-2"
-                color="neutral"
-                variant="ghost"
-                square
-                size="md"
-                aria-label="Copy YouTube link"
-                @click="copyYouTubeLink(clip)"
-              />
-            </UTooltip>
+            <UButton
+              icon="i-lucide-external-link"
+              label="Open"
+              color="neutral"
+              variant="subtle"
+              size="sm"
+              aria-label="Open on YouTube"
+              @click="openYouTube(clip)"
+            />
+            <UButton
+              icon="i-lucide-link-2"
+              label="Copy link"
+              color="neutral"
+              variant="subtle"
+              size="sm"
+              aria-label="Copy YouTube link"
+              @click="copyYouTubeLink(clip)"
+            />
           </span>
         </div>
       </section>
 
       <section>
         <h4>Location</h4>
-        <div class="link-pair">
-          <button type="button" class="link-row" title="Show in Explorer" @click="revealClip(clip)">
-            <UIcon name="i-lucide-folder-open" class="row-icon" />
-            <span class="link-text">
-              <span class="link-title truncate">Show in Explorer</span>
-              <span class="link-sub path" :title="clip.path">{{ folder }}</span>
-            </span>
-            <UIcon name="i-lucide-chevron-right" class="row-chev" />
-          </button>
-          <UTooltip text="Copy path">
-            <UButton
-              class="pair-btn"
-              icon="i-lucide-copy"
-              color="neutral"
-              variant="subtle"
-              square
-              aria-label="Copy path"
-              @click="copyClipPath(clip)"
-            />
-          </UTooltip>
-        </div>
+        <button type="button" class="link-row" title="Show in Explorer" @click="revealClip(clip)">
+          <UIcon name="i-lucide-folder-open" class="row-icon" />
+          <span class="link-text">
+            <span class="link-title truncate">Show in Explorer</span>
+            <span class="link-sub path" :title="clip.path">{{ folder }}</span>
+          </span>
+          <UIcon name="i-lucide-chevron-right" class="row-chev" />
+        </button>
+        <UButton
+          class="path-copy"
+          icon="i-lucide-copy"
+          label="Copy path"
+          color="neutral"
+          variant="ghost"
+          size="sm"
+          aria-label="Copy the file path"
+          @click="copyClipPath(clip)"
+        />
       </section>
     </div>
 
     <footer class="actions">
       <UButton
         icon="i-lucide-scissors"
-        :label="editing ? 'Leave edit mode' : 'Trim & export'"
+        :label="editing ? 'Cancel trim' : 'Trim & export'"
         :color="editing ? 'neutral' : 'primary'"
         :variant="editing ? 'subtle' : 'solid'"
         block
         :disabled="!canEdit"
         @click="$emit('edit')"
       />
-      <div class="actions-row">
+      <!-- A live upload gets its own row with its own Cancel; the Upload button
+           below never turns into something else under the pointer. -->
+      <div v-if="uploading && upload" class="upload-row" role="status">
+        <UIcon name="i-lucide-cloud-upload" class="upload-icon" />
+        <span class="upload-text truncate">{{ uploadStatus }}</span>
         <UButton
-          class="grow"
-          :icon="uploading ? 'i-lucide-x' : 'i-lucide-youtube'"
-          :color="uploading ? 'error' : 'neutral'"
-          :label="uploadLabel"
+          label="Cancel"
+          color="neutral"
           variant="subtle"
-          block
-          :disabled="clip.probeState !== 'ok' || busy"
-          @click="onUploadButton"
+          size="sm"
+          @click="cancelUpload(upload.id)"
         />
-        <UTooltip text="Copy file">
+        <UProgress
+          class="upload-bar"
+          :model-value="upload.state === 'uploading' ? Math.round(upload.progress * 100) : null"
+          size="xs"
+          color="primary"
+          :aria-label="uploadStatus"
+        />
+      </div>
+      <div class="actions-row">
+        <UTooltip :text="clip.youtubeId ? 'Upload to YouTube again' : 'Upload to YouTube'">
           <UButton
-            icon="i-lucide-clipboard-copy"
+            class="grow"
+            icon="i-lucide-youtube"
+            :label="clip.youtubeId ? 'Upload again' : 'Upload'"
             color="neutral"
             variant="subtle"
-            square
-            aria-label="Copy file"
-            :loading="pendingAction?.kind === 'copy-file'"
-            :disabled="busy"
-            @click="copyClipFile(clip)"
+            block
+            :disabled="clip.probeState !== 'ok' || busy || uploading"
+            @click="$emit('upload')"
           />
         </UTooltip>
-        <UTooltip text="Delete">
-          <UButton
-            class="danger"
-            icon="i-lucide-trash-2"
-            color="error"
-            variant="subtle"
-            square
-            aria-label="Delete"
-            :loading="pendingAction?.kind === 'delete'"
-            :disabled="busy"
-            @click="$emit('remove')"
-          />
-        </UTooltip>
+        <UButton
+          class="grow"
+          icon="i-lucide-clipboard-copy"
+          label="Copy file"
+          color="neutral"
+          variant="subtle"
+          block
+          :loading="pendingAction?.kind === 'copy-file'"
+          :disabled="busy"
+          @click="copyClipFile(clip)"
+        />
       </div>
+      <!-- On its own line, small and unfilled: reachable, never in the way. -->
+      <UButton
+        class="danger"
+        icon="i-lucide-trash-2"
+        label="Delete"
+        color="error"
+        variant="ghost"
+        size="sm"
+        :loading="pendingAction?.kind === 'delete'"
+        :disabled="busy"
+        @click="$emit('remove')"
+      />
     </footer>
   </aside>
 </template>
@@ -541,7 +547,7 @@ const rows = computed<Row[]>(() => {
   flex: 1;
   min-width: 0;
   font-size: var(--text-sm);
-  color: var(--fg-dim);
+  color: var(--fg-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -722,19 +728,9 @@ h4 {
   gap: var(--s-1);
   flex: none;
 }
-/* The row and its one side action share a line; the button matches the row's height. */
-.link-pair {
-  display: flex;
-  align-items: stretch;
-  gap: var(--s-2);
-}
-.link-pair .link-row {
-  flex: 1;
-  min-width: 0;
-}
-.pair-btn {
-  height: auto;
-  align-self: stretch;
+/* Under the row rather than beside it: the path needs the width more than the button does. */
+.path-copy {
+  margin-top: var(--s-2);
 }
 
 .actions {
@@ -753,5 +749,36 @@ h4 {
 .actions-row .grow {
   flex: 1;
   min-width: 0;
+}
+.upload-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: var(--s-2) var(--s-3) calc(var(--s-2) + 3px);
+  border-radius: var(--r-md);
+  background: var(--bg-2);
+  box-shadow: inset 0 0 0 1px var(--border);
+  overflow: hidden;
+}
+.upload-icon {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  color: var(--secondary);
+}
+.upload-text {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--text-sm);
+}
+.upload-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+}
+.danger {
+  align-self: flex-end;
 }
 </style>

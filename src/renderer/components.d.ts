@@ -30,6 +30,7 @@ declare module 'vue' {
     DialogHost: typeof import('./src/components/DialogHost.vue')['default']
     DropWash: typeof import('./src/components/DropWash.vue')['default']
     ElasticSlider: typeof import('./src/components/bits/ElasticSlider.vue')['default']
+    ExportBanner: typeof import('./src/components/ExportBanner.vue')['default']
     FavouriteButton: typeof import('./src/components/FavouriteButton.vue')['default']
     Folder: typeof import('./src/components/bits/Folder.vue')['default']
     FoldersPane: typeof import('./src/components/settings/FoldersPane.vue')['default']

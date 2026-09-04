@@ -72,6 +72,7 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
       { chords: [['M']], label: 'Mute' },
       { chords: [['N'], ['P']], label: 'Next / previous clip' },
       { chords: [['S']], label: 'Favourite' },
+      { chords: [['R']], label: 'Loop' },
       { chords: [['F']], label: 'Fullscreen' },
       { chords: [['I']], label: 'Details pane' },
       { chords: [['E']], label: 'Trim & export' },
@@ -86,7 +87,7 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
       { chords: [['shift', 'M']], label: 'Mute the export' },
       { chords: [['shift', 'R']], label: 'Reset the range' },
       { chords: [['ctrl', 'enter']], label: 'Export' },
-      { chords: [['escape']], label: 'Leave edit mode' },
+      { chords: [['escape']], label: 'Cancel trim' },
     ],
   },
 ]

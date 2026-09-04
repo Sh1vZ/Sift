@@ -235,18 +235,19 @@ function toSettings(): void {
 }
 
 /**
- * Hands the request to main and closes at once: the queue answers in a few
- * milliseconds and the card veil takes over as the progress display, so the
- * form has nothing left to show. A refusal comes back as an error toast.
+ * Hands the request to main. Once the queue has taken it the form closes and
+ * the card veil takes over as the progress display; a refusal (toasted by
+ * startUpload) keeps the form open with everything still filled in.
  */
 async function submit(): Promise<void> {
   if (!canSubmit.value || !request.value || submitting.value) return
   const req = request.value
   submitting.value = true
-  closeUploadDialog()
   try {
     const job = await startUpload(req)
-    if (job) toast('info', 'Uploading to YouTube', job.title)
+    if (!job) return
+    closeUploadDialog()
+    toast('info', 'Uploading to YouTube', job.title)
   } finally {
     submitting.value = false
   }
@@ -294,6 +295,24 @@ async function submit(): Promise<void> {
           icon="i-lucide-plug-zap"
           title="No YouTube project is connected"
           description="Add a Google project and connect it before uploading."
+          :actions="[
+            {
+              label: 'Open YouTube settings',
+              color: 'neutral',
+              variant: 'outline',
+              size: 'xs',
+              onClick: toSettings,
+            },
+          ]"
+        />
+        <!-- Auto has nothing left to pick: say so here, not only as a greyed-out option. -->
+        <UAlert
+          v-else-if="!effective"
+          color="warning"
+          variant="subtle"
+          icon="i-lucide-hourglass"
+          title="Every project is out of quota for today"
+          description="YouTube hands each project a fresh daily quota at midnight Pacific. Add another Google project to keep uploading before then."
           :actions="[
             {
               label: 'Open YouTube settings',
@@ -457,7 +476,7 @@ async function submit(): Promise<void> {
     </template>
     <template #footer>
       <p class="summary truncate" :title="summary">
-        <template v-if="problem && title.trim()">
+        <template v-if="problem">
           <span class="summary-problem">{{ problem }}</span>
         </template>
         <template v-else>{{ summary }}</template>

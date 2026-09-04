@@ -171,7 +171,11 @@ const icon = computed(() => {
   gap: var(--s-3);
   padding: var(--s-3) var(--s-4) calc(var(--s-3) + 3px);
   color: var(--fg);
-  background: linear-gradient(180deg, rgba(7, 7, 18, 0.94), rgba(7, 7, 18, 0.78));
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--scrim) 94%, transparent),
+    color-mix(in srgb, var(--scrim) 78%, transparent)
+  );
   backdrop-filter: blur(6px);
   border-bottom: 1px solid var(--border);
   cursor: default;

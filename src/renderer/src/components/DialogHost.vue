@@ -62,7 +62,7 @@ watch(open, (v) => {
       content: alt ? 'max-w-lg' : 'max-w-md',
       header: 'pe-12 sm:pe-12',
       title: 'font-heading text-base',
-      footer: 'flex-nowrap justify-end gap-2',
+      footer: 'flex-nowrap justify-end gap-3',
     }"
   >
     <template v-if="isPrompt || detail" #body>
@@ -91,7 +91,7 @@ watch(open, (v) => {
       />
       <UButton
         v-if="alt"
-        class="shrink-0"
+        class="me-2 shrink-0"
         :label="alt.label"
         :color="alt.danger ? 'error' : 'neutral'"
         variant="subtle"

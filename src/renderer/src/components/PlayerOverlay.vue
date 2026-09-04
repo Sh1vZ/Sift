@@ -6,6 +6,7 @@ import ElasticSlider from './bits/ElasticSlider.vue'
 import FavouriteButton from './FavouriteButton.vue'
 import PlayerDetails from './PlayerDetails.vue'
 import TrimBar from './TrimBar.vue'
+import ExportBanner from './ExportBanner.vue'
 import PendingBanner from './youtube/PendingBanner.vue'
 import UploadBanner from './youtube/UploadBanner.vue'
 import {
@@ -39,6 +40,7 @@ import {
   exitEdit,
   exportMuted,
   exportName,
+  exportProblem,
   inSec,
   outSec,
   resetRange,
@@ -48,6 +50,7 @@ import {
   submit,
   submitting,
 } from '@/composables/useEditor'
+import { exportJobs } from '@/composables/useExports'
 import { fadeOut, flipFrom, flipTo } from '@/composables/useMotion'
 import { activeTheme } from '@/composables/useTheme'
 import { visible as windowVisible } from '@/composables/useWindowVisibility'
@@ -81,6 +84,11 @@ const clip = computed(() => current.value!)
 const upload = computed(() => uploadByClip.value[clip.value.id])
 /** A slow action (delete, rename, YouTube removal) running on this clip. */
 const pending = computed(() => pendingByClip.value[clip.value.id])
+/** This recording's export, queue to done, for the banner over the stage. */
+const exportJob = computed(() => {
+  const mine = exportJobs.value.filter((j) => j.sourceId === clip.value.id)
+  return mine.length ? mine[mine.length - 1] : undefined
+})
 /**
  * Set while the window is off screen: the media is unloaded to stop the decoder,
  * but the overlay stays mounted so a trim in progress, the rate and the details
@@ -164,11 +172,7 @@ const outExt = computed(() =>
   KEEP_EXT.has(clip.value.ext.toLowerCase()) ? clip.value.ext.toLowerCase() : '.mp4',
 )
 const editHint = computed(() =>
-  canEdit.value
-    ? editing.value
-      ? 'Leave edit mode'
-      : 'Trim & export'
-    : 'Media info still loading',
+  canEdit.value ? (editing.value ? 'Cancel trim' : 'Trim & export') : 'Media info still loading',
 )
 
 const failedActions = computed(() => [
@@ -228,9 +232,35 @@ function poke(): void {
   if (editing.value) return
   hideTimer = window.setTimeout(() => {
     if (playing.value && !seeking.value && hoverPct.value === null) controls.value = false
-  }, 2600)
+  }, 3500)
 }
-watch(editing, poke)
+
+/**
+ * Changing clips would throw the trim away, so in edit mode the arrows and
+ * N/P stay where they are but say no — once per edit session, in a toast, and
+ * always in the tooltip.
+ */
+let blockedHint = false
+function stepClip(direction: -1 | 1): void {
+  if (editing.value) {
+    if (!blockedHint) {
+      blockedHint = true
+      toast(
+        'info',
+        'Finish or cancel the trim first',
+        'Export, or press Esc to leave edit mode, then change clips.',
+      )
+    }
+    return
+  }
+  if (direction > 0) nextClip()
+  else prevClip()
+}
+
+watch(editing, (on) => {
+  if (!on) blockedHint = false
+  poke()
+})
 
 // ------------------------------------------------------------- playback
 
@@ -516,10 +546,13 @@ function onKey(e: KeyboardEvent): void {
       toggleEdit()
       break
     case 'n':
-      if (!editing.value) nextClip()
+      stepClip(1)
       break
     case 'p':
-      if (!editing.value) prevClip()
+      stepClip(-1)
+      break
+    case 'r':
+      loop.value = !loop.value
       break
     case 'Home':
       seekTo(0)
@@ -746,17 +779,24 @@ onBeforeUnmount(() => {
     <!-- `.self` so only the letterbox around the video closes the player - clicks
          on the video, the arrows or the overlays are handled by those elements. -->
     <div class="stage-wrap" @click.self="close">
-      <UButton
-        v-if="hasPrev && !editing"
-        class="arrow left"
-        icon="i-lucide-chevron-left"
-        color="neutral"
-        variant="soft"
-        square
-        size="xl"
-        aria-label="Previous clip"
-        @click.stop="prevClip"
-      />
+      <UTooltip
+        v-if="hasPrev"
+        :text="editing ? 'Finish or cancel the trim first' : 'Previous clip'"
+        :kbds="editing ? undefined : ['P']"
+      >
+        <UButton
+          class="arrow left"
+          :class="{ 'is-blocked': editing }"
+          icon="i-lucide-chevron-left"
+          color="neutral"
+          variant="soft"
+          square
+          size="xl"
+          :aria-disabled="editing"
+          aria-label="Previous clip"
+          @click.stop="stepClip(-1)"
+        />
+      </UTooltip>
 
       <div ref="stageArea" class="stage-area" @click.self="close">
         <div
@@ -794,6 +834,7 @@ onBeforeUnmount(() => {
           <Transition name="fade">
             <UploadBanner v-if="upload" :key="upload.id" :job="upload" :clip="clip" />
             <PendingBanner v-else-if="pending" :label="pending.label" />
+            <ExportBanner v-else-if="exportJob" :key="exportJob.id" :job="exportJob" />
           </Transition>
 
           <Transition name="fade">
@@ -843,17 +884,24 @@ onBeforeUnmount(() => {
         </div>
       </div>
 
-      <UButton
-        v-if="hasNext && !editing"
-        class="arrow right"
-        icon="i-lucide-chevron-right"
-        color="neutral"
-        variant="soft"
-        square
-        size="xl"
-        aria-label="Next clip"
-        @click.stop="nextClip"
-      />
+      <UTooltip
+        v-if="hasNext"
+        :text="editing ? 'Finish or cancel the trim first' : 'Next clip'"
+        :kbds="editing ? undefined : ['N']"
+      >
+        <UButton
+          class="arrow right"
+          :class="{ 'is-blocked': editing }"
+          icon="i-lucide-chevron-right"
+          color="neutral"
+          variant="soft"
+          square
+          size="xl"
+          :aria-disabled="editing"
+          aria-label="Next clip"
+          @click.stop="stepClip(1)"
+        />
+      </UTooltip>
     </div>
 
     <Transition name="pane">
@@ -931,12 +979,11 @@ onBeforeUnmount(() => {
                 :label="formatTimecode(inSec)"
                 color="neutral"
                 variant="subtle"
-                size="sm"
                 aria-label="Set start to the playhead"
                 @click="setIn(time)"
               />
             </UTooltip>
-            <span class="len mono" :title="'Selection length'">{{
+            <span class="len mono" title="Selection length" aria-label="Selection length">{{
               formatTimecode(selectionLength)
             }}</span>
             <UTooltip text="Set end to the playhead" :kbds="[']']">
@@ -946,7 +993,6 @@ onBeforeUnmount(() => {
                 :label="formatTimecode(outSec)"
                 color="neutral"
                 variant="subtle"
-                size="sm"
                 aria-label="Set end to the playhead"
                 @click="setOut(time)"
               />
@@ -957,59 +1003,57 @@ onBeforeUnmount(() => {
                 color="neutral"
                 variant="ghost"
                 square
-                size="sm"
                 aria-label="Reset range"
                 @click="resetRange"
               />
             </UTooltip>
-          </div>
-
-          <UTooltip
-            :text="clip.hasAudio ? 'Drop the audio from the export' : 'Source has no audio'"
-            :kbds="['Shift', 'M']"
-          >
-            <UButton
-              :icon="exportMuted ? 'i-lucide-volume-x' : 'i-lucide-volume-2'"
-              :label="exportMuted ? 'Muted' : 'Mute'"
-              :color="exportMuted ? 'primary' : 'neutral'"
-              :variant="exportMuted ? 'soft' : 'subtle'"
-              size="sm"
-              :aria-pressed="exportMuted"
-              :disabled="!clip.hasAudio"
-              @click="exportMuted = !exportMuted"
-            />
-          </UTooltip>
-
-          <UInput
-            v-model="exportName"
-            class="name"
-            size="md"
-            placeholder="Clip name"
-            spellcheck="false"
-            autocomplete="off"
-            aria-label="Clip name"
-            :ui="{ trailing: 'pe-2.5' }"
-            @keydown.enter.prevent="exportNow"
-            @keydown.esc.prevent="exitEdit"
-          >
-            <template #trailing>
-              <span class="ext mono">{{ outExt }}</span>
-            </template>
-          </UInput>
-
-          <div class="submit">
-            <UButton label="Cancel" color="neutral" variant="ghost" size="md" @click="exitEdit" />
-            <UTooltip text="Export the selection" :kbds="['Ctrl', 'Enter']">
+            <UTooltip
+              :text="clip.hasAudio ? 'Drop the audio from the export' : 'Source has no audio'"
+              :kbds="['Shift', 'M']"
+            >
               <UButton
-                icon="i-lucide-download"
-                label="Export"
-                color="primary"
-                size="md"
-                :loading="submitting"
-                :disabled="!canExport"
-                @click="exportNow"
+                :icon="exportMuted ? 'i-lucide-volume-x' : 'i-lucide-volume-2'"
+                :label="exportMuted ? 'Muted' : 'Mute'"
+                :color="exportMuted ? 'primary' : 'neutral'"
+                :variant="exportMuted ? 'soft' : 'subtle'"
+                :aria-pressed="exportMuted"
+                :disabled="!clip.hasAudio"
+                @click="exportMuted = !exportMuted"
               />
             </UTooltip>
+          </div>
+
+          <div class="export">
+            <UInput
+              v-model="exportName"
+              class="name"
+              placeholder="Clip name"
+              spellcheck="false"
+              autocomplete="off"
+              aria-label="Clip name"
+              :ui="{ trailing: 'pe-2.5' }"
+              @keydown.enter.prevent="exportNow"
+              @keydown.esc.prevent="exitEdit"
+            >
+              <template #trailing>
+                <span class="ext mono">{{ outExt }}</span>
+              </template>
+            </UInput>
+            <!-- Why Export is off, in words, instead of a silently disabled button. -->
+            <p v-if="exportProblem" class="problem" role="status">{{ exportProblem }}</p>
+            <div class="submit">
+              <UButton label="Cancel trim" color="neutral" variant="ghost" @click="exitEdit" />
+              <UTooltip text="Export the selection" :kbds="['Ctrl', 'Enter']">
+                <UButton
+                  icon="i-lucide-download"
+                  label="Export"
+                  color="primary"
+                  :loading="submitting"
+                  :disabled="!canExport"
+                  @click="exportNow"
+                />
+              </UTooltip>
+            </div>
           </div>
         </div>
       </div>
@@ -1023,9 +1067,11 @@ onBeforeUnmount(() => {
                 color="neutral"
                 variant="ghost"
                 square
-                :disabled="!hasPrev || editing"
+                :class="{ 'is-blocked': editing }"
+                :disabled="!hasPrev"
+                :aria-disabled="editing"
                 aria-label="Previous clip"
-                @click="prevClip"
+                @click="stepClip(-1)"
               />
             </UTooltip>
             <UTooltip :text="playing ? 'Pause' : 'Play'" :kbds="['Space']">
@@ -1045,9 +1091,11 @@ onBeforeUnmount(() => {
                 color="neutral"
                 variant="ghost"
                 square
-                :disabled="!hasNext || editing"
+                :class="{ 'is-blocked': editing }"
+                :disabled="!hasNext"
+                :aria-disabled="editing"
                 aria-label="Next clip"
-                @click="nextClip"
+                @click="stepClip(1)"
               />
             </UTooltip>
           </div>
@@ -1059,12 +1107,14 @@ onBeforeUnmount(() => {
                 variant="ghost"
                 square
                 :aria-label="muted ? 'Unmute' : 'Mute'"
+                :aria-pressed="muted"
                 @click="setMuted(!muted)"
               />
             </UTooltip>
             <!-- No side icons: the mute button beside it already shows the volume state. -->
             <ElasticSlider
               class="vol-slider"
+              aria-label="Volume"
               :model-value="muted ? 0 : volume * 100"
               :max-value="100"
               :fill-color="activeTheme.colors.secondary"
@@ -1116,7 +1166,7 @@ onBeforeUnmount(() => {
             />
           </UDropdownMenu>
           <FavouriteButton :clip="clip" />
-          <UTooltip v-if="!editing" text="Loop">
+          <UTooltip v-if="!editing" text="Loop" :kbds="['R']">
             <UButton
               icon="i-lucide-repeat"
               :color="loop ? 'primary' : 'neutral'"
@@ -1157,7 +1207,7 @@ onBeforeUnmount(() => {
   -webkit-app-region: no-drag;
   /* One width, one switch: everything that has to make room for the details
      pane reads --pane-w, which is 0 whenever the pane is not showing. */
-  --details-w: 380px;
+  --details-w: 400px;
   --pane-w: 0px;
   /* The controls block grows a row in edit mode; the stage gives it the room. */
   --controls-h: 108px;
@@ -1166,16 +1216,16 @@ onBeforeUnmount(() => {
   --pane-w: var(--details-w);
 }
 .player.is-editing {
-  --controls-h: 236px;
+  --controls-h: 252px;
 }
 /* Near the 980px minimum window the pane gives width back so the video keeps
    the larger share of the screen. */
 @media (max-width: 1240px) {
   .player {
-    --details-w: 320px;
+    --details-w: 340px;
   }
   .player.is-editing {
-    --controls-h: 282px;
+    --controls-h: 320px;
   }
 }
 .player.no-cursor {
@@ -1375,6 +1425,18 @@ onBeforeUnmount(() => {
   border-color: var(--primary-hover);
   transform: scale(1.08);
 }
+/* In edit mode the arrows stay put but say no: the tooltip and a toast explain,
+   and the hover lift is withheld. The same class dims the transport pair. */
+.arrow.is-blocked,
+.is-blocked {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.arrow.is-blocked:hover {
+  background: color-mix(in srgb, var(--bg-3) 70%, transparent);
+  border-color: var(--border-hover);
+  transform: none;
+}
 .arrow.left {
   left: 22px;
 }
@@ -1462,7 +1524,8 @@ onBeforeUnmount(() => {
   border-radius: 50%;
   background: #fff;
   box-shadow: 0 0 0 4px color-mix(in srgb, var(--secondary) 35%, transparent);
-  transform: scale(0);
+  /* Small at rest so the position reads without hovering; full size under the pointer. */
+  transform: scale(0.6);
   transition: transform var(--dur-fast) var(--ease-spring);
 }
 .seek:hover .knob {
@@ -1513,31 +1576,55 @@ onBeforeUnmount(() => {
   background: color-mix(in srgb, var(--bg-3) 60%, transparent);
   border: 1px solid var(--border);
 }
+/* Two clusters: the range on the left, the export form on the right. At the
+   window minimum the form drops to its own line rather than squeezing the name. */
 .range {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: var(--s-1);
 }
 .point {
-  min-width: 108px;
+  min-width: 116px;
   justify-content: center;
   text-transform: none;
 }
 .len {
   min-width: 64px;
   text-align: center;
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   color: var(--fg-muted);
 }
+.export {
+  flex: 1 1 420px;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+}
 .name {
-  flex: 1;
-  min-width: 200px;
+  flex: 1 1 180px;
+  min-width: 0;
+}
+.name :deep(input) {
+  min-width: 0;
 }
 .ext {
-  font-size: var(--text-xs);
-  color: var(--fg-dim);
+  font-size: var(--text-sm);
+  color: var(--fg-muted);
+}
+.problem {
+  flex: 0 1 auto;
+  min-width: 0;
+  font-size: var(--text-sm);
+  color: var(--warning);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .submit {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   gap: var(--s-2);

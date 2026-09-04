@@ -88,8 +88,9 @@ Press `?` anywhere for the same list in the app.
 | 0–9 | Jump to 0–90 % |
 | N / P | Next / previous clip |
 | F | Fullscreen · Esc back |
+| R | Loop |
 | I | Show / hide the details pane |
-| E | Trim & export (edit mode) · Esc leaves it |
+| E | Trim & export (edit mode) · Esc cancels the trim |
 | , . | Step one frame back / forward |
 
 In edit mode:

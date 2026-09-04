@@ -29,6 +29,15 @@ export const canExport = computed(
     selectionLength.value >= MIN_SELECTION_S,
 )
 
+/** Why Export is off, in words, or empty when it is not: the row shows this beside the button. */
+export const exportProblem = computed(() => {
+  if (!editing.value) return ''
+  if (!exportName.value.trim()) return 'Give the clip a name'
+  if (selectionLength.value < MIN_SELECTION_S)
+    return `Selection is too short (at least ${MIN_SELECTION_S} s)`
+  return ''
+})
+
 export function enterEdit(clip: Clip): void {
   duration = clip.duration
   inSec.value = 0
