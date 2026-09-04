@@ -1,6 +1,12 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { changelogSection, changelogToText } from '@shared/changelog'
+import {
+  changelogReleases,
+  changelogSection,
+  parseChangelog,
+  type ChangelogBlock,
+  type ChangelogRelease
+} from '@shared/changelog'
 
 /**
  * The bundled `CHANGELOG.md`. A packaged build gets it from extraResources
@@ -19,19 +25,30 @@ function candidates(): string[] {
 }
 
 /**
- * Release notes for one version as display text, or '' when the changelog is
- * missing or has no section for it. Never throws: a missing changelog degrades to
- * silence rather than breaking startup.
+ * The bundled changelog, or '' when it is missing. Never throws: an absent
+ * changelog degrades to silence rather than breaking startup.
  */
-export async function releaseNotesFor(version: string): Promise<string> {
+async function read(): Promise<string> {
   for (const file of candidates()) {
     try {
-      const md = await readFile(file, 'utf8')
-      const section = changelogSection(md, version)
-      if (section) return changelogToText(section)
+      return await readFile(file, 'utf8')
     } catch {
       /* try the next location; absence is not an error */
     }
   }
   return ''
+}
+
+/**
+ * Release notes for one version as parsed blocks, or an empty array when the
+ * changelog is missing or has no section for it.
+ */
+export async function releaseNotesFor(version: string): Promise<ChangelogBlock[]> {
+  const section = changelogSection(await read(), version)
+  return section ? parseChangelog(section) : []
+}
+
+/** Every version in the bundled changelog, newest first, for the full-history view. */
+export async function fullChangelog(): Promise<ChangelogRelease[]> {
+  return changelogReleases(await read())
 }

@@ -32,7 +32,8 @@ const api: Api = {
     check: () => ipcRenderer.invoke('updates:check'),
     install: () => void ipcRenderer.invoke('updates:install'),
     whatsNew: () => ipcRenderer.invoke('updates:whats-new'),
-    dismissWhatsNew: () => void ipcRenderer.invoke('updates:dismiss-whats-new')
+    dismissWhatsNew: () => void ipcRenderer.invoke('updates:dismiss-whats-new'),
+    changelog: () => ipcRenderer.invoke('updates:changelog')
   },
   window: {
     minimize: () => void ipcRenderer.invoke('window:minimize'),

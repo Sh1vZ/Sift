@@ -77,6 +77,7 @@ export function registerIpc(
   ipcMain.handle('updates:install', () => updates.install())
   ipcMain.handle('updates:whats-new', () => library.whatsNew())
   ipcMain.handle('updates:dismiss-whats-new', () => library.dismissWhatsNew())
+  ipcMain.handle('updates:changelog', () => library.changelog())
 
   ipcMain.handle('window:minimize', () => getWindow()?.minimize())
   ipcMain.handle('window:toggle-maximize', () => {

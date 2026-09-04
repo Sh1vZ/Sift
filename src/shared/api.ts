@@ -1,3 +1,4 @@
+import type { ChangelogRelease } from './changelog'
 import type {
   ActionResult,
   AppStats,
@@ -62,6 +63,8 @@ export interface Api {
     whatsNew(): Promise<WhatsNew | null>
     /** Marks those notes read so they are not offered again. */
     dismissWhatsNew(): void
+    /** Every version in the bundled changelog, newest first. */
+    changelog(): Promise<ChangelogRelease[]>
   }
   window: {
     minimize(): void

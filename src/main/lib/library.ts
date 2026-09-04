@@ -4,6 +4,7 @@ import { existsSync, type Stats } from 'node:fs'
 import { mkdir, rename as fsRename, stat, unlink } from 'node:fs/promises'
 import { basename, dirname, extname, join, normalize } from 'node:path'
 import type { FSWatcher } from 'chokidar'
+import type { ChangelogRelease } from '@shared/changelog'
 import type {
   ActionResult,
   AppStats,
@@ -19,7 +20,7 @@ import type {
   Settings,
   WhatsNew
 } from '@shared/types'
-import { releaseNotesFor } from './changelog'
+import { fullChangelog, releaseNotesFor } from './changelog'
 import { cleanTitle, clipId, deriveGame, parseRecordedAt } from './clips'
 import {
   INVALID_NAME,
@@ -337,14 +338,19 @@ export class Library {
       if (!seen) this.setSettings({ lastSeenVersion: version })
       return null
     }
-    const notes = await releaseNotesFor(version)
+    const blocks = await releaseNotesFor(version)
     // Nothing written for this version — mark it seen so the file is not re-read
     // on every launch from here on.
-    if (!notes) {
+    if (!blocks.length) {
       this.setSettings({ lastSeenVersion: version })
       return null
     }
-    return { version, notes }
+    return { version, blocks }
+  }
+
+  /** The whole bundled changelog, for the "Full changelog" view in that dialog. */
+  changelog(): Promise<ChangelogRelease[]> {
+    return fullChangelog()
   }
 
   /** The user has read the notes; do not offer them again. */

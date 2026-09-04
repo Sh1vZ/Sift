@@ -11,7 +11,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
-import { changelogSection, changelogToText } from '@shared/changelog'
+import { changelogReleases, changelogSection, parseChangelog } from '@shared/changelog'
 import { DEFAULT_SETTINGS, type Clip, type LibraryFolder } from '@shared/types'
 import { buildExportArgs, exportExt, safeGameDir, sanitizeName, uniqueName, parseProgressLine } from '../src/main/lib/exports'
 import { Store } from '../src/main/lib/store'
@@ -229,9 +229,40 @@ function changelogCases(): void {
   )
   check(changelogSection(CHANGELOG, '9.9.9') === '', 'changelogSection is empty for an unknown version')
   check(changelogSection('', '1.0.0') === '' && changelogSection(CHANGELOG, '') === '', 'changelogSection handles empties')
+  const section = ['### Added', '- One **bold** and `code`', '  wrapped onto a second line', '  - Nested', '* Two'].join('\n')
+  const blocks = parseChangelog(section)
   check(
-    changelogToText('### Added\n- One\n* Two') === 'Added\n• One\n• Two',
-    'changelogToText drops sub-headings and normalises bullets'
+    blocks.length === 2 && blocks[0]?.kind === 'heading' && blocks[0].text === 'Added',
+    'parseChangelog reads a sub-heading'
+  )
+  const list = blocks[1]
+  check(list?.kind === 'list' && list.items.length === 2, 'parseChangelog groups bullets into one list')
+  const first = list?.kind === 'list' ? list.items[0] : undefined
+  check(
+    first?.content.map((n) => n.kind).join(',') === 'text,strong,text,code,text',
+    'parseChangelog splits bold and code spans out of a bullet'
+  )
+  check(
+    first?.content.at(-1)?.text === ' wrapped onto a second line',
+    'parseChangelog folds a wrapped line back into its bullet'
+  )
+  check(first?.children.length === 1, 'parseChangelog nests an indented bullet under its parent')
+
+  const link = parseChangelog('- See [docs](https://example.com) and [bad](javascript:alert(1))')
+  const runs = link[0]?.kind === 'list' ? (link[0].items[0]?.content ?? []) : []
+  check(
+    runs.some((n) => n.kind === 'link' && n.href === 'https://example.com'),
+    'parseChangelog keeps an http link'
+  )
+  check(
+    runs.every((n) => n.kind !== 'link' || n.href.startsWith('https://')),
+    'parseChangelog refuses a non-http href'
+  )
+
+  const releases = changelogReleases(CHANGELOG)
+  check(
+    releases.length === 2 && releases[0]?.version === '1.0.0-beta.2' && releases[0]?.date === '2026-09-10',
+    'changelogReleases lists every version with its date, newest first'
   )
 }
 

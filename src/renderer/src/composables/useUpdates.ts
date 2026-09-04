@@ -1,4 +1,5 @@
 import { computed, ref } from 'vue'
+import type { ChangelogRelease } from '@shared/changelog'
 import { IDLE_UPDATE_STATE, type UpdateState, type WhatsNew } from '@shared/types'
 import { toast } from './useToasts'
 
@@ -6,8 +7,10 @@ import { toast } from './useToasts'
  * Auto-update state, mirrored from main. The updater there owns the state
  * machine; this is a read-through copy plus the three actions the UI needs.
  *
- * `notes` arrives already flattened to plain text — main strips the HTML the
- * GitHub feed serves — so nothing here needs to render markup.
+ * `update.notes` arrives already flattened to plain text — main strips the HTML
+ * the GitHub feed serves. The bundled changelog takes the other route: main
+ * parses its markdown into blocks. Either way the renderer is never handed
+ * markup, and there is no `v-html` in the app.
  */
 const api = window.api
 
@@ -18,6 +21,14 @@ export const update = ref<UpdateState>({ ...IDLE_UPDATE_STATE })
 
 /** The changelog for the running build, shown once after it updates itself. */
 export const whatsNew = ref<WhatsNew | null>(null)
+
+/**
+ * Every version in the bundled changelog, for the dialog's full-history view.
+ * Null until it is first asked for — the file is only read when someone opens
+ * that tab, and the result is cached because it cannot change while the app runs.
+ */
+export const changelog = ref<ChangelogRelease[] | null>(null)
+export const changelogLoading = ref(false)
 
 export const checking = computed(() => update.value.status === 'checking')
 export const updateReady = computed(() => update.value.status === 'downloaded')
@@ -79,6 +90,17 @@ export async function checkForUpdates(): Promise<void> {
 
 export function installUpdate(): void {
   api.updates.install()
+}
+
+/** Reads the bundled changelog once; a second call while one is in flight is a no-op. */
+export async function loadChangelog(): Promise<void> {
+  if (changelog.value || changelogLoading.value) return
+  changelogLoading.value = true
+  try {
+    changelog.value = await api.updates.changelog()
+  } finally {
+    changelogLoading.value = false
+  }
 }
 
 /** Idempotent: the dialog's button and its own close both land here. */

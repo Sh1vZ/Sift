@@ -1,5 +1,7 @@
 /** Types shared between the main process, the preload bridge and the renderer. */
 
+import type { ChangelogBlock } from "./changelog";
+
 export type ProbeState = "pending" | "ok" | "failed";
 
 export interface Clip {
@@ -281,8 +283,12 @@ export const IDLE_UPDATE_STATE: UpdateState = {
 /** The changelog section for the version now running, shown once after an update. */
 export interface WhatsNew {
   version: string;
-  /** Plain text from the bundled CHANGELOG.md; empty when there was no section. */
-  notes: string;
+  /**
+   * The section of the bundled CHANGELOG.md for this version, already parsed in
+   * main. Blocks rather than markdown or HTML, so the renderer draws it with
+   * `v-for` and never has to decide whether to trust markup.
+   */
+  blocks: ChangelogBlock[];
 }
 
 /** Payloads pushed from main → renderer. */
