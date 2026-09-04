@@ -1,4 +1,4 @@
-import { computed, ref, watch } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import type {
   ActivityRecord,
   Clip,
@@ -6,6 +6,7 @@ import type {
   LibraryFolder,
   ScanState,
   Settings,
+  SortBy,
 } from '@shared/types'
 import { DEFAULT_SETTINGS } from '@shared/types'
 import { youtubeUrl } from '@shared/youtube'
@@ -142,23 +143,27 @@ export const games = computed<GameSummary[]>(() => {
   return [...map.values()].sort((a, b) => b.latestMs - a.latestMs)
 })
 
-function compare(sort: Settings['sort']): (a: Clip, b: Clip) => number {
+/** Grid order. `timeOf` is what "newest" means: the recording time, or for exports the export time. */
+function compare(
+  sort: SortBy,
+  timeOf: (c: Clip) => number = (c) => c.recordedAtMs,
+): (a: Clip, b: Clip) => number {
   switch (sort) {
     case 'oldest':
-      return (a, b) => a.recordedAtMs - b.recordedAtMs || a.name.localeCompare(b.name)
+      return (a, b) => timeOf(a) - timeOf(b) || a.name.localeCompare(b.name)
     case 'name':
-      return (a, b) => a.title.localeCompare(b.title) || a.recordedAtMs - b.recordedAtMs
+      return (a, b) => a.title.localeCompare(b.title) || timeOf(a) - timeOf(b)
     case 'duration':
-      return (a, b) => b.duration - a.duration || b.recordedAtMs - a.recordedAtMs
+      return (a, b) => b.duration - a.duration || timeOf(b) - timeOf(a)
     case 'size':
-      return (a, b) => b.size - a.size || b.recordedAtMs - a.recordedAtMs
+      return (a, b) => b.size - a.size || timeOf(b) - timeOf(a)
     case 'favourite':
       return (a, b) =>
         Number(b.favourite) - Number(a.favourite) ||
-        b.recordedAtMs - a.recordedAtMs ||
+        timeOf(b) - timeOf(a) ||
         a.name.localeCompare(b.name)
     default:
-      return (a, b) => b.recordedAtMs - a.recordedAtMs || a.name.localeCompare(b.name)
+      return (a, b) => timeOf(b) - timeOf(a) || a.name.localeCompare(b.name)
   }
 }
 
@@ -170,60 +175,69 @@ export const SHARE_FILTERS: Array<{ value: ShareFilter; label: string; icon: str
   { value: 'unshared', label: 'Not shared', icon: 'i-lucide-cloud-off' },
 ]
 
-/**
- * Narrows both grids to clips that have, or have not, been uploaded to YouTube.
- * View state rather than a setting: a filter left on across launches would look
- * like clips had vanished.
- */
-export const shareFilter = ref<ShareFilter>('all')
+/** Which grid a filter belongs to: a game's recordings, or the Clips view. */
+export type FilterScope = 'library' | 'clips'
 
-const matchesShare = (c: Clip): boolean =>
-  shareFilter.value === 'all' || (shareFilter.value === 'shared') === Boolean(c.youtubeId)
-
-/**
- * Two independent toggles rather than one select: they compose, and "unwatched
- * favourites" is the question this pair exists to answer. View state like
- * `shareFilter` — left on across launches they would look like lost clips.
- */
-export const favouritesOnly = ref(false)
-export const unseenOnly = ref(false)
-
-const matchesState = (c: Clip): boolean =>
-  (!favouritesOnly.value || c.favourite) && (!unseenOnly.value || !c.seenAtMs)
-
-/** Both grids are narrowed; the palette and the empty states read it to explain themselves. */
-export const stateFiltered = computed(() => favouritesOnly.value || unseenOnly.value)
-
-export function clearFilters(): void {
-  favouritesOnly.value = false
-  unseenOnly.value = false
-  shareFilter.value = 'all'
+export interface ViewFilters {
+  /** Title filter typed in the toolbar; reset whenever its screen is entered. */
+  query: string
+  favourites: boolean
+  unwatched: boolean
+  share: ShareFilter
 }
+
+const blankFilters = (): ViewFilters => ({
+  query: '',
+  favourites: false,
+  unwatched: false,
+  share: 'all',
+})
+
+/**
+ * One set per grid, so a toggle set inside a game never silently narrows the
+ * Clips view, or the other way round. View state rather than settings: a
+ * filter left on across launches would look like clips had vanished. The two
+ * toggles compose — "unwatched favourites" is the question the pair answers.
+ */
+export const libraryFilters = reactive<ViewFilters>(blankFilters())
+export const clipsFilters = reactive<ViewFilters>(blankFilters())
+
+export const filtersFor = (scope: FilterScope): ViewFilters =>
+  scope === 'clips' ? clipsFilters : libraryFilters
+
+/** A toggle or the sharing select — not the name filter — is hiding clips. */
+export const isNarrowed = (f: ViewFilters): boolean =>
+  f.favourites || f.unwatched || f.share !== 'all'
+
+export function clearFilters(scope: FilterScope): void {
+  const f = filtersFor(scope)
+  f.favourites = false
+  f.unwatched = false
+  f.share = 'all'
+}
+
+/** The Clips view's order. The in-game order is a persisted setting; this one resets with the app. */
+export const exportSort = ref<SortBy>('newest')
 
 /** Letters and digits only, so "lords of the fallen" finds "LordsOfTheFallen_2026". */
 export const squash = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]+/g, '')
-
-/**
- * Narrows a game's grid by title. View state like `shareFilter`: it resets
- * whenever you step into or out of a game, so a filter never outlives the
- * screen it was typed on.
- */
-export const clipQuery = ref('')
-/** The same for the Clips view; cleared each time the view is opened. */
-export const exportQuery = ref('')
 
 /** Title match for a query already lower-cased (`q`) and squashed (`qs`). */
 const matchesQuery = (c: Clip, q: string, qs: string): boolean =>
   !q || c.title.toLowerCase().includes(q) || squash(c.title).includes(qs)
 
+const matches = (c: Clip, f: ViewFilters, q: string, qs: string): boolean =>
+  (f.share === 'all' || (f.share === 'shared') === Boolean(c.youtubeId)) &&
+  (!f.favourites || c.favourite) &&
+  (!f.unwatched || !c.seenAtMs) &&
+  matchesQuery(c, q, qs)
+
 export const visibleClips = computed<Clip[]>(() => {
   const game = selectedGame.value
-  const q = clipQuery.value.trim().toLowerCase()
+  const f = libraryFilters
+  const q = f.query.trim().toLowerCase()
   const qs = squash(q)
-  const list = recordings.value.filter(
-    (c) =>
-      (!game || c.game === game) && matchesShare(c) && matchesState(c) && matchesQuery(c, q, qs),
-  )
+  const list = recordings.value.filter((c) => (!game || c.game === game) && matches(c, f, q, qs))
   return list.sort(compare(settings.value.sort))
 })
 
@@ -281,13 +295,12 @@ export const libraryStats = computed(() => {
 /** When an export happened; hand-copied files fall back to their recording time. */
 const exportedAt = (c: Clip): number => c.createdAtMs || c.recordedAtMs
 
-/** The Clips view: one section per game, latest export first, games by their latest export. */
+/** The Clips view: one section per game in the chosen order, games by their latest export. */
 export const clipSections = computed<Section[]>(() => {
-  const q = exportQuery.value.trim().toLowerCase()
+  const f = clipsFilters
+  const q = f.query.trim().toLowerCase()
   const qs = squash(q)
-  const list = exportedClips.value.filter(
-    (c) => matchesShare(c) && matchesState(c) && matchesQuery(c, q, qs),
-  )
+  const list = exportedClips.value.filter((c) => matches(c, f, q, qs))
   if (!list.length) return []
   const byGame = new Map<string, { latest: number; clips: Clip[] }>()
   for (const c of list) {
@@ -304,7 +317,7 @@ export const clipSections = computed<Section[]>(() => {
     .map(([game, g]) => ({
       key: `g:${game}`,
       title: game,
-      clips: g.clips.sort((a, b) => exportedAt(b) - exportedAt(a) || a.name.localeCompare(b.name)),
+      clips: g.clips.sort(compare(exportSort.value, exportedAt)),
     }))
 })
 
@@ -332,13 +345,13 @@ export const screen = computed<'games' | 'game' | 'clips' | 'settings' | 'activi
 
 export function goGames(): void {
   selectedGame.value = null
-  clipQuery.value = ''
+  libraryFilters.query = ''
   view.value = 'library'
 }
 
 export function openGame(name: string): void {
   selectedGame.value = name
-  clipQuery.value = ''
+  libraryFilters.query = ''
   view.value = 'library'
 }
 
@@ -352,7 +365,7 @@ export function newestClipOf(game: string): Clip | undefined {
 }
 
 export function goClips(): void {
-  exportQuery.value = ''
+  clipsFilters.query = ''
   view.value = 'clips'
 }
 
@@ -391,7 +404,7 @@ export function goBack(): void {
   restoring = true
   if (to.view === 'library') {
     selectedGame.value = to.game
-    clipQuery.value = ''
+    libraryFilters.query = ''
   }
   view.value = to.view
 }

@@ -38,6 +38,7 @@ declare module 'vue' {
     Icon: typeof import('./src/components/Icon.vue')['default']
     IndexingPane: typeof import('./src/components/settings/IndexingPane.vue')['default']
     InfoPane: typeof import('./src/components/settings/InfoPane.vue')['default']
+    LibraryToolbar: typeof import('./src/components/LibraryToolbar.vue')['default']
     LibraryView: typeof import('./src/components/LibraryView.vue')['default']
     Magnet: typeof import('./src/components/bits/Magnet.vue')['default']
     OsPane: typeof import('./src/components/settings/OsPane.vue')['default']

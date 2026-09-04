@@ -57,11 +57,14 @@ p {
   margin: 0;
 }
 
+/* No `color: inherit` here: Tailwind's preflight already gives controls that
+   default, in a layer, and an unlayered copy of it would beat every `text-*`
+   utility Nuxt UI puts on a button - a pressed primary toggle or a destructive
+   action would read in body colour. */
 button,
 input,
 select {
   font: inherit;
-  color: inherit;
 }
 
 button {

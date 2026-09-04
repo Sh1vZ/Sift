@@ -5,6 +5,7 @@ import ClipCard from './ClipCard.vue'
 import { GRID_PAD_X, useVirtualGrid } from '@/composables/useVirtualGrid'
 import { pendingByClip, settings, type Section } from '@/composables/useLibrary'
 import { clipMenuItems } from '@/composables/useClipMenu'
+import { cancelExport, dismissExport } from '@/composables/useExports'
 import { cancelUpload, uploadByClip } from '@/composables/useUploads'
 import { staggerIn, type Rect } from '@/composables/useMotion'
 import { current, openClip, source } from '@/composables/usePlayer'
@@ -115,6 +116,8 @@ const menuItems = (clip: Clip) =>
               :pending="pendingByClip[clip.id]"
               @open="onOpen"
               @cancel-upload="(id) => void cancelUpload(id)"
+              @cancel-job="(id) => void cancelExport(id)"
+              @dismiss-job="dismissExport"
             />
           </UContextMenu>
         </div>

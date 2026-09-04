@@ -34,9 +34,9 @@ export const GRID_PAD_X = 28
 const PAD_TOP = 8
 const PAD_BOTTOM = 48
 const GAP = 18
-/** Height reserved under each thumbnail for the title + date line, including the
- *  padding ClipCard's `.meta` sets. Change both together. */
-const META_H = 70
+/** Height of the strip under each thumbnail: ClipCard's `.meta` sets the same
+ *  fixed height, so font metrics can never move the two apart. Change both together. */
+const META_H = 68
 /** Section header row; ClipGrid's `.row-header` height must match. */
 const HEADER_H = 56
 const SECTION_GAP = 14

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, ref } from 'vue'
 import GameMergeHints from './GameMergeHints.vue'
 import Icon from './Icon.vue'
 import AnimatedList from './bits/AnimatedList.vue'
@@ -8,46 +8,26 @@ import { mergeGamesDialog, renameGameDialog, splitGameDialog } from '@/composabl
 import {
   filteredGames,
   gameQuery,
-  gameSort,
-  games,
   newestClipOf,
   now,
   openGame,
   rescan,
   revealClip,
   scan,
-  type GameSort,
   type GameSummary,
 } from '@/composables/useLibrary'
 import { motionEnabled } from '@/composables/useMotion'
-import { registerSearch } from '@/composables/useShortcuts'
 import { activeTheme } from '@/composables/useTheme'
+import { toast } from '@/composables/useToasts'
 import { isOpen as playerOpen } from '@/composables/usePlayer'
 import { visible as windowVisible } from '@/composables/useWindowVisibility'
 import { formatBytes, formatDuration, formatRelative } from '@/utils/format'
 
+/**
+ * The list of game cards under the Games header. The search and the sort live
+ * in LibraryView's tools row, bound to the same module state this reads.
+ */
 const api = window.api
-
-const sortOptions: Array<{ label: string; value: GameSort; icon: string }> = [
-  { label: 'Recent activity', value: 'recent', icon: 'i-lucide-clock' },
-  { label: 'Name', value: 'name', icon: 'i-lucide-arrow-up-down' },
-  { label: 'Most clips', value: 'count', icon: 'i-lucide-film' },
-]
-
-function onKey(e: KeyboardEvent): void {
-  if (e.key === 'Escape' && gameQuery.value) {
-    gameQuery.value = ''
-    e.stopPropagation()
-  }
-}
-
-// `/` and Ctrl+F land here while this screen is up.
-const search = ref<{ inputRef: HTMLInputElement | null } | null>(null)
-let offSearch: (() => void) | null = null
-onMounted(() => {
-  offSearch = registerSearch(() => search.value?.inputRef?.select())
-})
-onBeforeUnmount(() => offSearch?.())
 
 const keyOf = (g: GameSummary): string => g.name
 const open = (g: GameSummary): void => openGame(g.name)
@@ -84,8 +64,7 @@ function gameMenu(g: GameSummary, targets: GameSummary[]) {
       ...(g.renamed
         ? [
             {
-              label:
-                g.sources.length > 1 ? `Split into ${g.sources.length} games` : 'Use folder name',
+              label: g.sources.length > 1 ? 'Undo merge' : 'Use folder name',
               icon: 'i-lucide-split',
               onSelect: () => void splitGameDialog(g),
             },
@@ -123,6 +102,8 @@ const gameMenus = computed(() => {
 const DRAG_TYPE = 'application/x-sift-game'
 const dragging = ref<GameSummary | null>(null)
 const dropTarget = ref<string | null>(null)
+/** The first drag of a session says what dropping does; after that the ring on the target is enough. */
+let dragHintShown = false
 
 function onDragStart(e: DragEvent, g: GameSummary): void {
   dragging.value = g
@@ -130,6 +111,14 @@ function onDragStart(e: DragEvent, g: GameSummary): void {
   // Chromium refuses to start a drag that carries nothing.
   e.dataTransfer?.setData(DRAG_TYPE, g.name)
   if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move'
+  if (!dragHintShown) {
+    dragHintShown = true
+    toast(
+      'info',
+      'Drop it on another game to merge them',
+      'Only the card changes — nothing on disk moves.',
+    )
+  }
 }
 
 function onDragEnd(): void {
@@ -162,59 +151,6 @@ const menuOpen = ref(false)
 
 <template>
   <div class="browser">
-    <div class="tools">
-      <UInput
-        ref="search"
-        v-model="gameQuery"
-        class="search"
-        icon="i-lucide-search"
-        size="xl"
-        placeholder="Search games…"
-        autofocus
-        spellcheck="false"
-        autocomplete="off"
-        aria-label="Search games"
-        :ui="{ trailing: 'pe-1.5' }"
-        @keydown="onKey"
-      >
-        <template v-if="gameQuery" #trailing>
-          <UButton
-            color="neutral"
-            variant="link"
-            size="sm"
-            icon="i-lucide-x"
-            aria-label="Clear search"
-            @click="gameQuery = ''"
-          />
-        </template>
-      </UInput>
-
-      <div class="kbds" aria-hidden="true">
-        <UKbd value="arrowup" /><UKbd value="arrowdown" /><UKbd value="arrowleft" /><UKbd
-          value="arrowright"
-        />
-        <span>move</span>
-        <UKbd value="enter" />
-        <span>open</span>
-      </div>
-
-      <USelect
-        v-model="gameSort"
-        :items="sortOptions"
-        icon="i-lucide-arrow-up-down"
-        class="w-48"
-        aria-label="Sort games"
-      />
-
-      <UBadge
-        color="neutral"
-        variant="subtle"
-        size="md"
-        :label="`${filteredGames.length} of ${games.length}`"
-        class="mono"
-      />
-    </div>
-
     <GameMergeHints />
 
     <div class="stage">
@@ -345,33 +281,9 @@ const menuOpen = ref(false)
   display: flex;
   flex-direction: column;
 }
-.tools {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 0 28px 14px;
-}
-.search {
-  flex: 1;
-  max-width: 520px;
-}
-.kbds {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: var(--text-sm);
-  color: var(--fg-muted);
-  white-space: nowrap;
-}
-.kbds span {
-  margin: 0 4px 0 2px;
-}
-.tools > .mono {
-  margin-left: auto;
-}
 
 /* Holds the box the list and the empty state animate inside; without it the
-   leaving one, which goes absolute mid-transition, would cover the search row. */
+   leaving one, which goes absolute mid-transition, would cover the header. */
 .stage {
   position: relative;
   flex: 1;
@@ -416,14 +328,14 @@ const menuOpen = ref(false)
   background: var(--primary-soft);
   box-shadow: var(--glow-primary);
 }
-/* Above the card's spotlight wash, clear of the chevron, and dim until the row
-   is under the pointer or holds focus. */
+/* Above the card's spotlight wash, clear of the chevron. Dimmed at rest rather
+   than hidden: an affordance you cannot see is one you cannot find. */
 .game-slot .kebab {
   position: absolute;
   top: 6px;
   right: 6px;
   z-index: 2;
-  opacity: 0.5;
+  opacity: 0.7;
   transition:
     opacity var(--dur-fast) var(--ease-out),
     transform var(--dur) var(--ease-out);

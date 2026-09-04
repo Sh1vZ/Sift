@@ -1,49 +1,38 @@
 <script setup lang="ts">
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import type { Clip, ExportJob } from '@shared/types'
+import ClipGrid from './ClipGrid.vue'
+import LibraryToolbar from './LibraryToolbar.vue'
+import CountUp from './bits/CountUp.vue'
+import SplitText from './bits/SplitText.vue'
 import { exportJobs, jobsById } from '@/composables/useExports'
 import {
   chooseClipsDir,
+  clearFilters,
   clipSections,
+  clipsFilters,
   clipsFolder,
   clipsStats,
-  clearFilters,
   exportedClips,
-  exportQuery,
-  favouritesOnly,
+  exportSort,
   goGames,
   orderedExports,
   revealClipsDir,
   settings,
-  SHARE_FILTERS,
-  shareFilter,
-  stateFiltered,
-  unseenOnly,
-  updateSettings,
   type Section,
 } from '@/composables/useLibrary'
 import { motionEnabled } from '@/composables/useMotion'
 import { registerSearch } from '@/composables/useShortcuts'
 import { formatBytes, formatDuration } from '@/utils/format'
-import type { Clip, ExportJob, GridSize } from '@shared/types'
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import ClipGrid from './ClipGrid.vue'
-import CountUp from './bits/CountUp.vue'
-import SplitText from './bits/SplitText.vue'
 
-const sizeOptions: Array<{ value: GridSize; icon: string; label: string }> = [
-  { value: 'large', icon: 'i-lucide-grid-2x2', label: 'Large cards' },
-  { value: 'comfortable', icon: 'i-lucide-layout-grid', label: 'Comfortable cards' },
-  { value: 'compact', icon: 'i-lucide-grid-3x3', label: 'Compact cards' },
-]
-
-/** USelect shows only its own icon prop, so the active filter's glyph is bound by hand. */
-const shareIcon = computed(() => SHARE_FILTERS.find((f) => f.value === shareFilter.value)?.icon)
+const filters = clipsFilters
 
 /** Names whichever filter emptied the grid, so the empty state is actionable. */
 const filteredTitle = computed(() => {
-  if (favouritesOnly.value && unseenOnly.value) return 'No unwatched favourites'
-  if (favouritesOnly.value) return 'No favourite clips yet'
-  if (unseenOnly.value) return "You've watched every clip"
-  return shareFilter.value === 'shared' ? 'No clips on YouTube yet' : 'Every clip is on YouTube'
+  if (filters.favourites && filters.unwatched) return 'No unwatched favourites'
+  if (filters.favourites) return 'No favourite clips yet'
+  if (filters.unwatched) return "You've watched every clip"
+  return filters.share === 'shared' ? 'No clips on YouTube yet' : 'Every clip is on YouTube'
 })
 
 /** A job's stand-in card until the real clip arrives through `clips:added`. */
@@ -109,29 +98,18 @@ const unreachable = computed(() =>
 )
 const resetKey = computed(
   () =>
-    `${settings.value.gridSize}|${shareFilter.value}|${favouritesOnly.value}|${unseenOnly.value}|${exportQuery.value}`,
+    `${settings.value.gridSize}|${exportSort.value}|${filters.share}|${filters.favourites}|${filters.unwatched}|${filters.query}`,
 )
 /** Exports exist, but a filter hides all of them. */
 const filteredOut = computed(() => !hasContent.value && exportedClips.value.length > 0)
-/** The name filter or the sharing select is hiding some exports. */
+/** The name filter or another filter is hiding some exports. */
 const narrowed = computed(() => orderedExports.value.length !== exportedClips.value.length)
 
-// ------------------------------------------------------------ name filter
-
-const filterInput = ref<{ inputRef: HTMLInputElement | null } | null>(null)
-
-/** Esc clears the filter; a second Esc leaves the field. */
-function onFilterKey(e: KeyboardEvent): void {
-  if (e.key !== 'Escape') return
-  e.stopPropagation()
-  if (exportQuery.value) exportQuery.value = ''
-  else filterInput.value?.inputRef?.blur()
-}
-
-// `/` and Ctrl+F land here while this view is up.
+// `/` and Ctrl+F land in the toolbar's filter while this view is up.
+const toolbar = ref<{ focus: () => void } | null>(null)
 let offSearch: (() => void) | null = null
 onMounted(() => {
-  offSearch = registerSearch(() => filterInput.value?.inputRef?.select())
+  offSearch = registerSearch(() => toolbar.value?.focus())
 })
 onBeforeUnmount(() => offSearch?.())
 </script>
@@ -139,126 +117,62 @@ onBeforeUnmount(() => offSearch?.())
 <template>
   <section class="view">
     <header class="head">
-      <div class="head-text">
-        <SplitText
-          v-if="motionEnabled"
-          text="Clips"
-          tag="h1"
-          class-name="title"
-          split-type="chars"
-          :delay="18"
-          :duration="0.55"
-          ease="power3.out"
-          :from="{ opacity: 0, y: 22 }"
-          :to="{ opacity: 1, y: 0 }"
-          text-align="left"
-          immediate
-        />
-        <h1 v-else class="title">Clips</h1>
+      <div class="title-row">
+        <div class="head-text">
+          <SplitText
+            v-if="motionEnabled"
+            text="Clips"
+            tag="h1"
+            class-name="title"
+            split-type="chars"
+            :delay="18"
+            :duration="0.55"
+            ease="power3.out"
+            :from="{ opacity: 0, y: 22 }"
+            :to="{ opacity: 1, y: 0 }"
+            text-align="left"
+            immediate
+          />
+          <h1 v-else class="title">Clips</h1>
 
-        <div class="stats-slot">
-          <Transition name="dissolve">
-            <p v-if="clipsStats.count" key="totals" class="stats">
-              <span>
-                <template v-if="narrowed">{{ orderedExports.length }} of </template>
-                <CountUp v-if="motionEnabled" :to="clipsStats.count" :duration="0.9" /><template
-                  v-else
-                  >{{ clipsStats.count }}</template
-                >
-                clip{{ clipsStats.count === 1 ? '' : 's' }}
-              </span>
-              <span class="dot">·</span>
-              <span class="mono">{{ formatDuration(clipsStats.duration) }}</span>
-              <span class="dot">·</span>
-              <span>{{ formatBytes(clipsStats.size) }}</span>
-            </p>
-            <p v-else key="none" class="stats">Nothing exported yet</p>
-          </Transition>
+          <div class="stats-slot">
+            <Transition name="dissolve">
+              <p v-if="clipsStats.count" key="totals" class="stats">
+                <span>
+                  <template v-if="narrowed">{{ orderedExports.length }} of </template>
+                  <CountUp v-if="motionEnabled" :to="clipsStats.count" :duration="0.9" /><template
+                    v-else
+                    >{{ clipsStats.count }}</template
+                  >
+                  clip{{ clipsStats.count === 1 ? '' : 's' }}
+                </span>
+                <span class="dot">·</span>
+                <span class="mono">{{ formatDuration(clipsStats.duration) }}</span>
+                <span class="dot">·</span>
+                <span>{{ formatBytes(clipsStats.size) }}</span>
+              </p>
+              <p v-else key="none" class="stats">No clips exported yet</p>
+            </Transition>
+          </div>
         </div>
-      </div>
-
-      <div class="toolbar">
-        <UInput
-          ref="filterInput"
-          v-model="exportQuery"
-          class="filter"
-          icon="i-lucide-search"
-          placeholder="Filter clips"
-          spellcheck="false"
-          autocomplete="off"
-          aria-label="Filter clips by name"
-          :ui="{ trailing: 'pe-1.5' }"
-          @keydown="onFilterKey"
-        >
-          <template v-if="exportQuery" #trailing>
-            <UButton
-              color="neutral"
-              variant="link"
-              size="sm"
-              icon="i-lucide-x"
-              aria-label="Clear filter"
-              @click="exportQuery = ''"
-            />
-          </template>
-        </UInput>
-
-        <USelect
-          v-model="shareFilter"
-          :items="SHARE_FILTERS"
-          :icon="shareIcon"
-          class="w-44"
-          aria-label="Filter by sharing"
-        />
-
-        <UFieldGroup aria-label="Filter by state">
-          <UTooltip text="Favourites only">
-            <UButton
-              icon="i-lucide-star"
-              square
-              :color="favouritesOnly ? 'primary' : 'neutral'"
-              :variant="favouritesOnly ? 'soft' : 'subtle'"
-              :aria-pressed="favouritesOnly"
-              aria-label="Favourites only"
-              @click="favouritesOnly = !favouritesOnly"
-            />
-          </UTooltip>
-          <UTooltip text="Unwatched only">
-            <UButton
-              icon="i-lucide-eye-off"
-              square
-              :color="unseenOnly ? 'primary' : 'neutral'"
-              :variant="unseenOnly ? 'soft' : 'subtle'"
-              :aria-pressed="unseenOnly"
-              aria-label="Unwatched only"
-              @click="unseenOnly = !unseenOnly"
-            />
-          </UTooltip>
-        </UFieldGroup>
-
-        <UFieldGroup aria-label="Card size">
-          <UTooltip v-for="s in sizeOptions" :key="s.value" :text="s.label">
-            <UButton
-              :icon="s.icon"
-              square
-              :color="settings.gridSize === s.value ? 'primary' : 'neutral'"
-              :variant="settings.gridSize === s.value ? 'soft' : 'subtle'"
-              :aria-pressed="settings.gridSize === s.value"
-              :aria-label="s.label"
-              @click="updateSettings({ gridSize: s.value })"
-            />
-          </UTooltip>
-        </UFieldGroup>
 
         <UTooltip :text="clipsFolder?.path ?? ''">
           <UButton
             icon="i-lucide-folder-open"
             label="Open folder"
-            color="primary"
+            color="neutral"
+            variant="subtle"
             :disabled="!clipsFolder?.available"
             @click="revealClipsDir()"
           />
         </UTooltip>
       </div>
+
+      <Transition name="fade">
+        <div v-if="exportedClips.length" class="tools-row">
+          <LibraryToolbar ref="toolbar" scope="clips" />
+        </div>
+      </Transition>
     </header>
 
     <Transition name="collapse">
@@ -298,13 +212,13 @@ onBeforeUnmount(() => offSearch?.())
           :reset-key="resetKey"
         />
 
-        <!-- The name filter hid every export: say so, ahead of the sharing filter. -->
+        <!-- The name filter hid every export: say so, ahead of the other filters. -->
         <UEmpty
-          v-else-if="filteredOut && exportQuery"
+          v-else-if="filteredOut && filters.query"
           key="nomatch"
           class="empty"
           icon="i-lucide-search-x"
-          :title="`No clips match “${exportQuery}”`"
+          :title="`No clips match “${filters.query}”`"
           description="Try a shorter name — the filter also ignores spaces and punctuation."
         >
           <template #actions>
@@ -312,7 +226,7 @@ onBeforeUnmount(() => offSearch?.())
               label="Clear filter"
               color="neutral"
               variant="subtle"
-              @click="exportQuery = ''"
+              @click="filters.query = ''"
             />
           </template>
         </UEmpty>
@@ -324,13 +238,13 @@ onBeforeUnmount(() => offSearch?.())
           icon="i-lucide-filter-x"
           :title="filteredTitle"
           :description="
-            stateFiltered
+            filters.favourites || filters.unwatched
               ? 'Clear the filter to see the rest of your clips.'
               : 'The sharing filter is hiding the rest.'
           "
         >
           <template #actions>
-            <UButton label="Show all" color="primary" @click="clearFilters()" />
+            <UButton label="Show all" color="primary" @click="clearFilters('clips')" />
           </template>
         </UEmpty>
 
@@ -339,8 +253,8 @@ onBeforeUnmount(() => offSearch?.())
           key="empty"
           class="empty"
           icon="i-lucide-scissors"
-          title="No clips yet"
-          :description="`Open a recording, press E to trim it, and export. Clips land in ${clipsFolder?.path ?? 'your clips folder'} and show up here, grouped by game.`"
+          title="No clips exported yet"
+          :description="`Trim any recording — press E in the player — and export it. Clips land in ${clipsFolder?.path ?? 'your clips folder'} and show up here, grouped by game.`"
         >
           <template #actions>
             <UButton
@@ -365,10 +279,15 @@ onBeforeUnmount(() => offSearch?.())
 }
 .head {
   display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+  padding: 22px 28px 18px;
+}
+.title-row {
+  display: flex;
   align-items: flex-end;
   justify-content: space-between;
-  gap: 16px;
-  padding: 22px 28px 18px;
+  gap: var(--s-4);
 }
 .head-text {
   min-width: 0;
@@ -399,15 +318,11 @@ onBeforeUnmount(() => offSearch?.())
 .dot {
   color: var(--fg-dim);
 }
-.toolbar {
+.tools-row {
   display: flex;
   align-items: center;
-  gap: 10px;
   flex-wrap: wrap;
-  justify-content: flex-end;
-}
-.filter {
-  width: 200px;
+  gap: var(--s-3);
 }
 .warn {
   margin: 0 28px var(--s-4);
@@ -421,9 +336,7 @@ onBeforeUnmount(() => offSearch?.())
   flex: 1;
   min-height: 0;
 }
-/* No colour here: it would cascade into the actions, and Nuxt UI's own text
-   utilities cannot override an inherited colour on a button (see base.css).
-   UEmpty already dims its description on its own. */
+/* No colour here: UEmpty already dims its description on its own. */
 .empty {
   flex: 1;
   display: flex;

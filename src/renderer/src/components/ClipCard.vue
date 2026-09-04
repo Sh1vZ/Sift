@@ -31,7 +31,12 @@ const props = withDefaults(
   }>(),
   { variant: 'recording', job: undefined, upload: undefined, pending: undefined, menu: () => [] },
 )
-const emit = defineEmits<{ open: [clip: Clip, rect: DOMRect]; cancelUpload: [jobId: string] }>()
+const emit = defineEmits<{
+  open: [clip: Clip, rect: DOMRect]
+  cancelUpload: [jobId: string]
+  cancelJob: [jobId: string]
+  dismissJob: [jobId: string]
+}>()
 
 const api = window.api
 const thumbEl = ref<HTMLElement | null>(null)
@@ -204,8 +209,8 @@ const seen = computed(() => Boolean(props.clip.seenAtMs) && !veil.value)
     class="clip-card"
     :class="{ 'is-job': job, 'is-seen': seen }"
     :data-clip-id="clip.id"
-    :tabindex="job ? -1 : 0"
-    :role="job ? undefined : 'button'"
+    tabindex="0"
+    :role="job ? 'group' : 'button'"
     :aria-label="job ? `${jobLabel} ${clip.title}` : `Play ${clip.title}`"
     :aria-busy="veil?.busy || undefined"
     @click="open"
@@ -280,6 +285,31 @@ const seen = computed(() => Boolean(props.clip.seenAtMs) && !veil.value)
             variant="subtle"
             size="xs"
             @click.stop="emit('cancelUpload', upload.id)"
+            @keydown.enter.stop
+            @keydown.space.stop
+          />
+          <!-- A running export can be stopped from its own card, keyboard included;
+               one that ended badly can be waved away. -->
+          <UButton
+            v-if="job && (job.state === 'queued' || job.state === 'running')"
+            class="veil-cancel"
+            icon="i-lucide-x"
+            label="Cancel"
+            color="neutral"
+            variant="subtle"
+            size="xs"
+            @click.stop="emit('cancelJob', job.id)"
+            @keydown.enter.stop
+            @keydown.space.stop
+          />
+          <UButton
+            v-else-if="job"
+            class="veil-cancel"
+            label="Dismiss"
+            color="neutral"
+            variant="subtle"
+            size="xs"
+            @click.stop="emit('dismissJob', job.id)"
             @keydown.enter.stop
             @keydown.space.stop
           />
@@ -561,19 +591,26 @@ const seen = computed(() => Boolean(props.clip.seenAtMs) && !veil.value)
   color: var(--fg-strong);
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.22);
 }
-/* Already on YouTube: one glyph, top right, in the reserved rose. */
-/* Already on YouTube: same size as the other chips, told apart by the word and
-   the rose accent rather than by bulk. */
+/* Already on YouTube: the same chip as the others, told apart by the word and
+   the rose glyph. The word itself stays as legible as every other label. */
 .badge.yt {
-  color: var(--accent);
+  color: var(--fg-strong);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent);
+}
+.badge.yt :deep(svg) {
+  color: var(--accent);
 }
 /* The rose says "this is on YouTube and it is fine". A video YouTube is still
    working on, or would not publish, borrows the amber every other unfinished
    or unhappy state in the app already uses rather than inventing a colour. */
 .badge.yt.is-busy,
-.badge.yt.is-bad {
+.badge.yt.is-bad,
+.badge.yt.is-busy :deep(svg),
+.badge.yt.is-bad :deep(svg) {
   color: var(--warning);
+}
+.badge.yt.is-busy,
+.badge.yt.is-bad {
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--warning) 40%, transparent);
 }
 /* A flat wash rather than `.poster { opacity }`: the poster already owns an
@@ -626,13 +663,15 @@ const seen = computed(() => Boolean(props.clip.seenAtMs) && !veil.value)
   opacity: 0;
   transform: scale(0.6);
 }
-/* Inset on every side: the hover ring sits on the card's edge, so the title and
-   the date line need room before it. Keep in step with META_H in useVirtualGrid. */
+/* A fixed height, the same number as META_H in useVirtualGrid, so the font
+   metrics can never move the strip and the composable apart. Inset on the sides
+   because the hover ring sits on the card's edge. */
 .meta {
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 12px 10px;
+  height: 68px;
+  padding: 0 12px;
 }
 /* The two lines take whatever the menu button leaves; `min-width: 0` is what
    keeps their `truncate` honest inside a flex row. */
@@ -644,7 +683,7 @@ const seen = computed(() => Boolean(props.clip.seenAtMs) && !veil.value)
    affordance you cannot see is one you cannot find. */
 .kebab {
   flex: 0 0 auto;
-  opacity: 0.5;
+  opacity: 0.7;
   transition: opacity var(--dur-fast) var(--ease-out);
 }
 .clip-card:hover .kebab,
@@ -655,6 +694,7 @@ const seen = computed(() => Boolean(props.clip.seenAtMs) && !veil.value)
 }
 .title {
   font-size: var(--text-md);
+  line-height: 1.25;
   font-weight: 600;
   color: var(--fg);
   transition: color var(--dur-fast) var(--ease-out);
@@ -668,6 +708,7 @@ const seen = computed(() => Boolean(props.clip.seenAtMs) && !veil.value)
   gap: 5px;
   margin-top: 3px;
   font-size: var(--text-sm);
+  line-height: 1.43;
   color: var(--fg-muted);
 }
 .game {

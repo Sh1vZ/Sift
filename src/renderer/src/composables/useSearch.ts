@@ -67,7 +67,7 @@ export function isExport(clip: Clip): boolean {
 export async function openResult(clip: Clip): Promise<void> {
   const from = isExport(clip) ? 'clips' : 'library'
   closeSearch()
-  clearFilters()
+  clearFilters(from)
   if (from === 'clips') goClips()
   else openGame(clip.game)
   await nextTick()

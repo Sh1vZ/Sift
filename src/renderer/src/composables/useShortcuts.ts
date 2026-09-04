@@ -1,6 +1,6 @@
 import { ref } from 'vue'
 import { dialog } from './useDialogs'
-import { clipQuery, goBack, screen } from './useLibrary'
+import { goBack, libraryFilters, screen } from './useLibrary'
 import { isOpen as playerOpen } from './usePlayer'
 import { openSearch, searchOpen } from './useSearch'
 import { openSettings, settingsTab } from './useSettings'
@@ -146,7 +146,8 @@ function onKey(e: KeyboardEvent): void {
     (e.key === 'Backspace' || (e.altKey && e.key === 'ArrowLeft') || e.key === 'Escape')
   ) {
     // Inside a game, Esc empties the filter first; the next one leaves.
-    if (e.key === 'Escape' && screen.value === 'game' && clipQuery.value) clipQuery.value = ''
+    if (e.key === 'Escape' && screen.value === 'game' && libraryFilters.query)
+      libraryFilters.query = ''
     else goBack()
   } else handled = false
   if (handled) {

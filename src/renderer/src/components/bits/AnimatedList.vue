@@ -7,7 +7,7 @@
         :index="index"
         :delay="0.05"
         :animated="animated"
-        @mouseenter="selectedIndex = index"
+        @mousemove="onPointer($event, index)"
         @click="select(item, index)"
       >
         <slot :item="item" :index="index" :selected="selectedIndex === index" />
@@ -35,6 +35,9 @@
  * upstream Tab hijack removed so focus can still reach the search box. Item
  * spacing moved from a per-item margin onto the scroll container, so a consumer
  * can lay the items out as a grid; arrow keys follow whatever grid it picks.
+ * The pointer moves the highlight on `mousemove` rather than `mouseenter`:
+ * enter also fires when the list re-lays out under a still pointer, which stole
+ * the highlight from the keyboard on every filter keystroke.
  */
 import { motion, useInView } from 'motion-v'
 import { defineComponent, h, onMounted, onUnmounted, ref, watch } from 'vue'
@@ -46,7 +49,7 @@ const AnimatedItem = defineComponent({
     delay: { type: Number, default: 0 },
     animated: { type: Boolean, default: true }
   },
-  emits: ['mouseenter', 'click'],
+  emits: ['mousemove', 'click'],
   setup(props, { slots, emit }) {
     const itemRef = ref<HTMLElement | null>(null)
     const inView = useInView(itemRef, { amount: 0.5, once: false })
@@ -60,7 +63,7 @@ const AnimatedItem = defineComponent({
           initial: props.animated ? { scale: 0.92, opacity: 0 } : false,
           animate: !props.animated || inView.value ? { scale: 1, opacity: 1 } : { scale: 0.92, opacity: 0 },
           transition: { duration: 0.22, delay: props.delay },
-          onMouseenter: (e: MouseEvent) => emit('mouseenter', e),
+          onMousemove: (e: MouseEvent) => emit('mousemove', e),
           onClick: (e: MouseEvent) => emit('click', e)
         },
         slots.default?.()
@@ -100,6 +103,16 @@ const topGradientOpacity = ref(0)
 const bottomGradientOpacity = ref(1)
 
 const keyOf = (item: T, index: number): string | number => (props.itemKey ? props.itemKey(item, index) : index)
+
+let lastX = -1
+let lastY = -1
+/** Only a pointer that actually moved takes the highlight. */
+const onPointer = (e: MouseEvent, index: number): void => {
+  if (e.clientX === lastX && e.clientY === lastY) return
+  lastX = e.clientX
+  lastY = e.clientY
+  selectedIndex.value = index
+}
 
 const select = (item: T, index: number): void => {
   selectedIndex.value = index

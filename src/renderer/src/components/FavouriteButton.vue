@@ -150,8 +150,9 @@ function onClick(e: MouseEvent): void {
   /* The card owns the reveal, and it is in another component's style scope — a
      selector cannot reach across that, but an inherited custom property can.
      ClipCard sets `--fav-shown` on hover and focus; see its `.clip-card` rules. */
-  opacity: var(--fav-shown, 0);
-  transform: scale(var(--fav-scale, 0.8));
+  /* Visible at rest, so it can be found without hovering; the card lifts it to full. */
+  opacity: var(--fav-shown, 0.55);
+  transform: scale(var(--fav-scale, 0.92));
   transition:
     opacity var(--dur) var(--ease-out),
     transform var(--dur) var(--ease-spring),
