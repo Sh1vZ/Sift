@@ -4,6 +4,7 @@ import type { Clip, ExportJob } from '@shared/types'
 import ClipCard from './ClipCard.vue'
 import { GRID_PAD_X, useVirtualGrid } from '@/composables/useVirtualGrid'
 import {
+  copyClipFile,
   copyClipPath,
   copyYouTubeLink,
   deleteClip,
@@ -168,6 +169,12 @@ function menuItems(clip: Clip) {
   const busy = Boolean(pendingByClip.value[clip.id])
   main.push(
     { label: 'Show in Explorer', icon: 'i-lucide-folder-open', onSelect: () => revealClip(clip) },
+    {
+      label: 'Copy file',
+      icon: 'i-lucide-clipboard-copy',
+      disabled: busy,
+      onSelect: () => void copyClipFile(clip),
+    },
     { label: 'Copy path', icon: 'i-lucide-copy', onSelect: () => void copyClipPath(clip) },
     {
       label: 'Rename',

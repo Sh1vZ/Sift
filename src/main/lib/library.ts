@@ -21,6 +21,7 @@ import type {
   WhatsNew,
 } from '@shared/types'
 import { fullChangelog, releaseNotesFor } from './changelog'
+import { copyFileToClipboard } from './clipboard'
 import { cleanTitle, clipId, deriveGame, parseRecordedAt } from './clips'
 import {
   INVALID_NAME,
@@ -495,6 +496,23 @@ export class Library {
     const clip = this.store.data.clips[id]
     if (!clip) return { ok: false, error: 'Clip not found.' }
     await clipboard.writeText(clip.path)
+    return { ok: true }
+  }
+
+  /** Puts the file itself on the clipboard, so a paste anywhere lands the clip. */
+  async copyFile(id: string): Promise<ActionResult> {
+    const clip = this.store.data.clips[id]
+    if (!clip) return { ok: false, error: 'Clip not found.' }
+    try {
+      await stat(clip.path)
+    } catch {
+      return { ok: false, error: 'The file is no longer on disk.' }
+    }
+    try {
+      await copyFileToClipboard(clip.path)
+    } catch (err) {
+      return { ok: false, error: (err as Error).message }
+    }
     return { ok: true }
   }
 

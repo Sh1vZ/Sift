@@ -21,6 +21,7 @@ const api: Api = {
     delete: (id, permanent) => ipcRenderer.invoke('clip:delete', id, permanent === true),
     reveal: (id) => ipcRenderer.invoke('clip:reveal', id),
     copyPath: (id) => ipcRenderer.invoke('clip:copy-path', id),
+    copyFile: (id) => ipcRenderer.invoke('clip:copy-file', id),
     export: (req) => ipcRenderer.invoke('clip:export', req),
     openYouTube: (id) => ipcRenderer.invoke('clip:open-youtube', id),
     copyYouTubeLink: (id) => ipcRenderer.invoke('clip:copy-youtube-link', id),

@@ -49,6 +49,8 @@ export interface Api {
     reveal(id: string): Promise<ActionResult>
     /** Puts the clip's absolute path on the system clipboard. */
     copyPath(id: string): Promise<ActionResult>
+    /** Puts the file itself on the clipboard, as Explorer's Copy does, for pasting anywhere. */
+    copyFile(id: string): Promise<ActionResult>
     /** Queues a stream-copy export; progress arrives through `exports:changed`. */
     export(req: ExportRequest): Promise<ActionResult & { job?: ExportJob }>
     /** Opens the clip's YouTube page in the browser. */

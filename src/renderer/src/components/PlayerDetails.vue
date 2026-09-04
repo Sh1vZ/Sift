@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import type { Clip } from '@shared/types'
 import {
   clipsFolder,
+  copyClipFile,
   copyClipPath,
   copyYouTubeLink,
   getClip,
@@ -71,7 +72,7 @@ const folder = computed(() => {
 
 const isExport = computed(() => Boolean(props.clip.sourceId))
 const upload = computed(() => uploadByClip.value[props.clip.id])
-/** A delete, rename or YouTube removal still in flight for this clip. */
+/** A delete, rename, YouTube removal or file copy still in flight for this clip. */
 const pendingAction = computed(() => pendingByClip.value[props.clip.id])
 const busy = computed(() => Boolean(pendingAction.value))
 const uploading = computed(() =>
@@ -319,6 +320,18 @@ const sourceRows = computed<Row[]>(() => {
         block
         :disabled="clip.probeState !== 'ok' || busy"
         @click="onUploadButton"
+      />
+      <UButton
+        class="wide"
+        icon="i-lucide-clipboard-copy"
+        label="Copy file"
+        color="neutral"
+        variant="subtle"
+        size="md"
+        block
+        :loading="pendingAction?.kind === 'copy-file'"
+        :disabled="busy"
+        @click="copyClipFile(clip)"
       />
       <UButton
         icon="i-lucide-folder-open"

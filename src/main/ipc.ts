@@ -71,6 +71,7 @@ export function registerIpc(
   )
   ipcMain.handle('clip:reveal', (_e, id) => library.reveal(str(id)))
   ipcMain.handle('clip:copy-path', (_e, id) => library.copyPath(str(id)))
+  ipcMain.handle('clip:copy-file', (_e, id) => library.copyFile(str(id)))
   ipcMain.handle('clip:export', (_e, raw) => {
     // Rebuilt field by field: the request crosses the bridge as plain JSON.
     const r = (raw ?? {}) as Record<string, unknown>

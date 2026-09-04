@@ -404,7 +404,7 @@ export async function revealClipsDir(): Promise<void> {
 
 // ------------------------------------------------------------ pending work
 
-export type PendingKind = 'delete' | 'rename' | 'remove-youtube'
+export type PendingKind = 'delete' | 'rename' | 'remove-youtube' | 'copy-file'
 
 export interface PendingAction {
   kind: PendingKind
@@ -483,6 +483,19 @@ export async function copyClipPath(clip: Clip): Promise<void> {
   const res = await api.clips.copyPath(clip.id)
   if (res.ok) toast('success', 'Path copied', clip.path)
   else toast('error', 'Could not copy path', res.error)
+}
+
+/**
+ * Puts the file itself on the clipboard, so a paste into Discord, a browser
+ * or a folder lands the clip. Pending because the PowerShell that writes the
+ * clipboard can take a second to cold-start.
+ */
+export async function copyClipFile(clip: Clip): Promise<void> {
+  await withPending(clip.id, 'copy-file', 'Copying file…', async () => {
+    const res = await api.clips.copyFile(clip.id)
+    if (res.ok) toast('success', 'File copied', 'Paste it anywhere with Ctrl+V.')
+    else toast('error', 'Could not copy the file', res.error)
+  })
 }
 
 /** Opens the clip's YouTube page in the browser; main builds the URL from the stored id. */
