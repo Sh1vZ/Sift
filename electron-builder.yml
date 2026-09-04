@@ -5,11 +5,12 @@ directories:
   buildResources: build
   output: dist
 files:
-  - out/**
+  # The three build outputs only — `out/**` also swept in the bundled test and
+  # release-notes scripts, which have no business in a shipped app.
+  - out/main/**
+  - out/preload/**
+  - out/renderer/**
   - package.json
-  - '!node_modules/ffprobe-static/bin/darwin/**'
-  - '!node_modules/ffprobe-static/bin/linux/**'
-  - '!node_modules/ffprobe-static/bin/win32/ia32/**'
 # The tray builds its icon from a real file, and 'files' above does not ship build/.
 extraResources:
   - from: build/icon.png
@@ -18,10 +19,19 @@ extraResources:
   # the notes for the running build do not depend on the network.
   - from: CHANGELOG.md
     to: CHANGELOG.md
+# The ffmpeg and ffprobe executables have to be real files on disk for
+# child_process to spawn them. @ffprobe-installer resolves its own path through
+# require, which lands inside the archive; lib/paths.ts rewrites that to the
+# unpacked copy.
 asarUnpack:
   - node_modules/ffmpeg-static/**
-  - node_modules/ffprobe-static/bin/**
+  - node_modules/@ffprobe-installer/**
 npmRebuild: false
+# Electron ships 55 locale .pak files, ~48 MB, and Sift's UI is English-only.
+# Worth 7.7 MB of the installer. Note the matching is exact-ish: 'en' would drop
+# en-US.pak rather than keep it, so name the full locale.
+electronLanguages:
+  - en-US
 
 # electron-builder infers a GitHub provider from the git remote, but the inferred
 # default is `releaseType: draft` — and a draft release is invisible to

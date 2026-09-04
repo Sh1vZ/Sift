@@ -29,7 +29,7 @@ transform-only animation — exists to keep Sift from stealing frames. Do not re
 - **Component kit:** Nuxt UI v4, auto-imported, themed onto the app tokens (see `sift-nuxt-ui`)
 - **Styling:** Tailwind v4 (supplied by the Nuxt UI plugin) + scoped CSS against custom properties
 - **Motion:** GSAP, motion-v, ogl (see `sift-motion`)
-- **Media:** `ffmpeg-static` + `ffprobe-static`, spawned as child processes
+- **Media:** `ffmpeg-static` + `@ffprobe-installer/ffprobe`, spawned as child processes
 - **Watching:** chokidar 5
 - **Packaging:** electron-builder 26
 - **Package manager:** npm
@@ -408,7 +408,7 @@ npm run build:win           # Windows installer into dist/
 npm run build:unpack        # unpacked folder for a quick smoke test
 ```
 
-Native or binary-bearing dependencies (`ffmpeg-static`, `ffprobe-static`) must be listed in
+Native or binary-bearing dependencies (`ffmpeg-static`, `@ffprobe-installer/ffprobe`) must be listed in
 `dependencies`, not `devDependencies`, and unpacked from the ASAR via `electron-builder.yml`.
 Renderer-only libraries belong in `devDependencies` — Vite bundles them.
 

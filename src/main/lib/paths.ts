@@ -1,16 +1,39 @@
 import { app } from 'electron'
 import { existsSync, mkdirSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import ffmpegPath from 'ffmpeg-static'
-import ffprobeStatic from 'ffprobe-static'
 
-/** Binaries live outside the asar archive in a packaged build. */
+/**
+ * Binaries live outside the asar archive in a packaged build. Idempotent on
+ * purpose: 'app.asar.unpacked' contains 'app.asar', so rewriting a path that has
+ * already been rewritten would produce 'app.asar.unpacked.unpacked'. Which of the
+ * two a module reports is up to how it resolves itself, so neither is assumed.
+ */
 function unpacked(p: string): string {
-  return p.replace('app.asar', 'app.asar.unpacked')
+  return p.includes('app.asar.unpacked') ? p : p.replace('app.asar', 'app.asar.unpacked')
+}
+
+/**
+ * Required rather than imported: @ffprobe-installer resolves its binary at
+ * module load and *throws* when the platform package is missing — an install
+ * that skipped optional dependencies, or an architecture it has no build for.
+ * A static import would take the whole app down with it, where Sift is meant to
+ * start anyway and report the tooling as unavailable (see `ffmpegAvailable` in
+ * lib/media.ts, which is what an empty path here feeds).
+ */
+function resolveFfprobe(): string {
+  try {
+    const require = createRequire(import.meta.url)
+    return (require('@ffprobe-installer/ffprobe') as { path?: string }).path ?? ''
+  } catch {
+    return ''
+  }
 }
 
 export const FFMPEG = ffmpegPath ? unpacked(ffmpegPath) : ''
-export const FFPROBE = ffprobeStatic?.path ? unpacked(ffprobeStatic.path) : ''
+const ffprobePath = resolveFfprobe()
+export const FFPROBE = ffprobePath ? unpacked(ffprobePath) : ''
 
 export const userDataDir = (): string => app.getPath('userData')
 export const cacheDir = (): string => join(userDataDir(), 'thumbs')

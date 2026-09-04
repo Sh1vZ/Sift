@@ -100,10 +100,10 @@ Rules:
 
 - **`externalizeDepsPlugin()` on main and preload only.** It leaves `dependencies` as runtime
   `require`/`import` rather than bundling them — which is exactly right for native and
-  binary-bearing packages (`ffmpeg-static`, `ffprobe-static`, `chokidar`) and exactly wrong for
-  the renderer, where everything must be bundled. `@nuxt/ui` and `motion-v` are `dependencies`
-  but renderer-only, so they are bundled by the renderer target — the split is by *target*, not
-  by which section of `package.json` a package sits in.
+  binary-bearing packages (`ffmpeg-static`, `@ffprobe-installer/ffprobe`, `chokidar`) and exactly
+  wrong for the renderer, where everything must be bundled. Renderer-only libraries (`@nuxt/ui`,
+  `motion-v`, `ogl`) sit in `devDependencies` for that reason: the renderer target inlines them,
+  while anything left in `dependencies` is shipped into the asar whole, transitive tree and all.
 - **`@nuxt/ui/vite` also registers the Tailwind plugin.** See §5.
 - **Consequence:** anything the main process imports at runtime must be in `dependencies`, not
   `devDependencies`, or it will be missing from the packaged app. Renderer-only libraries
@@ -387,13 +387,17 @@ Full rules in `sift-engineering` §Main-Process Rules. Platform specifics:
   and deadlocks the child.
 - A kill timer on every job (`JOB_TIMEOUT_MS`, 60s), always cleared in both the `close` and
   `error` paths.
-- Binaries come from `ffmpeg-static` / `ffprobe-static` and are rewritten by `paths.ts`:
+- Binaries come from `ffmpeg-static` / `@ffprobe-installer/ffprobe` and are rewritten by
+  `paths.ts`:
 
 ```ts
 function unpacked(p: string): string {
-  return p.replace('app.asar', 'app.asar.unpacked')
+  return p.includes('app.asar.unpacked') ? p : p.replace('app.asar', 'app.asar.unpacked')
 }
 ```
+
+  The guard is not decoration: `'app.asar.unpacked'` contains `'app.asar'`, and which of the two
+  a package reports depends on how it resolves itself (`__dirname` vs `require.resolve`).
 
   In a packaged build the ASAR archive is not a real directory, so the binary must be read from
   `app.asar.unpacked`. This pairs with `asarUnpack` in `electron-builder.yml` — **change one and
@@ -405,11 +409,13 @@ function unpacked(p: string): string {
 
 `electron-builder.yml` controls the Windows NSIS installer.
 
-- `files` ships `out/**` and `package.json` only. Everything else is pulled in as a resolved
-  dependency; nothing from `src/` reaches the installer.
-- Unused platform binaries are excluded explicitly (`ffprobe-static/bin/darwin`, `linux`,
-  `win32/ia32`). Adding a platform-specific dependency means adding its exclusions.
-- `asarUnpack` covers `ffmpeg-static` and `ffprobe-static/bin`. Any new spawned binary needs an
+- `files` ships `out/main`, `out/preload`, `out/renderer` and `package.json` only. Everything else
+  is pulled in as a resolved dependency; nothing from `src/` reaches the installer, and neither do
+  the bundled test/release scripts that a bare `out/**` would sweep in.
+- Prefer binary packages that ship one platform per optional dependency (`@ffprobe-installer/*`):
+  npm then installs only the one this build needs. A package that puts every platform in one
+  tarball is paid for on every install and needs explicit `!` exclusions to stay out of the asar.
+- `asarUnpack` covers `ffmpeg-static` and `@ffprobe-installer`. Any new spawned binary needs an
   entry here **and** the `unpacked()` treatment in `paths.ts`.
 - `npmRebuild: false` — there are no native modules to rebuild. If a native dependency is ever
   added, this must change and the postinstall story must be re-tested.
