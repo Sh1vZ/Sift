@@ -5,14 +5,18 @@ import {
   clipSections,
   clipsFolder,
   clipsStats,
+  clearFilters,
   exportedClips,
   exportQuery,
+  favouritesOnly,
   goGames,
   orderedExports,
   revealClipsDir,
   settings,
   SHARE_FILTERS,
   shareFilter,
+  stateFiltered,
+  unseenOnly,
   updateSettings,
   type Section,
 } from '@/composables/useLibrary'
@@ -33,6 +37,14 @@ const sizeOptions: Array<{ value: GridSize; icon: string; label: string }> = [
 
 /** USelect shows only its own icon prop, so the active filter's glyph is bound by hand. */
 const shareIcon = computed(() => SHARE_FILTERS.find((f) => f.value === shareFilter.value)?.icon)
+
+/** Names whichever filter emptied the grid, so the empty state is actionable. */
+const filteredTitle = computed(() => {
+  if (favouritesOnly.value && unseenOnly.value) return 'No unwatched favourites'
+  if (favouritesOnly.value) return 'No favourite clips yet'
+  if (unseenOnly.value) return "You've watched every clip"
+  return shareFilter.value === 'shared' ? 'No clips on YouTube yet' : 'Every clip is on YouTube'
+})
 
 /** A job's stand-in card until the real clip arrives through `clips:added`. */
 function placeholder(job: ExportJob): Clip {
@@ -63,6 +75,8 @@ function placeholder(job: ExportJob): Clip {
     muted: job.muted,
     createdAtMs: job.createdAtMs,
     youtubeId: '',
+    favourite: false,
+    seenAtMs: 0,
   }
 }
 
@@ -88,9 +102,10 @@ const unreachable = computed(() =>
   Boolean(clipsFolder.value && !clipsFolder.value.available && exportedClips.value.length),
 )
 const resetKey = computed(
-  () => `${settings.value.gridSize}|${shareFilter.value}|${exportQuery.value}`,
+  () =>
+    `${settings.value.gridSize}|${shareFilter.value}|${favouritesOnly.value}|${unseenOnly.value}|${exportQuery.value}`,
 )
-/** Exports exist, but the sharing filter hides all of them. */
+/** Exports exist, but a filter hides all of them. */
 const filteredOut = computed(() => !hasContent.value && exportedClips.value.length > 0)
 /** The name filter or the sharing select is hiding some exports. */
 const narrowed = computed(() => orderedExports.value.length !== exportedClips.value.length)
@@ -191,6 +206,31 @@ onBeforeUnmount(() => offSearch?.())
           aria-label="Filter by sharing"
         />
 
+        <UFieldGroup size="lg" aria-label="Filter by state">
+          <UTooltip text="Favourites only">
+            <UButton
+              icon="i-lucide-star"
+              square
+              :color="favouritesOnly ? 'primary' : 'neutral'"
+              :variant="favouritesOnly ? 'soft' : 'subtle'"
+              :aria-pressed="favouritesOnly"
+              aria-label="Favourites only"
+              @click="favouritesOnly = !favouritesOnly"
+            />
+          </UTooltip>
+          <UTooltip text="Unwatched only">
+            <UButton
+              icon="i-lucide-eye-off"
+              square
+              :color="unseenOnly ? 'primary' : 'neutral'"
+              :variant="unseenOnly ? 'soft' : 'subtle'"
+              :aria-pressed="unseenOnly"
+              aria-label="Unwatched only"
+              @click="unseenOnly = !unseenOnly"
+            />
+          </UTooltip>
+        </UFieldGroup>
+
         <UFieldGroup size="lg" aria-label="Card size">
           <UTooltip v-for="s in sizeOptions" :key="s.value" :text="s.label">
             <UButton
@@ -280,11 +320,15 @@ onBeforeUnmount(() => offSearch?.())
           key="filtered"
           class="empty"
           icon="i-lucide-filter-x"
-          :title="shareFilter === 'shared' ? 'No clips on YouTube yet' : 'Every clip is on YouTube'"
-          description="The sharing filter is hiding the rest."
+          :title="filteredTitle"
+          :description="
+            stateFiltered
+              ? 'Clear the filter to see the rest of your clips.'
+              : 'The sharing filter is hiding the rest.'
+          "
         >
           <template #actions>
-            <UButton label="Show all" color="primary" size="lg" @click="shareFilter = 'all'" />
+            <UButton label="Show all" color="primary" size="lg" @click="clearFilters()" />
           </template>
         </UEmpty>
 

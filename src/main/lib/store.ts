@@ -34,6 +34,11 @@ const MIGRATIONS: Array<(db: DatabaseSync) => void> = [
     db.exec("ALTER TABLE clips ADD COLUMN youtube_id TEXT NOT NULL DEFAULT ''")
     db.exec(YOUTUBE_ACCOUNTS_TABLE)
   },
+  // v4 -> v5: clips carry the two pieces of user state — starred, and watched.
+  (db) => {
+    db.exec('ALTER TABLE clips ADD COLUMN favourite INTEGER NOT NULL DEFAULT 0')
+    db.exec('ALTER TABLE clips ADD COLUMN seen_at_ms REAL NOT NULL DEFAULT 0')
+  },
 ]
 const SCHEMA_VERSION = MIGRATIONS.length + 1
 
@@ -107,7 +112,9 @@ CREATE TABLE IF NOT EXISTS clips (
   trim_end       REAL NOT NULL DEFAULT 0,
   muted          INTEGER NOT NULL DEFAULT 0,
   created_at_ms  REAL NOT NULL DEFAULT 0,
-  youtube_id     TEXT NOT NULL DEFAULT ''
+  youtube_id     TEXT NOT NULL DEFAULT '',
+  favourite      INTEGER NOT NULL DEFAULT 0,
+  seen_at_ms     REAL NOT NULL DEFAULT 0
 );
 ${YOUTUBE_ACCOUNTS_TABLE}
 `
@@ -147,6 +154,8 @@ interface ClipRow {
   muted: number
   created_at_ms: number
   youtube_id: string
+  favourite: number
+  seen_at_ms: number
 }
 
 /** A `youtube_accounts` row as stored. The `_enc` columns hold base64 ciphertext or ''. */
@@ -272,8 +281,8 @@ export class Store {
       upsertClip: db.prepare(`
         INSERT INTO clips (id, path, name, title, ext, folder_id, game, size, mtime_ms, recorded_at_ms,
           duration, width, height, fps, vcodec, has_audio, thumb, sprite, sprite_frames, probe_state,
-          source_id, trim_start, trim_end, muted, created_at_ms, youtube_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          source_id, trim_start, trim_end, muted, created_at_ms, youtube_id, favourite, seen_at_ms)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
           path = excluded.path, name = excluded.name, title = excluded.title, ext = excluded.ext,
           folder_id = excluded.folder_id, game = excluded.game, size = excluded.size,
@@ -283,7 +292,8 @@ export class Store {
           sprite = excluded.sprite, sprite_frames = excluded.sprite_frames, probe_state = excluded.probe_state,
           source_id = excluded.source_id, trim_start = excluded.trim_start, trim_end = excluded.trim_end,
           muted = excluded.muted, created_at_ms = excluded.created_at_ms,
-          youtube_id = excluded.youtube_id`),
+          youtube_id = excluded.youtube_id, favourite = excluded.favourite,
+          seen_at_ms = excluded.seen_at_ms`),
       deleteClip: db.prepare('DELETE FROM clips WHERE id = ?'),
       setSetting: db.prepare(
         'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
@@ -472,6 +482,8 @@ export class Store {
       c.muted ? 1 : 0,
       c.createdAtMs,
       c.youtubeId,
+      c.favourite ? 1 : 0,
+      c.seenAtMs,
     )
   }
 
@@ -525,5 +537,7 @@ function rowToClip(r: ClipRow): Clip {
     muted: Boolean(r.muted),
     createdAtMs: r.created_at_ms,
     youtubeId: r.youtube_id,
+    favourite: Boolean(r.favourite),
+    seenAtMs: r.seen_at_ms,
   }
 }

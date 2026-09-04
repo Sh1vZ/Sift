@@ -130,6 +130,11 @@ function compare(sort: Settings['sort']): (a: Clip, b: Clip) => number {
       return (a, b) => b.duration - a.duration || b.recordedAtMs - a.recordedAtMs
     case 'size':
       return (a, b) => b.size - a.size || b.recordedAtMs - a.recordedAtMs
+    case 'favourite':
+      return (a, b) =>
+        Number(b.favourite) - Number(a.favourite) ||
+        b.recordedAtMs - a.recordedAtMs ||
+        a.name.localeCompare(b.name)
     default:
       return (a, b) => b.recordedAtMs - a.recordedAtMs || a.name.localeCompare(b.name)
   }
@@ -153,8 +158,28 @@ export const shareFilter = ref<ShareFilter>('all')
 const matchesShare = (c: Clip): boolean =>
   shareFilter.value === 'all' || (shareFilter.value === 'shared') === Boolean(c.youtubeId)
 
+/**
+ * Two independent toggles rather than one select: they compose, and "unwatched
+ * favourites" is the question this pair exists to answer. View state like
+ * `shareFilter` — left on across launches they would look like lost clips.
+ */
+export const favouritesOnly = ref(false)
+export const unseenOnly = ref(false)
+
+const matchesState = (c: Clip): boolean =>
+  (!favouritesOnly.value || c.favourite) && (!unseenOnly.value || !c.seenAtMs)
+
+/** Both grids are narrowed; the palette and the empty states read it to explain themselves. */
+export const stateFiltered = computed(() => favouritesOnly.value || unseenOnly.value)
+
+export function clearFilters(): void {
+  favouritesOnly.value = false
+  unseenOnly.value = false
+  shareFilter.value = 'all'
+}
+
 /** Letters and digits only, so "lords of the fallen" finds "LordsOfTheFallen_2026". */
-const squash = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]+/g, '')
+export const squash = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]+/g, '')
 
 /**
  * Narrows a game's grid by title. View state like `shareFilter`: it resets
@@ -174,7 +199,8 @@ export const visibleClips = computed<Clip[]>(() => {
   const q = clipQuery.value.trim().toLowerCase()
   const qs = squash(q)
   const list = recordings.value.filter(
-    (c) => (!game || c.game === game) && matchesShare(c) && matchesQuery(c, q, qs),
+    (c) =>
+      (!game || c.game === game) && matchesShare(c) && matchesState(c) && matchesQuery(c, q, qs),
   )
   return list.sort(compare(settings.value.sort))
 })
@@ -237,7 +263,9 @@ const exportedAt = (c: Clip): number => c.createdAtMs || c.recordedAtMs
 export const clipSections = computed<Section[]>(() => {
   const q = exportQuery.value.trim().toLowerCase()
   const qs = squash(q)
-  const list = exportedClips.value.filter((c) => matchesShare(c) && matchesQuery(c, q, qs))
+  const list = exportedClips.value.filter(
+    (c) => matchesShare(c) && matchesState(c) && matchesQuery(c, q, qs),
+  )
   if (!list.length) return []
   const byGame = new Map<string, { latest: number; clips: Clip[] }>()
   for (const c of list) {
@@ -521,6 +549,47 @@ export async function deleteClip(clip: Clip, permanent = false): Promise<boolean
 
 export function revealClip(clip: Clip): void {
   void api.clips.reveal(clip.id)
+}
+
+// ------------------------------------------------------------- user state
+// Flipped in the local map first so the star and the dimming answer the click
+// in the same frame; the `clips:updated` push confirms a moment later. No
+// `withPending` veil — that is for actions that touch the disk and take time.
+
+function patchLocal(id: string, patch: Partial<Clip>): void {
+  const c = clipsById.get(id)
+  if (!c) return
+  clipsById.set(id, { ...c, ...patch })
+  version.value++
+}
+
+export async function toggleFavourite(clip: Clip): Promise<void> {
+  const next = !clip.favourite
+  patchLocal(clip.id, { favourite: next })
+  const res = await api.clips.setFavourite(clip.id, next)
+  if (!res.ok) {
+    patchLocal(clip.id, { favourite: !next })
+    toast(
+      'error',
+      next ? 'Could not add to favourites' : 'Could not remove from favourites',
+      res.error,
+    )
+  }
+}
+
+/**
+ * Idempotent on purpose: the player calls this on every `timeupdate` past the
+ * threshold, so a no-op has to be free and must not touch IPC.
+ */
+export async function markSeen(clip: Clip, seen = true): Promise<void> {
+  if (Boolean(clip.seenAtMs) === seen) return
+  const previous = clip.seenAtMs
+  patchLocal(clip.id, { seenAtMs: seen ? Date.now() : 0 })
+  const res = await api.clips.setSeen(clip.id, seen)
+  if (!res.ok) {
+    patchLocal(clip.id, { seenAtMs: previous })
+    toast('error', seen ? 'Could not mark as watched' : 'Could not mark as unwatched', res.error)
+  }
 }
 
 export async function copyClipPath(clip: Clip): Promise<void> {

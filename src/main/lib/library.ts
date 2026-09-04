@@ -160,6 +160,23 @@ export class Library {
     this.applyPatch(patch)
   }
 
+  // ------------------------------------------------------------- user state
+  // Both go through `applyPatch`, so they persist and reach the renderer on the
+  // ordinary `clips:updated` push — no extra plumbing for a one-field change.
+
+  setFavourite(id: string, favourite: boolean): ActionResult {
+    if (!this.store.data.clips[id]) return { ok: false, error: 'Clip not found.' }
+    this.applyPatch({ id, favourite })
+    return { ok: true }
+  }
+
+  /** `seenAtMs` doubles as the flag and the timestamp: 0 is unwatched. */
+  setSeen(id: string, seen: boolean): ActionResult {
+    if (!this.store.data.clips[id]) return { ok: false, error: 'Clip not found.' }
+    this.applyPatch({ id, seenAtMs: seen ? Date.now() : 0 })
+    return { ok: true }
+  }
+
   snapshot(): LibrarySnapshot {
     const videos = app.getPath('videos')
     return {
@@ -677,6 +694,9 @@ export class Library {
         muted: job.muted,
         createdAtMs: Date.now(),
         youtubeId: '',
+        // A clip you just cut is neither starred nor watched yet.
+        favourite: false,
+        seenAtMs: 0,
       }
       const previous = this.store.data.clips[clip.id]
       if (previous) void removeArtifacts(previous)
@@ -813,6 +833,10 @@ export class Library {
         previous?.createdAtMs ?? (folder.kind === 'clips' ? st.birthtimeMs || st.mtimeMs : 0),
       // A re-probed file is still the video that was uploaded.
       youtubeId: previous?.youtubeId ?? '',
+      // User state outlives a re-index: a file that grew by a byte is still the
+      // clip you starred and the one you already watched.
+      favourite: previous?.favourite ?? false,
+      seenAtMs: previous?.seenAtMs ?? 0,
     }
     this.store.data.clips[clip.id] = clip
     this.store.upsertClip(clip)

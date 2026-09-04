@@ -43,6 +43,10 @@ export interface Clip {
   createdAtMs: number
   /** YouTube video id once uploaded from Sift; '' otherwise. */
   youtubeId: string
+  /** User-set: pinned to the top of grids and reachable from the Favourites filter. */
+  favourite: boolean
+  /** When playback last passed the seen threshold; 0 when never watched. */
+  seenAtMs: number
 }
 
 /**
@@ -100,7 +104,7 @@ export interface ExportJob {
 }
 
 export type GroupBy = 'date' | 'none'
-export type SortBy = 'newest' | 'oldest' | 'name' | 'duration' | 'size'
+export type SortBy = 'newest' | 'oldest' | 'name' | 'duration' | 'size' | 'favourite'
 export type GridSize = 'compact' | 'comfortable' | 'large'
 
 /**

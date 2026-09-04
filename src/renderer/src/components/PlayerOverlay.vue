@@ -3,13 +3,22 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { DropdownMenuItem } from '@nuxt/ui'
 import type { Clip } from '@shared/types'
 import ElasticSlider from './bits/ElasticSlider.vue'
+import FavouriteButton from './FavouriteButton.vue'
 import PlayerDetails from './PlayerDetails.vue'
 import TrimBar from './TrimBar.vue'
 import PendingBanner from './youtube/PendingBanner.vue'
 import UploadBanner from './youtube/UploadBanner.vue'
-import { pendingByClip, revealClip, settings, updateSettings } from '@/composables/useLibrary'
+import {
+  markSeen,
+  pendingByClip,
+  revealClip,
+  settings,
+  toggleFavourite,
+  updateSettings,
+} from '@/composables/useLibrary'
 import { clipMenuItems, deleteClipDialog } from '@/composables/useClipMenu'
 import { shortcutsOpen } from '@/composables/useShortcuts'
+import { searchOpen } from '@/composables/useSearch'
 import {
   closePlayer,
   current,
@@ -300,6 +309,9 @@ function onLoadedMetadata(): void {
   resumeAt = -1
   v.pause()
 }
+/** Fraction of a clip that counts as having watched it. */
+const SEEN_AT = 0.9
+
 let lastTime = 0
 function onTimeUpdate(): void {
   const v = video.value
@@ -314,6 +326,11 @@ function onTimeUpdate(): void {
     }
   }
   lastTime = v.currentTime
+  // Watched once you have seen essentially all of it. Never in edit mode: the
+  // preview loops inside the trim range, so a range near the end of a clip
+  // would otherwise mark it watched on every lap.
+  if (!editing.value && duration.value > 0 && v.currentTime / duration.value >= SEEN_AT)
+    void markSeen(clip.value)
 }
 function onProgress(): void {
   const v = video.value
@@ -336,6 +353,8 @@ function onEnded(): void {
     return
   }
   playing.value = false
+  // Watched to the very end, even if no `timeupdate` landed past the threshold.
+  void markSeen(clip.value)
   if (settings.value.autoplayNext && hasNext.value) {
     nextClip()
     return
@@ -433,7 +452,7 @@ function remove(): void {
 function onKey(e: KeyboardEvent): void {
   // A modal owns the keyboard: the confirm/prompt host, the upload form, or the
   // shortcut list.
-  if (dialog.value || uploadDialog.value || shortcutsOpen.value) return
+  if (dialog.value || uploadDialog.value || shortcutsOpen.value || searchOpen.value) return
   const tag = (e.target as HTMLElement | null)?.tagName
   if (tag === 'INPUT' || tag === 'TEXTAREA') return
   let handled = true
@@ -467,6 +486,9 @@ function onKey(e: KeyboardEvent): void {
       break
     case 'm':
       setMuted(!muted.value)
+      break
+    case 's':
+      void toggleFavourite(clip.value)
       break
     case 'f':
       void toggleFullscreen()
@@ -1076,6 +1098,7 @@ onBeforeUnmount(() => {
               aria-label="Playback speed"
             />
           </UDropdownMenu>
+          <FavouriteButton :clip="clip" />
           <UTooltip v-if="!editing" text="Loop">
             <UButton
               icon="i-lucide-repeat"

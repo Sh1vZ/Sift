@@ -10,6 +10,7 @@ import DialogHost from './components/DialogHost.vue'
 import ToastBridge from './components/ToastBridge.vue'
 import WhatsNewDialog from './components/WhatsNewDialog.vue'
 import ShortcutsDialog from './components/ShortcutsDialog.vue'
+import SearchDialog from './components/SearchDialog.vue'
 import UploadDialog from './components/youtube/UploadDialog.vue'
 import { initLibrary, initialExports, ready, view } from '@/composables/useLibrary'
 import { initExports } from '@/composables/useExports'
@@ -85,6 +86,7 @@ onBeforeUnmount(() => {
       <DialogHost />
       <WhatsNewDialog />
       <ShortcutsDialog />
+      <SearchDialog />
       <UploadDialog />
       <ToastBridge />
     </div>

@@ -88,6 +88,10 @@ export function registerIpc(
   ipcMain.handle('clip:open-youtube', (_e, id) => youtube.openVideo(str(id)))
   ipcMain.handle('clip:copy-youtube-link', (_e, id) => youtube.copyLink(str(id)))
   ipcMain.handle('clip:remove-youtube', (_e, id) => youtube.removeVideo(str(id)))
+  ipcMain.handle('clip:set-favourite', (_e, id, favourite) =>
+    library.setFavourite(str(id), favourite === true),
+  )
+  ipcMain.handle('clip:set-seen', (_e, id, seen) => library.setSeen(str(id), seen === true))
 
   ipcMain.handle('export:cancel', (_e, id) => library.cancelExport(str(id)))
   ipcMain.handle('export:dismiss', (_e, id) => library.dismissExport(str(id)))

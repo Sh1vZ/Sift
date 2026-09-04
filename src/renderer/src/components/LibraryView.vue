@@ -12,7 +12,9 @@ import SplitText from './bits/SplitText.vue'
 import StarBorder from './bits/StarBorder.vue'
 import {
   addFolder,
+  clearFilters,
   clipQuery,
+  favouritesOnly,
   folders,
   gameClipCount,
   games,
@@ -28,7 +30,9 @@ import {
   settings,
   SHARE_FILTERS,
   shareFilter,
+  stateFiltered,
   suggestedFolders,
+  unseenOnly,
   updateSettings,
   visibleClips,
 } from '@/composables/useLibrary'
@@ -46,7 +50,7 @@ const hasFolders = computed(() => folders.value.some((f) => f.kind === 'library'
 // Filter/sort/group/size changes restart the grid from the top with a stagger.
 const gridResetKey = computed(
   () =>
-    `${selectedGame.value}|${settings.value.sort}|${settings.value.groupBy}|${settings.value.gridSize}|${shareFilter.value}|${clipQuery.value}`,
+    `${selectedGame.value}|${settings.value.sort}|${settings.value.groupBy}|${settings.value.gridSize}|${shareFilter.value}|${favouritesOnly.value}|${unseenOnly.value}|${clipQuery.value}`,
 )
 const inGame = computed(() => screen.value === 'game')
 const title = computed(() => (inGame.value ? (selectedGame.value ?? '') : 'Games'))
@@ -68,6 +72,7 @@ const sortOptions: Array<{ value: SortBy; label: string }> = [
   { value: 'name', label: 'Name' },
   { value: 'duration', label: 'Longest' },
   { value: 'size', label: 'Largest' },
+  { value: 'favourite', label: 'Favourites first' },
 ]
 
 const sortModel = computed({
@@ -76,6 +81,16 @@ const sortModel = computed({
 })
 /** USelect shows only its own icon prop, so the active filter's glyph is bound by hand. */
 const shareIcon = computed(() => SHARE_FILTERS.find((f) => f.value === shareFilter.value)?.icon)
+
+/** Names whichever filter emptied the grid, so the empty state is actionable. */
+const filteredTitle = computed(() => {
+  if (favouritesOnly.value && unseenOnly.value) return 'No unwatched favourites in this game'
+  if (favouritesOnly.value) return 'Nothing from this game is a favourite yet'
+  if (unseenOnly.value) return "You've watched everything in this game"
+  return shareFilter.value === 'shared'
+    ? 'Nothing from this game is on YouTube yet'
+    : 'Every clip of this game is on YouTube'
+})
 
 // ------------------------------------------------------------ clip filter
 
@@ -246,6 +261,34 @@ const { dropping } = useFolderDrop(stageEl, () => !inGame.value)
               aria-label="Filter by sharing"
             />
 
+            <!-- Two toggles rather than a third select: they compose into
+                 "unwatched favourites", and the in-game toolbar has no room
+                 for another w-44 control at the 980px minimum. -->
+            <UFieldGroup size="lg" aria-label="Filter by state">
+              <UTooltip text="Favourites only">
+                <UButton
+                  icon="i-lucide-star"
+                  square
+                  :color="favouritesOnly ? 'primary' : 'neutral'"
+                  :variant="favouritesOnly ? 'soft' : 'subtle'"
+                  :aria-pressed="favouritesOnly"
+                  aria-label="Favourites only"
+                  @click="favouritesOnly = !favouritesOnly"
+                />
+              </UTooltip>
+              <UTooltip text="Unwatched only">
+                <UButton
+                  icon="i-lucide-eye-off"
+                  square
+                  :color="unseenOnly ? 'primary' : 'neutral'"
+                  :variant="unseenOnly ? 'soft' : 'subtle'"
+                  :aria-pressed="unseenOnly"
+                  aria-label="Unwatched only"
+                  @click="unseenOnly = !unseenOnly"
+                />
+              </UTooltip>
+            </UFieldGroup>
+
             <UFieldGroup size="lg" aria-label="Card size">
               <UTooltip v-for="s in sizeOptions" :key="s.value" :text="s.label">
                 <UButton
@@ -318,22 +361,22 @@ const { dropping } = useFolderDrop(stageEl, () => !inGame.value)
           </template>
         </UEmpty>
 
-        <!-- The sharing filter hid every clip of this game: say so instead of
+        <!-- A filter hid every clip of this game: say which one, instead of
              showing the no-clips screen. -->
         <UEmpty
           v-else-if="inGame && gameClipCount"
           key="filtered"
           class="empty"
           icon="i-lucide-filter-x"
-          :title="
-            shareFilter === 'shared'
-              ? 'Nothing from this game is on YouTube yet'
-              : 'Every clip of this game is on YouTube'
+          :title="filteredTitle"
+          :description="
+            stateFiltered
+              ? 'Clear the filter to see the rest of this game.'
+              : 'The sharing filter is hiding the rest.'
           "
-          description="The sharing filter is hiding the rest."
         >
           <template #actions>
-            <UButton label="Show all" color="primary" size="lg" @click="shareFilter = 'all'" />
+            <UButton label="Show all" color="primary" size="lg" @click="clearFilters()" />
           </template>
         </UEmpty>
 

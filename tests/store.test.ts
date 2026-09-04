@@ -63,6 +63,8 @@ const clip = (id: string): Clip => ({
   muted: false,
   createdAtMs: 0,
   youtubeId: '',
+  favourite: false,
+  seenAtMs: 0,
 })
 
 const count = (file: string, sql: string): number => {
@@ -154,6 +156,8 @@ async function storeCases(): Promise<void> {
     trimEnd: 9.5,
     muted: true,
     createdAtMs: 42,
+    favourite: true,
+    seenAtMs: 1700,
   }
   store.upsertClip(exported)
 
@@ -196,6 +200,11 @@ async function storeCases(): Promise<void> {
     again.data.clips.c1?.sourceId === '' && again.data.clips.c1?.muted === false,
     'recordings keep empty provenance',
   )
+  check(e1?.favourite === true && e1.seenAtMs === 1700, 'favourite and seen survive reopen')
+  check(
+    again.data.clips.c1?.favourite === false && again.data.clips.c1?.seenAtMs === 0,
+    'untouched clips stay unfavourited and unwatched',
+  )
 
   // 5. Removing a folder cascades to its clips; a clip delete queued alongside is harmless.
   again.deleteClip('c1')
@@ -231,8 +240,16 @@ async function migrationCase(): Promise<void> {
     'migration added the provenance columns',
   )
   check(names.includes('youtube_id'), 'migration added the youtube_id column')
-  check(version === '4', 'schema version advanced to 4')
+  check(
+    names.includes('favourite') && names.includes('seen_at_ms'),
+    'migration added the user-state columns',
+  )
+  check(version === '5', 'schema version advanced to 5')
   check(store.data.clips.oc?.youtubeId === '', 'v2 clips migrate with no YouTube id')
+  check(
+    store.data.clips.oc?.favourite === false && store.data.clips.oc?.seenAtMs === 0,
+    'v2 clips migrate unfavourited and unwatched',
+  )
 
   // YouTube accounts and a clip's video id round-trip through the new table/column.
   store.upsertYouTubeAccount({

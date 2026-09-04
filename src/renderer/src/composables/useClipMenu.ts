@@ -8,6 +8,7 @@ import {
   deleteClip,
   games,
   getClip,
+  markSeen,
   openGame,
   openYouTube,
   pendingByClip,
@@ -136,6 +137,13 @@ export function clipMenuItems(clip: Clip, opts: ClipMenuOptions): ClipMenuItem[]
   // collide with it wait until it lands.
   const busy = Boolean(pendingByClip.value[clip.id])
   main.push(
+    // The watched flag is set for you at 90 % of playback; this is the override
+    // for a clip you skimmed, or one you want back in the unwatched list.
+    {
+      label: clip.seenAtMs ? 'Mark as unwatched' : 'Mark as watched',
+      icon: clip.seenAtMs ? 'i-lucide-eye-off' : 'i-lucide-eye',
+      onSelect: () => void markSeen(clip, !clip.seenAtMs),
+    },
     { label: 'Show in Explorer', icon: 'i-lucide-folder-open', onSelect: () => revealClip(clip) },
     {
       label: 'Copy file',

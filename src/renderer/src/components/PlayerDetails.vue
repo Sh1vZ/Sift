@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import type { Clip } from '@shared/types'
+import FavouriteButton from './FavouriteButton.vue'
 import {
   clipsFolder,
   copyClipFile,
@@ -181,6 +182,7 @@ const rows = computed<Row[]>(() => {
         <span class="name-hint" aria-live="polite">
           {{ nameFocused ? 'Enter saves · Esc cancels' : 'Click to rename' }}
         </span>
+        <FavouriteButton :clip="clip" />
         <UTooltip text="Hide details" :kbds="['I']">
           <UButton
             icon="i-lucide-panel-right-close"
@@ -450,6 +452,10 @@ const rows = computed<Row[]>(() => {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--fg-muted);
+  /* The row ends in two buttons; without this the label is the thing that gives,
+     and "FILE NAME" breaks across two lines in a 320px pane. */
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 .name-hint {
   flex: 1;

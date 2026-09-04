@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import type { Clip, ExportJob } from '@shared/types'
 import type { UploadJob } from '@shared/youtube'
+import FavouriteButton from './FavouriteButton.vue'
 import Icon from './Icon.vue'
 import { now, settings, type PendingAction } from '@/composables/useLibrary'
 import { progressText } from '@/composables/useUploads'
@@ -141,12 +142,15 @@ function open(): void {
   const rect = thumbEl.value?.getBoundingClientRect()
   if (rect) emit('open', props.clip, rect)
 }
+
+/** Watched, and not while something is still happening to the card. */
+const seen = computed(() => Boolean(props.clip.seenAtMs) && !veil.value)
 </script>
 
 <template>
   <article
     class="clip-card"
-    :class="{ 'is-job': job }"
+    :class="{ 'is-job': job, 'is-seen': seen }"
     :data-clip-id="clip.id"
     :tabindex="job ? -1 : 0"
     :role="job ? undefined : 'button'"
@@ -229,16 +233,29 @@ function open(): void {
           />
         </div>
 
+        <!-- Watched clips recede rather than disappear; hovering lifts the veil
+             so pointing at a card always shows the real frame. -->
+        <div v-if="seen" class="seen-scrim" aria-hidden="true" />
+
+        <FavouriteButton v-if="!job" :clip="clip" variant="card" />
+
         <UBadge v-if="resolution && !job" class="badge res" size="sm" :label="resolution" />
-        <UBadge
-          v-if="clip.youtubeId && !veil"
-          class="badge yt"
-          size="sm"
-          icon="i-lucide-youtube"
-          label="YouTube"
-          aria-label="On YouTube"
-          title="On YouTube"
-        />
+
+        <!-- The right-hand corner carries what has happened to a clip; the left
+             carries what it is. Grouped, so neither has to know the other is
+             there and the pair stays inside the thumbnail on a compact card. -->
+        <div v-if="seen || (clip.youtubeId && !veil)" class="badges-tr">
+          <UBadge v-if="seen" class="badge seen" size="sm" icon="i-lucide-check" label="Watched" />
+          <UBadge
+            v-if="clip.youtubeId && !veil"
+            class="badge yt"
+            size="sm"
+            icon="i-lucide-youtube"
+            label="YouTube"
+            aria-label="On YouTube"
+            title="On YouTube"
+          />
+        </div>
         <UBadge
           v-if="clip.duration"
           class="badge duration mono"
@@ -285,6 +302,14 @@ function open(): void {
   transition:
     transform var(--dur) var(--ease-out),
     box-shadow var(--dur) var(--ease-out);
+}
+/* Reveals the favourite star, which lives in another component and so cannot be
+   reached by a selector from here. FavouriteButton reads both. */
+.clip-card:hover,
+.clip-card:focus-visible,
+.clip-card:focus-within {
+  --fav-shown: 1;
+  --fav-scale: 1;
 }
 /* Hover and keyboard focus get the identical treatment - the ring lights up, the
    card lifts a little and casts a real shadow under the violet bloom. */
@@ -404,13 +429,21 @@ function open(): void {
 .job-progress {
   width: 60%;
 }
+/* Sized here rather than left to `UBadge size="sm"`: its 10px text in a py-1 box
+   reads as a small label in a large chip. Slightly bigger type in a tighter box
+   is easier to read at a glance and keeps all four chips visually equal. */
 .badge {
   position: absolute;
   bottom: 8px;
   right: 8px;
+  padding: 2px 7px;
+  gap: 4px;
+  border-radius: 6px;
   background: rgba(10, 10, 24, 0.82);
   color: #f1f5f9;
   font-family: var(--font-heading);
+  font-size: 11px;
+  line-height: 1.35;
   font-weight: 600;
   letter-spacing: 0.03em;
   backdrop-filter: blur(4px);
@@ -424,15 +457,55 @@ function open(): void {
   right: auto;
   color: var(--secondary);
 }
+/* History chips, right-aligned so YouTube keeps the corner it has always had and
+   Watched grows leftward beside it instead of pushing it out. */
+.badges-tr {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  max-width: calc(100% - 16px);
+}
+.badges-tr .badge {
+  position: static;
+}
+/* Watched is a state, not a spec, so it does not borrow the violet the quality
+   chip uses — nor the rose reserved for YouTube, nor the filled primary the star
+   owns. Plain white on the same dark chip is what is left, and it is also the
+   most legible of the four. Never the off-palette green it used to be. */
+.badge.seen {
+  color: #ffffff;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.22);
+}
 /* Already on YouTube: one glyph, top right, in the reserved rose. */
 /* Already on YouTube: same size as the other chips, told apart by the word and
    the rose accent rather than by bulk. */
 .badge.yt {
-  top: 8px;
-  right: 8px;
-  bottom: auto;
   color: var(--accent);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent);
+}
+/* A flat wash rather than `.poster { opacity }`: the poster already owns an
+   opacity transition for its load-in and the two would fight. */
+.seen-scrim {
+  position: absolute;
+  inset: 0;
+  background: rgba(7, 7, 18, 0.42);
+  pointer-events: none;
+  transition: opacity var(--dur) var(--ease-out);
+}
+.clip-card:hover .seen-scrim,
+.clip-card:focus-visible .seen-scrim {
+  opacity: 0;
+}
+.clip-card.is-seen .title {
+  color: var(--fg-muted);
+}
+.clip-card.is-seen:hover .title,
+.clip-card.is-seen:focus-visible .title {
+  color: var(--secondary);
 }
 .play-hint {
   position: absolute;

@@ -2,6 +2,7 @@ import { ref } from 'vue'
 import { dialog } from './useDialogs'
 import { clipQuery, goGames, screen } from './useLibrary'
 import { isOpen as playerOpen } from './usePlayer'
+import { openSearch, searchOpen } from './useSearch'
 import { openSettings, settingsTab } from './useSettings'
 import { whatsNew } from './useUpdates'
 import { uploadDialog } from './useUploads'
@@ -47,6 +48,7 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
   {
     title: 'Library',
     rows: [
+      { chords: [['ctrl', 'K']], label: 'Search every clip' },
       { chords: [['/'], ['ctrl', 'F']], label: 'Search games, filter clips' },
       { chords: [['backspace'], ['alt', 'arrowleft']], label: 'Back to games' },
       { chords: [['escape']], label: 'Clear the filter, then back' },
@@ -66,6 +68,7 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
       { chords: [['arrowup'], ['arrowdown']], label: 'Volume' },
       { chords: [['M']], label: 'Mute' },
       { chords: [['N'], ['P']], label: 'Next / previous clip' },
+      { chords: [['S']], label: 'Favourite' },
       { chords: [['F']], label: 'Fullscreen' },
       { chords: [['I']], label: 'Details pane' },
       { chords: [['E']], label: 'Trim & export' },
@@ -96,12 +99,23 @@ function modalOpen(): boolean {
     dialog.value !== null ||
     uploadDialog.value !== null ||
     whatsNew.value !== null ||
-    shortcutsOpen.value
+    shortcutsOpen.value ||
+    searchOpen.value
   )
 }
 
 function onKey(e: KeyboardEvent): void {
-  if (modalOpen() || inField(e)) return
+  if (modalOpen()) return
+  // Ctrl+K comes before the in-field bail so it works from a filter box, and
+  // before the player check so it works over an open player. Being on the
+  // capture phase, stopping it here keeps it away from the player's own `k`.
+  if (e.ctrlKey && e.key.toLowerCase() === 'k') {
+    openSearch()
+    e.preventDefault()
+    e.stopImmediatePropagation()
+    return
+  }
+  if (inField(e)) return
   let handled = true
   if (e.key === '?') openShortcuts()
   else if (playerOpen.value) handled = false

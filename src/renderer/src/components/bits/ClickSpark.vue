@@ -9,8 +9,11 @@
 /**
  * Vue Bits — Animations/ClickSpark (https://vue-bits.dev/animations/click-spark)
  * Adapted: the draw loop only runs while sparks are alive (upstream ran a
- * requestAnimationFrame loop forever), the canvas is DPR-aware, and a
- * `disabled` prop honours the app's reduced-motion setting.
+ * requestAnimationFrame loop forever), the canvas is DPR-aware, a `disabled`
+ * prop honours the app's reduced-motion setting, and `spark()` is exposed so a
+ * control that stops its own click (the favourite star, which must not reach
+ * the card behind it) can still fire the burst. `lineWidth` is a prop too, so a
+ * burst can be made heavier than the upstream hairline.
  */
 import { computed, onMounted, onUnmounted, useTemplateRef } from 'vue'
 
@@ -29,6 +32,7 @@ interface Props {
   duration?: number
   easing?: 'linear' | 'ease-in' | 'ease-out' | 'ease-in-out'
   extraScale?: number
+  lineWidth?: number
   disabled?: boolean
 }
 
@@ -40,6 +44,7 @@ const props = withDefaults(defineProps<Props>(), {
   duration: 400,
   easing: 'ease-out',
   extraScale: 1.0,
+  lineWidth: 2,
   disabled: false
 })
 
@@ -62,18 +67,28 @@ const easeFunc = computed(() => (t: number) => {
   }
 })
 
-const handleClick = (e: MouseEvent): void => {
+/**
+ * Burst from the pointer, or from the centre of the canvas when there is no
+ * pointer position (a button reached by keyboard).
+ */
+const spark = (e?: MouseEvent): void => {
   const canvas = canvasRef.value
   if (!canvas || props.disabled) return
   const rect = canvas.getBoundingClientRect()
-  const x = e.clientX - rect.left
-  const y = e.clientY - rect.top
+  // A keyboard "click" reports 0,0; burst from the middle instead of the corner.
+  const fromPointer = e && (e.clientX !== 0 || e.clientY !== 0)
+  const x = fromPointer ? e.clientX - rect.left : rect.width / 2
+  const y = fromPointer ? e.clientY - rect.top : rect.height / 2
   const now = performance.now()
   for (let i = 0; i < props.sparkCount; i++) {
     sparks.push({ x, y, angle: (2 * Math.PI * i) / props.sparkCount, startTime: now })
   }
   if (animationId === null) animationId = requestAnimationFrame(draw)
 }
+
+const handleClick = (e: MouseEvent): void => spark(e)
+
+defineExpose({ spark })
 
 const draw = (timestamp: number): void => {
   const canvas = canvasRef.value
@@ -97,7 +112,7 @@ const draw = (timestamp: number): void => {
     const x2 = spark.x + (distance + lineLength) * Math.cos(spark.angle)
     const y2 = spark.y + (distance + lineLength) * Math.sin(spark.angle)
     ctx.strokeStyle = props.sparkColor
-    ctx.lineWidth = 2
+    ctx.lineWidth = props.lineWidth
     ctx.beginPath()
     ctx.moveTo(x1, y1)
     ctx.lineTo(x2, y2)
