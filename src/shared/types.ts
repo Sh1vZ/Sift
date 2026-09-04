@@ -302,6 +302,11 @@ export interface EventMap {
   /** Every live export job; a job is sent once in its terminal state and then dropped. */
   "exports:changed": ExportJob[];
   "window:maximized": boolean;
+  /**
+   * Whether the window is on screen. False while it is hidden to the tray or
+   * minimized, which is the renderer's cue to release everything expensive.
+   */
+  "window:visible": boolean;
   /** The tray Settings item: show the settings screen on the OS settings pane. */
   "app:open-settings": null;
   /** The whole updater state on every transition; the renderer replaces its copy. */

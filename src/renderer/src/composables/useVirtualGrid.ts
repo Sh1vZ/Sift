@@ -1,6 +1,7 @@
-import { computed, onBeforeUnmount, onMounted, ref, type Ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch, type Ref } from 'vue'
 import type { Clip, GridSize } from '@shared/types'
 import type { Section } from './useLibrary'
+import { visible } from './useWindowVisibility'
 
 export interface HeaderRow {
   kind: 'header'
@@ -20,6 +21,14 @@ export interface CardRow {
   cardHeight: number
 }
 export type GridRow = HeaderRow | CardRow
+
+export interface Layout {
+  rows: GridRow[]
+  /** Cards per row at the current width. */
+  cols: number
+  /** Full scrollable height, including padding. */
+  total: number
+}
 
 export const GRID_PAD_X = 28
 const PAD_TOP = 8
@@ -77,7 +86,7 @@ export function useVirtualGrid(
     if (raf) cancelAnimationFrame(raf)
   })
 
-  const layout = computed(() => {
+  const rawLayout = computed<Layout>(() => {
     const inner = Math.max(0, width.value - GRID_PAD_X * 2)
     const cols = Math.max(1, Math.floor((inner + GAP) / (MIN_CARD_W[gridSize.value] + GAP)))
     const cardWidth = Math.floor((inner - GAP * (cols - 1)) / cols)
@@ -106,7 +115,33 @@ export function useVirtualGrid(
     return { rows, cols, total: top + PAD_BOTTOM }
   })
 
+  /**
+   * The last layout from before the window went off screen. While it is set,
+   * `layout` never reads `rawLayout` — and because computeds are lazy, that
+   * keeps the whole sections → visibleClips → recordings → allClips chain from
+   * rebuilding on every batch of clips a background scan indexes. It also keeps
+   * the canvas at its old height, so the scroller holds its position.
+   */
+  const frozen = shallowRef<Layout | null>(null)
+  const layout = computed<Layout>(() => frozen.value ?? rawLayout.value)
+
+  watch(visible, (vis) => {
+    if (!vis) {
+      frozen.value = rawLayout.value // one last read, then dormant
+      return
+    }
+    frozen.value = null
+    // The container may have been resized while nothing was observing it.
+    const el = container.value
+    if (!el) return
+    width.value = el.clientWidth
+    height.value = el.clientHeight
+    scrollTop.value = el.scrollTop
+  })
+
+  const EMPTY: GridRow[] = []
   const visibleRows = computed<GridRow[]>(() => {
+    if (!visible.value) return EMPTY
     const { rows } = layout.value
     const start = scrollTop.value - OVERSCAN
     const end = scrollTop.value + height.value + OVERSCAN

@@ -48,14 +48,22 @@ export function prevClip(): void {
   if (hasPrev.value) current.value = list.value[index.value - 1]
 }
 
-/** Keep the open clip's metadata fresh (thumbnails, probe data) and close if it disappears. */
-watch(allClips, () => {
-  const cur = current.value
-  if (!cur) return
-  const fresh = getClip(cur.id)
-  if (!fresh) current.value = null
-  else if (fresh !== cur) current.value = fresh
-})
+/**
+ * Keep the open clip's metadata fresh (thumbnails, probe data) and close if it
+ * disappears. The source is gated on the player being open: a watch re-runs its
+ * getter on every dependency bump, and reading `allClips` unconditionally
+ * rebuilt the whole clip array on every batch of a scan, player or no player.
+ */
+watch(
+  () => (current.value ? allClips.value : null),
+  () => {
+    const cur = current.value
+    if (!cur) return
+    const fresh = getClip(cur.id)
+    if (!fresh) current.value = null
+    else if (fresh !== cur) current.value = fresh
+  }
+)
 
 /** The clip that should take over if the current one goes away: next, else previous. */
 export function neighbor(): Clip | null {

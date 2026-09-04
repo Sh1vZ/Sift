@@ -14,6 +14,7 @@ import { initExports } from '@/composables/useExports'
 import { initUpdates } from '@/composables/useUpdates'
 import { isOpen } from '@/composables/usePlayer'
 import { openSettings } from '@/composables/useSettings'
+import { initWindowVisibility } from '@/composables/useWindowVisibility'
 // Side-effect import: applies the persisted theme to <html> before first paint.
 import '@/composables/useTheme'
 
@@ -21,6 +22,9 @@ onMounted(async () => {
   // The tray's Settings item. Subscribed here rather than in useLibrary because
   // useSettings already imports from it; App is the root, so it never unmounts.
   window.api.on('app:open-settings', () => openSettings('os'))
+  // Same reason: the window can hide at any point, so the subscription has to
+  // outlive every view.
+  initWindowVisibility()
   try {
     await initLibrary()
     initExports(initialExports.value)

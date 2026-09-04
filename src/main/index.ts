@@ -1,7 +1,7 @@
 import { app, BrowserWindow } from 'electron'
 import { electronApp, optimizer } from '@electron-toolkit/utils'
 import { registerIpc } from './ipc'
-import { userDataOverride } from './lib/env'
+import { perfLog, userDataOverride } from './lib/env'
 import { Library } from './lib/library'
 import { ensureDirs } from './lib/paths'
 import { installProtocol, registerScheme } from './lib/protocol'
@@ -112,6 +112,17 @@ if (!app.requestSingleInstanceLock()) {
     })
 
     syncTray(library.settings.minimizeToTray)
+
+    // SIFT_PERF_LOG=1: what each process costs, sampled from main so the numbers
+    // keep coming while the window is hidden. `Tab` is the renderer.
+    if (perfLog) {
+      setInterval(() => {
+        for (const m of app.getAppMetrics()) {
+          const ws = Math.round((m.memory?.workingSetSize ?? 0) / 1024)
+          console.log(`[perf] ${m.type}#${m.pid} cpu=${m.cpu.percentCPUUsage.toFixed(1)}% ws=${ws}MB`)
+        }
+      }, 5000)
+    }
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) mainWindow = createMainWindow()

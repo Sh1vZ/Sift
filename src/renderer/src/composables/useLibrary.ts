@@ -34,7 +34,25 @@ export const view = ref<'library' | 'clips' | 'settings'>('library')
 
 /** Ticks once a minute so "2 minutes ago" labels stay honest. */
 export const now = ref(Date.now())
-window.setInterval(() => (now.value = Date.now()), 60_000)
+
+let clock = 0
+/**
+ * Stopped while the window is off screen (see useWindowVisibility). The timer
+ * itself is nearly free, but every tick invalidates `sections`, which rebuilds
+ * the whole grid — pointless work for a window nobody is looking at.
+ */
+export function startClock(): void {
+  if (clock) return
+  // Catch up first: labels have to be right before the next paint, not a minute later.
+  now.value = Date.now()
+  clock = window.setInterval(() => (now.value = Date.now()), 60_000)
+}
+export function stopClock(): void {
+  if (!clock) return
+  window.clearInterval(clock)
+  clock = 0
+}
+startClock()
 
 /** Every record in the index: recordings and exported clips alike. */
 export const allClips = computed<Clip[]>(() => {
@@ -240,10 +258,16 @@ export const filteredGames = computed<GameSummary[]>(() => {
   }
 })
 
-// If the selected game vanishes (folder removed, last clip deleted) fall back to All.
-watch(games, (list) => {
-  if (selectedGame.value && !list.some((g) => g.name === selectedGame.value)) selectedGame.value = null
-})
+// If the selected game vanishes (folder removed, last clip deleted) fall back to
+// All. Gated on there being a selection: a watch re-runs its getter on every
+// dependency bump, so reading `games` unconditionally rebuilt the whole game
+// index on every batch of clips a scan indexed, even on the Games screen.
+watch(
+  () => (selectedGame.value ? games.value : null),
+  (list) => {
+    if (list && selectedGame.value && !list.some((g) => g.name === selectedGame.value)) selectedGame.value = null
+  }
+)
 
 export async function initLibrary(): Promise<void> {
   const snap = await api.library.snapshot()

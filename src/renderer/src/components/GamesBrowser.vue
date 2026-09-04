@@ -15,6 +15,7 @@ import {
 import { motionEnabled } from '@/composables/useMotion'
 import { activeTheme } from '@/composables/useTheme'
 import { isOpen as playerOpen } from '@/composables/usePlayer'
+import { visible as windowVisible } from '@/composables/useWindowVisibility'
 import { formatBytes, formatDuration, formatRelative } from '@/utils/format'
 
 const api = window.api
@@ -91,7 +92,11 @@ const open = (g: GameSummary): void => openGame(g.name)
               :title="g.name"
             >
               <span class="cover">
-                <img v-if="g.cover" :src="api.thumbUrl(g.cover)" alt="" loading="lazy" decoding="async" />
+                <!-- The list is not windowed, so every cover stays decoded. Dropping
+                     them while the window is away is the bulk of what a hidden
+                     Games screen was holding; the box keeps its aspect ratio, so
+                     falling back to the placeholder shifts nothing. -->
+                <img v-if="g.cover && windowVisible" :src="api.thumbUrl(g.cover)" alt="" loading="lazy" decoding="async" />
                 <Icon v-else name="gamepad" :size="24" :stroke="1.6" />
               </span>
               <span class="text">

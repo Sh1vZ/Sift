@@ -73,6 +73,12 @@ export interface Api {
     isMaximized(): Promise<boolean>
     /** The app has its first real frame — dismisses the launch splash and reveals the window. */
     ready(): void
+    /**
+     * Drops Chromium's in-renderer caches (decoded images, the resource cache).
+     * Only releases what nothing still references, so call it *after* the
+     * images have been unmounted, never before.
+     */
+    clearCache(): void
   }
   on<K extends EventName>(name: K, handler: (payload: EventMap[K]) => void): () => void
   mediaUrl(clipId: string): string

@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
+import { contextBridge, ipcRenderer, webFrame, type IpcRendererEvent } from 'electron'
 import type { Api } from '@shared/api'
 import type { EventMap, EventName } from '@shared/types'
 
@@ -40,7 +40,8 @@ const api: Api = {
     toggleMaximize: () => void ipcRenderer.invoke('window:toggle-maximize'),
     close: () => void ipcRenderer.invoke('window:close'),
     isMaximized: () => ipcRenderer.invoke('window:is-maximized'),
-    ready: () => void ipcRenderer.invoke('window:ready')
+    ready: () => void ipcRenderer.invoke('window:ready'),
+    clearCache: () => webFrame.clearCache()
   },
   on<K extends EventName>(name: K, handler: (payload: EventMap[K]) => void) {
     const listener = (_e: IpcRendererEvent, payload: EventMap[K]): void => handler(payload)

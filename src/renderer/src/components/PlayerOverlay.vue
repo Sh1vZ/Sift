@@ -34,6 +34,7 @@ import {
 } from '@/composables/useEditor'
 import { fadeOut, flipFrom, flipTo } from '@/composables/useMotion'
 import { activeTheme } from '@/composables/useTheme'
+import { visible as windowVisible } from '@/composables/useWindowVisibility'
 import { confirmWithAlt, dialog, prompt } from '@/composables/useDialogs'
 import { toast } from '@/composables/useToasts'
 import {
@@ -59,7 +60,16 @@ const seekEl = ref<HTMLElement | null>(null)
 
 // The overlay only mounts while a clip is open.
 const clip = computed(() => current.value!)
-const src = computed(() => api.mediaUrl(clip.value.id))
+/**
+ * Set while the window is off screen: the media is unloaded to stop the decoder,
+ * but the overlay stays mounted so a trim in progress, the rate and the details
+ * pane all survive. `undefined` drops the attribute entirely — an empty string
+ * would resolve against the document and fire `error`.
+ */
+const suspended = ref(false)
+/** Where playback was when the window went away, or -1 for nothing to restore. */
+let resumeAt = -1
+const src = computed(() => (suspended.value ? undefined : api.mediaUrl(clip.value.id)))
 const ratio = computed(() => (clip.value.width && clip.value.height ? clip.value.width / clip.value.height : 16 / 9))
 const meta = computed(() =>
   [
@@ -233,11 +243,18 @@ function onLoadedMetadata(): void {
   v.volume = volume.value
   v.muted = muted.value
   v.playbackRate = rate.value
+  if (resumeAt < 0) return
+  // Back from the tray: land on the frame we left, paused. The element carries
+  // `autoplay`, and pause() is what clears that flag — without it a window
+  // restored from the tray would start playing on its own.
+  v.currentTime = Math.min(resumeAt, duration.value)
+  resumeAt = -1
+  v.pause()
 }
 let lastTime = 0
 function onTimeUpdate(): void {
   const v = video.value
-  if (!v) return
+  if (!v || suspended.value) return
   if (!seeking.value) time.value = v.currentTime
   // Edit mode previews the selection on a loop: crossing the out-point (or
   // having been dragged past it) wraps back to the in-point.
@@ -261,6 +278,8 @@ function onProgress(): void {
   buffered.value = v.buffered.end(v.buffered.length - 1)
 }
 function onEnded(): void {
+  // Nothing plays while the window is away; this can only be the teardown.
+  if (suspended.value) return
   if (editing.value) {
     // The out-point sits at the very end: keep the preview loop going.
     seekTo(inSec.value)
@@ -276,6 +295,8 @@ function onEnded(): void {
   controls.value = true
 }
 function onError(): void {
+  // Unloading the source is not a broken clip.
+  if (suspended.value) return
   failed.value = true
   playing.value = false
   buffering.value = false
@@ -509,6 +530,33 @@ watch(canEdit, (ok) => {
   if (ok && autoEdit) consumePendingEdit()
 })
 
+/**
+ * Hidden to the tray or minimized: unload the media. Chromium does not pause a
+ * <video> for a window that is off screen, so this is the difference between an
+ * idle app and one decoding 4K in the background for as long as it sits there.
+ * The overlay itself stays mounted — closing it would throw away a trim in
+ * progress, and its close path is a GSAP animation, which cannot run while the
+ * window is hidden anyway.
+ */
+watch(windowVisible, async (vis) => {
+  const v = video.value
+  if (vis) {
+    // Re-applying the src reloads the element; onLoadedMetadata restores the position.
+    suspended.value = false
+    return
+  }
+  // A window that hides while fullscreen leaves the desktop showing nothing.
+  if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined)
+  if (!v) return
+  resumeAt = v.currentTime
+  v.pause()
+  suspended.value = true
+  await nextTick() // Vue removes the src attribute
+  v.load() // and this is what actually releases the decoder and the buffers
+  buffered.value = 0
+  buffering.value = false
+})
+
 onMounted(async () => {
   window.addEventListener('keydown', onKey)
   document.addEventListener('fullscreenchange', onFullscreen)
@@ -532,6 +580,9 @@ onBeforeUnmount(() => {
   window.clearTimeout(volumeTimer)
   video.value?.pause()
   video.value?.removeAttribute('src')
+  // Dropping the attribute alone leaves the decoder and the buffered media
+  // attached until the element is collected; load() hands them back now.
+  video.value?.load()
 })
 </script>
 

@@ -14,6 +14,14 @@ import { app } from 'electron'
 export const userDataOverride: string =
   process.env.SIFT_USER_DATA || (!app.isPackaged ? (import.meta.env.MAIN_VITE_USER_DATA_DIR ?? '') : '')
 
+/**
+ * Log per-process CPU and working set every few seconds. A `SIFT_*` knob on
+ * purpose: the numbers that matter are from a packaged build with the window in
+ * the tray, which is exactly where DevTools cannot be attached (and attaching it
+ * would disable background throttling and invalidate the measurement anyway).
+ */
+export const perfLog: boolean = process.env.SIFT_PERF_LOG === '1'
+
 /** Open Chromium DevTools as soon as the window shows (dev only). */
 export const openDevTools: boolean = !app.isPackaged && import.meta.env.MAIN_VITE_OPEN_DEVTOOLS === 'true'
 
