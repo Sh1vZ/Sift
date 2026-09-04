@@ -42,7 +42,9 @@
   --border-active: rgba(167, 139, 250, 0.45);
   --ring: #a78bfa;
 
-  --glow-primary: 0 0 0 1px rgba(167, 139, 250, 0.35), 0 12px 32px -8px rgba(124, 58, 237, 0.55);
+  --glow-primary:
+    0 0 0 1px rgba(167, 139, 250, 0.35),
+    0 12px 32px -8px rgba(124, 58, 237, 0.55);
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
   --shadow-md: 0 8px 24px -6px rgba(0, 0, 0, 0.55);
   --shadow-lg: 0 24px 60px -12px rgba(0, 0, 0, 0.7);
@@ -50,13 +52,22 @@
   /* The two static radial washes App.vue paints over --bg-1. Owned here so a
      theme can recolour them; the OLED themes keep them over a true-black ground. */
   --app-wash:
-    radial-gradient(1200px 600px at 80% -10%, rgba(124, 58, 237, 0.14), transparent 60%),
-    radial-gradient(800px 500px at -10% 110%, rgba(244, 63, 94, 0.07), transparent 60%);
+    radial-gradient(
+      1200px 600px at 80% -10%,
+      rgba(124, 58, 237, 0.14),
+      transparent 60%
+    ),
+    radial-gradient(
+      800px 500px at -10% 110%,
+      rgba(244, 63, 94, 0.07),
+      transparent 60%
+    );
 
-  --font-display: 'Russo One', 'Chakra Petch', system-ui, sans-serif;
-  --font-heading: 'Chakra Petch', 'Inter Variable', system-ui, sans-serif;
-  --font-body: 'Inter Variable', 'Segoe UI', system-ui, -apple-system, sans-serif;
-  --font-mono: 'Cascadia Code', 'Consolas', ui-monospace, monospace;
+  --font-display: "Russo One", "Chakra Petch", system-ui, sans-serif;
+  --font-heading: "Chakra Petch", "Inter Variable", system-ui, sans-serif;
+  --font-body:
+    "Inter Variable", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-mono: "Cascadia Code", "Consolas", ui-monospace, monospace;
 
   --text-xs: 11px;
   --text-sm: 12.5px;
@@ -129,10 +140,10 @@
    (the default OLED inherits Sift's) so the ground still glows; only the pixels
    outside the washes go fully off. Every OLED variant shares this surface block
    and adds its own brand colours below. */
-html[data-theme='oled'],
-html[data-theme='oled-mint'],
-html[data-theme='oled-frost'],
-html[data-theme='oled-crimson'] {
+html[data-theme="oled"],
+html[data-theme="oled-mint"],
+html[data-theme="oled-frost"],
+html[data-theme="oled-crimson"] {
   --bg-0: #000000;
   --bg-1: #000000;
   --bg-2: #090909;
@@ -146,7 +157,7 @@ html[data-theme='oled-crimson'] {
 }
 
 /* Ember: warm charcoal ground, orange identity, gold punctuation. */
-html[data-theme='ember'] {
+html[data-theme="ember"] {
   --bg-0: #0b0807;
   --bg-1: #110e0c;
   --bg-2: #181412;
@@ -164,10 +175,20 @@ html[data-theme='ember'] {
   --accent-soft: rgba(250, 204, 21, 0.16);
   --border-active: rgba(253, 186, 116, 0.45);
   --ring: #fdba74;
-  --glow-primary: 0 0 0 1px rgba(253, 186, 116, 0.35), 0 12px 32px -8px rgba(249, 115, 22, 0.55);
+  --glow-primary:
+    0 0 0 1px rgba(253, 186, 116, 0.35),
+    0 12px 32px -8px rgba(249, 115, 22, 0.55);
   --app-wash:
-    radial-gradient(1200px 600px at 80% -10%, rgba(249, 115, 22, 0.13), transparent 60%),
-    radial-gradient(800px 500px at -10% 110%, rgba(250, 204, 21, 0.06), transparent 60%);
+    radial-gradient(
+      1200px 600px at 80% -10%,
+      rgba(249, 115, 22, 0.13),
+      transparent 60%
+    ),
+    radial-gradient(
+      800px 500px at -10% 110%,
+      rgba(250, 204, 21, 0.06),
+      transparent 60%
+    );
   --ui-text-toned: #cfc4bc;
   --ui-text-highlighted: #fbf7f4;
   --ui-color-primary-50: #fff7ed;
@@ -183,46 +204,8 @@ html[data-theme='ember'] {
   --ui-color-primary-950: #431407;
 }
 
-/* Arctic: blue-black ground, sky identity, teal punctuation. */
-html[data-theme='arctic'] {
-  --bg-0: #060a13;
-  --bg-1: #0a101b;
-  --bg-2: #101826;
-  --bg-3: #172033;
-  --bg-4: #1f2a3f;
-  --fg: #e6eef8;
-  --fg-muted: #97a9bf;
-  --fg-dim: #687c94;
-  --fg-inverse: #0b1220;
-  --primary: #0ea5e9;
-  --primary-hover: #38bdf8;
-  --primary-soft: rgba(14, 165, 233, 0.16);
-  --secondary: #7dd3fc;
-  --accent: #2dd4bf;
-  --accent-soft: rgba(45, 212, 191, 0.16);
-  --border-active: rgba(125, 211, 252, 0.45);
-  --ring: #7dd3fc;
-  --glow-primary: 0 0 0 1px rgba(125, 211, 252, 0.35), 0 12px 32px -8px rgba(14, 165, 233, 0.55);
-  --app-wash:
-    radial-gradient(1200px 600px at 80% -10%, rgba(14, 165, 233, 0.13), transparent 60%),
-    radial-gradient(800px 500px at -10% 110%, rgba(45, 212, 191, 0.06), transparent 60%);
-  --ui-text-toned: #b7c6d8;
-  --ui-text-highlighted: #f4f8fc;
-  --ui-color-primary-50: #f0f9ff;
-  --ui-color-primary-100: #e0f2fe;
-  --ui-color-primary-200: #bae6fd;
-  --ui-color-primary-300: #7dd3fc;
-  --ui-color-primary-400: #38bdf8;
-  --ui-color-primary-500: #0ea5e9;
-  --ui-color-primary-600: #0284c7;
-  --ui-color-primary-700: #0369a1;
-  --ui-color-primary-800: #075985;
-  --ui-color-primary-900: #0c4a6e;
-  --ui-color-primary-950: #082f49;
-}
-
 /* Synthwave: deep purple ground, hot pink identity, cyan punctuation. */
-html[data-theme='synthwave'] {
+html[data-theme="synthwave"] {
   --bg-0: #0b0516;
   --bg-1: #10081d;
   --bg-2: #180c2a;
@@ -240,10 +223,20 @@ html[data-theme='synthwave'] {
   --accent-soft: rgba(34, 211, 238, 0.16);
   --border-active: rgba(249, 168, 212, 0.45);
   --ring: #f9a8d4;
-  --glow-primary: 0 0 0 1px rgba(249, 168, 212, 0.35), 0 12px 32px -8px rgba(236, 72, 153, 0.55);
+  --glow-primary:
+    0 0 0 1px rgba(249, 168, 212, 0.35),
+    0 12px 32px -8px rgba(236, 72, 153, 0.55);
   --app-wash:
-    radial-gradient(1200px 600px at 80% -10%, rgba(236, 72, 153, 0.14), transparent 60%),
-    radial-gradient(800px 500px at -10% 110%, rgba(34, 211, 238, 0.07), transparent 60%);
+    radial-gradient(
+      1200px 600px at 80% -10%,
+      rgba(236, 72, 153, 0.14),
+      transparent 60%
+    ),
+    radial-gradient(
+      800px 500px at -10% 110%,
+      rgba(34, 211, 238, 0.07),
+      transparent 60%
+    );
   --ui-text-toned: #cdb8e0;
   --ui-text-highlighted: #faf5ff;
   --ui-color-primary-50: #fdf2f8;
@@ -259,46 +252,8 @@ html[data-theme='synthwave'] {
   --ui-color-primary-950: #500724;
 }
 
-/* Verdant: green-black ground, leaf-green identity, gold punctuation. */
-html[data-theme='verdant'] {
-  --bg-0: #070c09;
-  --bg-1: #0b120e;
-  --bg-2: #101a14;
-  --bg-3: #162219;
-  --bg-4: #1e2c22;
-  --fg: #e8f1ea;
-  --fg-muted: #9bb0a2;
-  --fg-dim: #6b8072;
-  --fg-inverse: #08140c;
-  --primary: #16a34a;
-  --primary-hover: #22c55e;
-  --primary-soft: rgba(34, 197, 94, 0.16);
-  --secondary: #86efac;
-  --accent: #facc15;
-  --accent-soft: rgba(250, 204, 21, 0.16);
-  --border-active: rgba(134, 239, 172, 0.45);
-  --ring: #86efac;
-  --glow-primary: 0 0 0 1px rgba(134, 239, 172, 0.35), 0 12px 32px -8px rgba(22, 163, 74, 0.55);
-  --app-wash:
-    radial-gradient(1200px 600px at 80% -10%, rgba(34, 197, 94, 0.12), transparent 60%),
-    radial-gradient(800px 500px at -10% 110%, rgba(250, 204, 21, 0.06), transparent 60%);
-  --ui-text-toned: #bccdc2;
-  --ui-text-highlighted: #f4faf6;
-  --ui-color-primary-50: #f0fdf4;
-  --ui-color-primary-100: #dcfce7;
-  --ui-color-primary-200: #bbf7d0;
-  --ui-color-primary-300: #86efac;
-  --ui-color-primary-400: #4ade80;
-  --ui-color-primary-500: #22c55e;
-  --ui-color-primary-600: #16a34a;
-  --ui-color-primary-700: #15803d;
-  --ui-color-primary-800: #166534;
-  --ui-color-primary-900: #14532d;
-  --ui-color-primary-950: #052e16;
-}
-
 /* Crimson: red-black ground, crimson identity, amber punctuation. */
-html[data-theme='crimson'] {
+html[data-theme="crimson"] {
   --bg-0: #0f0708;
   --bg-1: #150a0c;
   --bg-2: #1d0f12;
@@ -316,10 +271,20 @@ html[data-theme='crimson'] {
   --accent-soft: rgba(251, 191, 36, 0.16);
   --border-active: rgba(252, 165, 165, 0.45);
   --ring: #fca5a5;
-  --glow-primary: 0 0 0 1px rgba(252, 165, 165, 0.35), 0 12px 32px -8px rgba(220, 38, 38, 0.55);
+  --glow-primary:
+    0 0 0 1px rgba(252, 165, 165, 0.35),
+    0 12px 32px -8px rgba(220, 38, 38, 0.55);
   --app-wash:
-    radial-gradient(1200px 600px at 80% -10%, rgba(220, 38, 38, 0.13), transparent 60%),
-    radial-gradient(800px 500px at -10% 110%, rgba(251, 191, 36, 0.06), transparent 60%);
+    radial-gradient(
+      1200px 600px at 80% -10%,
+      rgba(220, 38, 38, 0.13),
+      transparent 60%
+    ),
+    radial-gradient(
+      800px 500px at -10% 110%,
+      rgba(251, 191, 36, 0.06),
+      transparent 60%
+    );
   --ui-text-toned: #d2bfc4;
   --ui-text-highlighted: #fcf5f6;
   --ui-color-primary-50: #fef2f2;
@@ -337,7 +302,7 @@ html[data-theme='crimson'] {
 
 /* Solar: warm graphite ground, golden identity, sky punctuation. Yellow is
    too light for white glyphs, so text on a primary fill goes dark here. */
-html[data-theme='solar'] {
+html[data-theme="solar"] {
   --bg-0: #0a0a08;
   --bg-1: #10100d;
   --bg-2: #171713;
@@ -356,10 +321,19 @@ html[data-theme='solar'] {
   --accent-soft: rgba(56, 189, 248, 0.16);
   --border-active: rgba(253, 224, 71, 0.45);
   --ring: #fde047;
-  --glow-primary: 0 0 0 1px rgba(253, 224, 71, 0.35), 0 12px 32px -8px rgba(234, 179, 8, 0.55);
+  --glow-primary:
+    0 0 0 1px rgba(253, 224, 71, 0.35), 0 12px 32px -8px rgba(234, 179, 8, 0.55);
   --app-wash:
-    radial-gradient(1200px 600px at 80% -10%, rgba(234, 179, 8, 0.12), transparent 60%),
-    radial-gradient(800px 500px at -10% 110%, rgba(56, 189, 248, 0.06), transparent 60%);
+    radial-gradient(
+      1200px 600px at 80% -10%,
+      rgba(234, 179, 8, 0.12),
+      transparent 60%
+    ),
+    radial-gradient(
+      800px 500px at -10% 110%,
+      rgba(56, 189, 248, 0.06),
+      transparent 60%
+    );
   --ui-text-toned: #cfcec2;
   --ui-text-highlighted: #fbfaf5;
   --ui-color-primary-50: #fefce8;
@@ -375,8 +349,174 @@ html[data-theme='solar'] {
   --ui-color-primary-950: #422006;
 }
 
+/* Nox: deep plum ground, magenta identity, amber punctuation. The canvas is the
+   darkest step (#150811); chrome and panels climb #1a0916 → #26081c → #380036. */
+html[data-theme="nox"] {
+  --bg-0: #1a0916;
+  --bg-1: #150811;
+  --bg-2: #200a19;
+  --bg-3: #26081c;
+  --bg-4: #380036;
+  --fg: #f6ecf3;
+  --fg-muted: #b49dae;
+  --fg-dim: #806b7a;
+  --fg-inverse: #150811;
+  --on-primary: #ffffff;
+  --primary: #b01ea4;
+  --primary-hover: #cf34c4;
+  --primary-soft: rgba(176, 30, 164, 0.18);
+  --secondary: #ee9ae7;
+  --accent: #fbbf24;
+  --accent-soft: rgba(251, 191, 36, 0.16);
+  --border-active: rgba(238, 154, 231, 0.45);
+  --ring: #ee9ae7;
+  --glow-primary:
+    0 0 0 1px rgba(238, 154, 231, 0.35),
+    0 12px 32px -8px rgba(176, 30, 164, 0.55);
+  --app-wash:
+    radial-gradient(
+      1200px 600px at 80% -10%,
+      rgba(176, 30, 164, 0.16),
+      transparent 60%
+    ),
+    radial-gradient(
+      800px 500px at -10% 110%,
+      rgba(251, 191, 36, 0.06),
+      transparent 60%
+    );
+  --ui-text-toned: #d8c6d3;
+  --ui-text-highlighted: #fdf7fb;
+  --ui-color-primary-50: #fdf2fc;
+  --ui-color-primary-100: #fbe3f9;
+  --ui-color-primary-200: #f6c5f2;
+  --ui-color-primary-300: #ee9ae7;
+  --ui-color-primary-400: #e162d8;
+  --ui-color-primary-500: #cf34c4;
+  --ui-color-primary-600: #b01ea4;
+  --ui-color-primary-700: #8e1884;
+  --ui-color-primary-800: #6a0f62;
+  --ui-color-primary-900: #4a0745;
+  --ui-color-primary-950: #380036;
+}
+
+/* Grim: near-black forest canvas with the chrome sitting a step *above* it —
+   the rail and titlebar are #011502, the ground behind the grid is darker at
+   #000a01, so the shell frames the clips instead of receding. Sage is too
+   light for white glyphs, so text on a primary fill goes dark here. Borders
+   and shadows follow the OLED treatment: a ground this dark swallows the
+   default hairlines. */
+html[data-theme="grim"] {
+  --bg-0: #011502;
+  --bg-1: #000a01;
+  --bg-2: #01180a;
+  --bg-3: #01200f;
+  --bg-4: #062a16;
+  --fg: #e8f2ea;
+  --fg-muted: #93a99a;
+  --fg-dim: #64786c;
+  --fg-inverse: #011502;
+  --on-primary: #011502;
+  --primary: #9ec5ab;
+  --primary-hover: #b6d6c0;
+  --primary-soft: rgba(158, 197, 171, 0.16);
+  --secondary: #c6dfd1;
+  --accent: #e0705c;
+  --accent-soft: rgba(224, 112, 92, 0.16);
+  --border: rgba(158, 197, 171, 0.1);
+  --border-hover: rgba(158, 197, 171, 0.18);
+  --border-active: rgba(158, 197, 171, 0.45);
+  --ring: #9ec5ab;
+  --glow-primary:
+    0 0 0 1px rgba(158, 197, 171, 0.35),
+    0 12px 32px -8px rgba(83, 140, 108, 0.55);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.7);
+  --shadow-md: 0 8px 24px -6px rgba(0, 0, 0, 0.85);
+  --shadow-lg: 0 24px 60px -12px rgba(0, 0, 0, 0.95);
+  --app-wash:
+    radial-gradient(
+      1200px 600px at 80% -10%,
+      rgba(158, 197, 171, 0.07),
+      transparent 60%
+    ),
+    radial-gradient(
+      800px 500px at -10% 110%,
+      rgba(224, 112, 92, 0.05),
+      transparent 60%
+    );
+  --ui-text-toned: #c9d8ce;
+  --ui-text-highlighted: #f4faf6;
+  --ui-color-primary-50: #f2f8f4;
+  --ui-color-primary-100: #e2efe7;
+  --ui-color-primary-200: #c6dfd1;
+  --ui-color-primary-300: #9ec5ab;
+  --ui-color-primary-400: #74a888;
+  --ui-color-primary-500: #538c6c;
+  --ui-color-primary-600: #3f7156;
+  --ui-color-primary-700: #345a46;
+  --ui-color-primary-800: #2b4739;
+  --ui-color-primary-900: #243b30;
+  --ui-color-primary-950: #01200f;
+}
+
+/* Space: deep-space navy ground with a cosmic blue identity and starlight gold
+   punctuation. Every surface step climbs through navy rather than grey so the
+   blue cast never leaves, and the washes read as a blue nebula overhead with a
+   faint gold star-field low on the left. */
+html[data-theme="space"] {
+  --bg-0: #060b1c;
+  --bg-1: #0a1128;
+  --bg-2: #101a38;
+  --bg-3: #16224a;
+  --bg-4: #1f2d5e;
+  --fg: #e8ecfb;
+  --fg-muted: #97a3c8;
+  --fg-dim: #6b769c;
+  --fg-inverse: #0a1128;
+  --on-primary: #ffffff;
+  --primary: #4361ee;
+  --primary-hover: #5b78f5;
+  --primary-soft: rgba(67, 97, 238, 0.18);
+  --secondary: #9db1ff;
+  --accent: #ffc94a;
+  --accent-soft: rgba(255, 201, 74, 0.16);
+  --border: rgba(157, 177, 255, 0.1);
+  --border-hover: rgba(157, 177, 255, 0.18);
+  --border-active: rgba(157, 177, 255, 0.45);
+  --ring: #9db1ff;
+  --glow-primary:
+    0 0 0 1px rgba(157, 177, 255, 0.35),
+    0 12px 32px -8px rgba(67, 97, 238, 0.55);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --shadow-md: 0 8px 24px -6px rgba(0, 0, 0, 0.7);
+  --shadow-lg: 0 24px 60px -12px rgba(0, 0, 0, 0.85);
+  --app-wash:
+    radial-gradient(
+      1200px 600px at 80% -10%,
+      rgba(67, 97, 238, 0.18),
+      transparent 60%
+    ),
+    radial-gradient(
+      800px 500px at -10% 110%,
+      rgba(255, 201, 74, 0.06),
+      transparent 60%
+    );
+  --ui-text-toned: #bcc7e6;
+  --ui-text-highlighted: #f4f7ff;
+  --ui-color-primary-50: #eef2ff;
+  --ui-color-primary-100: #dfe6ff;
+  --ui-color-primary-200: #c3d0ff;
+  --ui-color-primary-300: #9db1ff;
+  --ui-color-primary-400: #7a90fa;
+  --ui-color-primary-500: #5b78f5;
+  --ui-color-primary-600: #4361ee;
+  --ui-color-primary-700: #3049cb;
+  --ui-color-primary-800: #283ba2;
+  --ui-color-primary-900: #263680;
+  --ui-color-primary-950: #16224a;
+}
+
 /* OLED Mint: true black, emerald identity, pink punctuation. */
-html[data-theme='oled-mint'] {
+html[data-theme="oled-mint"] {
   --fg: #e6f0ea;
   --fg-muted: #9ab3a6;
   --fg-dim: #6a8375;
@@ -389,10 +529,20 @@ html[data-theme='oled-mint'] {
   --accent-soft: rgba(244, 114, 182, 0.16);
   --border-active: rgba(110, 231, 183, 0.45);
   --ring: #6ee7b7;
-  --glow-primary: 0 0 0 1px rgba(110, 231, 183, 0.35), 0 12px 32px -8px rgba(16, 185, 129, 0.55);
+  --glow-primary:
+    0 0 0 1px rgba(110, 231, 183, 0.35),
+    0 12px 32px -8px rgba(16, 185, 129, 0.55);
   --app-wash:
-    radial-gradient(1200px 600px at 80% -10%, rgba(16, 185, 129, 0.13), transparent 60%),
-    radial-gradient(800px 500px at -10% 110%, rgba(244, 114, 182, 0.07), transparent 60%);
+    radial-gradient(
+      1200px 600px at 80% -10%,
+      rgba(16, 185, 129, 0.13),
+      transparent 60%
+    ),
+    radial-gradient(
+      800px 500px at -10% 110%,
+      rgba(244, 114, 182, 0.07),
+      transparent 60%
+    );
   --ui-text-toned: #bad0c4;
   --ui-text-highlighted: #f3faf6;
   --ui-color-primary-50: #ecfdf5;
@@ -409,7 +559,7 @@ html[data-theme='oled-mint'] {
 }
 
 /* OLED Frost: true black, cyan identity, violet punctuation. */
-html[data-theme='oled-frost'] {
+html[data-theme="oled-frost"] {
   --fg: #e4f0f4;
   --fg-muted: #97b0b9;
   --fg-dim: #678089;
@@ -422,10 +572,20 @@ html[data-theme='oled-frost'] {
   --accent-soft: rgba(167, 139, 250, 0.16);
   --border-active: rgba(103, 232, 249, 0.45);
   --ring: #67e8f9;
-  --glow-primary: 0 0 0 1px rgba(103, 232, 249, 0.35), 0 12px 32px -8px rgba(6, 182, 212, 0.55);
+  --glow-primary:
+    0 0 0 1px rgba(103, 232, 249, 0.35),
+    0 12px 32px -8px rgba(6, 182, 212, 0.55);
   --app-wash:
-    radial-gradient(1200px 600px at 80% -10%, rgba(6, 182, 212, 0.13), transparent 60%),
-    radial-gradient(800px 500px at -10% 110%, rgba(167, 139, 250, 0.07), transparent 60%);
+    radial-gradient(
+      1200px 600px at 80% -10%,
+      rgba(6, 182, 212, 0.13),
+      transparent 60%
+    ),
+    radial-gradient(
+      800px 500px at -10% 110%,
+      rgba(167, 139, 250, 0.07),
+      transparent 60%
+    );
   --ui-text-toned: #b8ccd4;
   --ui-text-highlighted: #f2f9fb;
   --ui-color-primary-50: #ecfeff;
@@ -442,7 +602,7 @@ html[data-theme='oled-frost'] {
 }
 
 /* OLED Crimson: true black, crimson identity, amber punctuation. */
-html[data-theme='oled-crimson'] {
+html[data-theme="oled-crimson"] {
   --fg: #f5e9eb;
   --fg-muted: #b09aa0;
   --fg-dim: #7f6a70;
@@ -455,10 +615,20 @@ html[data-theme='oled-crimson'] {
   --accent-soft: rgba(251, 191, 36, 0.16);
   --border-active: rgba(252, 165, 165, 0.45);
   --ring: #fca5a5;
-  --glow-primary: 0 0 0 1px rgba(252, 165, 165, 0.35), 0 12px 32px -8px rgba(220, 38, 38, 0.55);
+  --glow-primary:
+    0 0 0 1px rgba(252, 165, 165, 0.35),
+    0 12px 32px -8px rgba(220, 38, 38, 0.55);
   --app-wash:
-    radial-gradient(1200px 600px at 80% -10%, rgba(220, 38, 38, 0.14), transparent 60%),
-    radial-gradient(800px 500px at -10% 110%, rgba(251, 191, 36, 0.06), transparent 60%);
+    radial-gradient(
+      1200px 600px at 80% -10%,
+      rgba(220, 38, 38, 0.14),
+      transparent 60%
+    ),
+    radial-gradient(
+      800px 500px at -10% 110%,
+      rgba(251, 191, 36, 0.06),
+      transparent 60%
+    );
   --ui-text-toned: #d2bfc4;
   --ui-text-highlighted: #fcf5f6;
   --ui-color-primary-50: #fef2f2;
