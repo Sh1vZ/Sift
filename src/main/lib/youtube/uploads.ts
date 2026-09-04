@@ -9,10 +9,11 @@
 import { randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { stat } from 'node:fs/promises'
-import type { ActionResult, Clip, ClipPatch } from '@shared/types'
+import type { ActionResult, ActivityInput, Clip, ClipPatch } from '@shared/types'
 import {
   WATCH_WINDOW_MS,
   isStageTerminal,
+  stageLine,
   stageSentence,
   validateUploadRequest,
   type UploadJob,
@@ -55,6 +56,8 @@ export interface UploadsDeps {
   watch(clipId: string, videoId: string, accountId: string, watchUntilMs: number): boolean
   /** Stop asking about a clip's video, for a dismissed processing row. */
   unwatch(clipId: string): void
+  /** Keep a finished upload in the Activity history. */
+  record(input: ActivityInput): void
 }
 
 export class YouTubeUploads {
@@ -399,6 +402,24 @@ export class YouTubeUploads {
   }
 
   private pruneLater(job: UploadJob): void {
+    // The one place every terminal transition passes exactly once — from a
+    // cancel, the upload's own end, or the watcher's verdict after a relaunch —
+    // so the history row is written here. A cancelled upload sent nothing and
+    // keeps no row.
+    if (job.state === 'done' || job.state === 'failed') {
+      this.deps.record({
+        kind: 'upload',
+        status: job.state,
+        title: job.title,
+        detail: stageLine(job) || (job.accountLabel ? `via ${job.accountLabel}` : ''),
+        error: job.error,
+        createdAtMs: job.createdAtMs,
+        clipId: job.clipId,
+        game: job.game,
+        videoId: job.videoId,
+        path: '',
+      })
+    }
     const delay =
       job.state === 'done'
         ? PRUNE_DONE_MS

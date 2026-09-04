@@ -37,6 +37,10 @@ const api: Api = {
     cancel: (id) => ipcRenderer.invoke('export:cancel', id),
     dismiss: (id) => ipcRenderer.invoke('export:dismiss', id),
   },
+  activity: {
+    remove: (id) => ipcRenderer.invoke('activity:remove', id),
+    clear: () => ipcRenderer.invoke('activity:clear'),
+  },
   youtube: {
     state: () => ipcRenderer.invoke('youtube:state'),
     addAccount: (clientId, clientSecret, label) =>

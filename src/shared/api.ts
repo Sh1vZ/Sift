@@ -77,6 +77,13 @@ export interface Api {
     /** Drops a finished/failed job from the list ahead of its automatic pruning. */
     dismiss(id: string): Promise<void>
   }
+  /** The History tab: finished work main kept. The list itself arrives in the snapshot and on `activity:changed`. */
+  activity: {
+    /** Forgets one row. */
+    remove(id: string): Promise<void>
+    /** Forgets every row. */
+    clear(): Promise<void>
+  }
   youtube: {
     state(): Promise<YouTubeState>
     /** New project from pasted values. The secret is encrypted before it touches disk and never comes back. */

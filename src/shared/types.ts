@@ -118,6 +118,46 @@ export interface ExportJob {
   createdAtMs: number
 }
 
+// --------------------------------------------------------------- activity
+
+export type ActivityKind =
+  'export' | 'upload' | 'copy-file' | 'rename' | 'delete' | 'game-alias' | 'scan'
+
+export type ActivityStatus = 'done' | 'failed'
+
+/**
+ * One finished piece of work, kept after the live job is pruned so the user
+ * can find what Sift did and act on it later. Flat on purpose: one SQLite row,
+ * every string present (`''` rather than absent) so the shape matches the table.
+ */
+export interface ActivityRecord {
+  id: string
+  kind: ActivityKind
+  status: ActivityStatus
+  /** The subject: file name for clip work, game name for aliases, folder name for scans. */
+  title: string
+  /** The specific part of the second line; the renderer adds the verb. For `game-alias` it is the whole sentence. */
+  detail: string
+  /** Why it failed; '' otherwise. */
+  error: string
+  /** When the work started (`job.createdAtMs`); equal to `finishedAtMs` for instant actions. */
+  createdAtMs: number
+  finishedAtMs: number
+  /** The clip the row can open; '' when there is none (a delete, a scan). A failed export points at its source. */
+  clipId: string
+  game: string
+  /** Upload only: works even after the clip is gone from the library. */
+  videoId: string
+  /** Absolute path of the file or folder the row is about; '' when none. */
+  path: string
+}
+
+/** What a caller supplies; the log assigns `id` and `finishedAtMs`. */
+export type ActivityInput = Omit<ActivityRecord, 'id' | 'finishedAtMs'>
+
+/** Rows kept in the history; the oldest fall off past this. */
+export const ACTIVITY_CAP = 200
+
 export type GroupBy = 'date' | 'none'
 export type SortBy = 'newest' | 'oldest' | 'name' | 'duration' | 'size' | 'favourite'
 export type GridSize = 'compact' | 'comfortable' | 'large'
@@ -207,6 +247,8 @@ export interface LibrarySnapshot {
   settings: Settings
   scan: ScanState
   exports: ExportJob[]
+  /** Finished work, newest first. */
+  activity: ActivityRecord[]
   appVersion: string
   suggestedFolders: string[]
   /** Where exports go unless the user picked another folder: `<Videos>\Sift Clips`. */
@@ -343,6 +385,8 @@ export interface EventMap {
   'youtube:changed': YouTubeState
   /** Every live upload job; a job is sent once in its terminal state and then dropped. */
   'uploads:changed': UploadJob[]
+  /** Every kept history record, newest first; the renderer replaces its copy. */
+  'activity:changed': ActivityRecord[]
 }
 
 export type EventName = keyof EventMap

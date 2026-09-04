@@ -1,8 +1,9 @@
 import { computed, ref } from 'vue'
 import type { ExportJob, ScanState } from '@shared/types'
 import type { UploadJob } from '@shared/youtube'
+import { historyRecords } from './useActivityHistory'
 import { activeExports, exportJobs, exportLabel } from './useExports'
-import { scan } from './useLibrary'
+import { scan, view } from './useLibrary'
 import { activeUploads, processingUploads, uploadJobs, uploadLabel } from './useUploads'
 
 /**
@@ -52,4 +53,25 @@ export const activityBusy = computed<boolean>(
   () => activeExports.value.length > 0 || activeUploads.value.length > 0 || scanBusy(),
 )
 
+/** The sidebar popover: live work plus the last few finished things. */
 export const activityOpen = ref(false)
+
+/** How many finished rows the popover shows before handing over to the page. */
+export const RECENT_LIMIT = 10
+export const recentRecords = computed(() => historyRecords.value.slice(0, RECENT_LIMIT))
+
+export type ActivityTab = 'active' | 'history'
+/** Which tab the Activity page is on. */
+export const activityTab = ref<ActivityTab>('active')
+
+/**
+ * The full Activity page. Lands on what there is to see: live work if any,
+ * else the history when it has something; an empty page stays on Active,
+ * whose empty state explains what turns up there. `tab` overrides that.
+ */
+export function openActivity(tab?: ActivityTab): void {
+  activityTab.value =
+    tab ?? (activityItems.value.length || !historyRecords.value.length ? 'active' : 'history')
+  activityOpen.value = false
+  view.value = 'activity'
+}

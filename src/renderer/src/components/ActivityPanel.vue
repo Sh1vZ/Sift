@@ -1,76 +1,21 @@
 <script setup lang="ts">
-import type { ExportJob } from '@shared/types'
-import type { UploadJob } from '@shared/youtube'
-import { activityCount, activityItems } from '@/composables/useActivity'
-import { cancelExport, dismissExport } from '@/composables/useExports'
-import { getClip, openYouTube } from '@/composables/useLibrary'
+import { computed } from 'vue'
+import ActivityHistoryRow from './ActivityHistoryRow.vue'
+import ActivityLiveList from './ActivityLiveList.vue'
 import {
-  cancelUpload,
-  checkUploadNow,
-  dismissUpload,
-  progressText,
-  stageText,
-} from '@/composables/useUploads'
+  activityCount,
+  activityItems,
+  openActivity,
+  recentRecords,
+} from '@/composables/useActivity'
+import { historyRecords } from '@/composables/useActivityHistory'
 
 /**
- * Every job main is running, in one list: exports, uploads and the scan. The
- * cards and the player show the same jobs in place; this is where you see them
- * together and stop one without hunting for its card.
+ * The sidebar glance: what is running now, then the last few things that
+ * finished. Anything longer than that is the Activity page's job, which the
+ * footer opens — the popover is for a look, not for digging.
  */
-const liveExport = (j: ExportJob): boolean => j.state === 'queued' || j.state === 'running'
-const liveUpload = (j: UploadJob): boolean => j.state === 'queued' || j.state === 'uploading'
-/** Sift has stopped asking, so the row offers the question as a button instead. */
-const stalled = (j: UploadJob): boolean => j.state === 'processing' && j.checksStopped
-
-/**
- * Determinate only where there is a real number to show: the bytes Sift sent,
- * or the parts YouTube says it has done. It often reports neither, and an
- * indeterminate bar is honest where a 0% one is not.
- */
-function barValue(j: UploadJob): number | null {
-  if (j.state === 'uploading') return Math.round(j.progress * 100)
-  if (j.state === 'processing' && j.stageProgress >= 0) return Math.round(j.stageProgress * 100)
-  return null
-}
-
-function exportLine(j: ExportJob): string {
-  switch (j.state) {
-    case 'queued':
-      return 'Waiting…'
-    case 'running':
-      return `Exporting · ${Math.round(j.progress * 100)}%`
-    case 'done':
-      return 'Exported'
-    case 'failed':
-      return j.error || 'Export failed'
-    default:
-      return 'Cancelled'
-  }
-}
-
-// Every arm is spelled out: a `default` here would quietly render the next
-// UploadState as "Cancelled" instead of failing to compile.
-function uploadLine(j: UploadJob): string {
-  switch (j.state) {
-    case 'queued':
-      return 'Waiting to upload…'
-    case 'uploading':
-      return `Uploading · ${progressText(j)}`
-    case 'processing':
-      return stageText(j)
-    case 'done':
-      return stageText(j) || (j.accountLabel ? `Uploaded · via ${j.accountLabel}` : 'Uploaded')
-    case 'failed':
-      return j.error || 'Upload failed'
-    case 'cancelled':
-      return 'Cancelled'
-  }
-}
-
-function openUploaded(j: UploadJob): void {
-  const clip = getClip(j.clipId)
-  if (clip) void openYouTube(clip)
-}
+const more = computed(() => Math.max(0, historyRecords.value.length - recentRecords.value.length))
 </script>
 
 <template>
@@ -86,150 +31,48 @@ function openUploaded(j: UploadJob): void {
       />
     </header>
 
-    <UEmpty
-      v-if="!activityItems.length"
-      class="empty"
-      icon="i-lucide-moon"
-      title="Nothing running"
-      description="Exports, uploads and scans show up here while they work."
-      variant="subtle"
-      size="sm"
-    />
+    <div class="scroll">
+      <template v-if="activityItems.length || recentRecords.length">
+        <section v-if="activityItems.length" aria-labelledby="activity-running">
+          <h4 id="activity-running" class="section">Running</h4>
+          <ActivityLiveList />
+        </section>
+        <section v-if="recentRecords.length" aria-labelledby="activity-recent">
+          <h4 id="activity-recent" class="section">Recent</h4>
+          <ul class="list">
+            <ActivityHistoryRow v-for="r in recentRecords" :key="r.id" :record="r" />
+          </ul>
+        </section>
+      </template>
+      <UEmpty
+        v-else
+        class="empty"
+        icon="i-lucide-moon"
+        title="Nothing yet"
+        description="Exports, uploads and scans show up here while they work, and stay a while after."
+        variant="subtle"
+        size="sm"
+      />
+    </div>
 
-    <ul v-else class="list">
-      <li v-for="item in activityItems" :key="item.id" class="item">
-        <template v-if="item.kind === 'export'">
-          <UIcon
-            name="i-lucide-scissors"
-            class="item-icon"
-            :class="{ 'is-failed': item.job.state === 'failed' }"
-          />
-          <div class="text">
-            <p class="title truncate" :title="item.job.name + item.job.ext">
-              {{ item.job.name }}{{ item.job.ext }}
-            </p>
-            <p class="line truncate">{{ exportLine(item.job) }}</p>
-            <UProgress
-              v-if="liveExport(item.job)"
-              class="bar"
-              size="xs"
-              color="primary"
-              :model-value="
-                item.job.state === 'running' ? Math.round(item.job.progress * 100) : null
-              "
-              :aria-label="exportLine(item.job)"
-            />
-          </div>
-          <UButton
-            v-if="liveExport(item.job)"
-            label="Cancel"
-            color="error"
-            variant="ghost"
-            size="sm"
-            @click="cancelExport(item.job.id)"
-          />
-          <UButton
-            v-else
-            icon="i-lucide-x"
-            color="neutral"
-            variant="ghost"
-            size="sm"
-            square
-            aria-label="Dismiss"
-            @click="dismissExport(item.job.id)"
-          />
-        </template>
-
-        <template v-else-if="item.kind === 'upload'">
-          <UIcon
-            name="i-lucide-youtube"
-            class="item-icon"
-            :class="{
-              'is-failed': item.job.state === 'failed',
-              'is-done': item.job.state === 'done',
-            }"
-          />
-          <div class="text">
-            <p class="title truncate" :title="item.job.title">{{ item.job.title }}</p>
-            <p class="line truncate">{{ uploadLine(item.job) }}</p>
-            <UProgress
-              v-if="liveUpload(item.job) || item.job.state === 'processing'"
-              class="bar"
-              size="xs"
-              color="primary"
-              :model-value="barValue(item.job)"
-              :aria-label="uploadLine(item.job)"
-            />
-          </div>
-          <UButton
-            v-if="liveUpload(item.job)"
-            label="Cancel"
-            color="error"
-            variant="ghost"
-            size="sm"
-            @click="cancelUpload(item.job.id)"
-          />
-          <template v-else>
-            <UTooltip v-if="stalled(item.job)" text="Ask YouTube now">
-              <UButton
-                icon="i-lucide-refresh-cw"
-                color="neutral"
-                variant="ghost"
-                size="sm"
-                square
-                aria-label="Check on YouTube now"
-                @click="checkUploadNow(item.job)"
-              />
-            </UTooltip>
-            <UTooltip v-if="item.job.videoId" text="Open on YouTube">
-              <UButton
-                icon="i-lucide-external-link"
-                color="neutral"
-                variant="ghost"
-                size="sm"
-                square
-                aria-label="Open on YouTube"
-                @click="openUploaded(item.job)"
-              />
-            </UTooltip>
-            <UButton
-              icon="i-lucide-x"
-              color="neutral"
-              variant="ghost"
-              size="sm"
-              square
-              :aria-label="item.job.state === 'processing' ? 'Stop checking' : 'Dismiss'"
-              @click="dismissUpload(item.job.id)"
-            />
-          </template>
-        </template>
-
-        <template v-else>
-          <UIcon name="i-lucide-radar" class="item-icon animate-spin" />
-          <div class="text">
-            <p class="title truncate">
-              {{ item.scan.active ? `Scanning ${item.scan.folder}` : 'Generating previews' }}
-            </p>
-            <p class="line truncate">
-              {{ item.scan.found }} found · {{ item.scan.pending }} left · {{ item.scan.done }} done
-            </p>
-            <UProgress
-              class="bar"
-              size="xs"
-              color="primary"
-              :model-value="null"
-              aria-label="Scan"
-            />
-          </div>
-        </template>
-      </li>
-    </ul>
+    <footer class="foot">
+      <UButton
+        class="all"
+        :label="more ? `See all activity · ${more} more` : 'See all activity'"
+        trailing-icon="i-lucide-arrow-right"
+        color="neutral"
+        variant="ghost"
+        size="sm"
+        block
+        @click="openActivity()"
+      />
+    </footer>
   </div>
 </template>
 
 <style scoped>
 .panel {
-  width: 360px;
+  width: 380px;
   max-height: 60vh;
   display: flex;
   flex-direction: column;
@@ -246,52 +89,39 @@ function openUploaded(j: UploadJob): void {
   font-size: var(--text-md);
   font-weight: 600;
 }
-.empty {
-  padding: var(--s-5) var(--s-4);
+.scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.section {
+  padding: var(--s-3) var(--s-4) var(--s-1);
+  font-family: var(--font-heading);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+}
+section + section .section {
+  border-top: 1px solid var(--border);
+  padding-top: var(--s-3);
 }
 .list {
   list-style: none;
   margin: 0;
   padding: 0;
-  overflow-y: auto;
-  overscroll-behavior: contain;
 }
-.item {
-  display: flex;
-  align-items: center;
-  gap: var(--s-3);
-  padding: var(--s-3) var(--s-4);
+.empty {
+  padding: var(--s-5) var(--s-4);
 }
-.item + .item {
+.foot {
+  flex: none;
+  padding: var(--s-2);
   border-top: 1px solid var(--border);
 }
-.item-icon {
-  flex: none;
-  width: 20px;
-  height: 20px;
-  color: var(--secondary);
-}
-.item-icon.is-done {
-  color: var(--success);
-}
-.item-icon.is-failed {
-  color: var(--warning);
-}
-.text {
-  flex: 1;
-  min-width: 0;
-}
-.title {
-  font-size: var(--text-base);
-  font-weight: 600;
-  color: var(--fg);
-}
-.line {
-  margin-top: 1px;
-  font-size: var(--text-sm);
-  color: var(--fg-muted);
-}
-.bar {
-  margin-top: var(--s-2);
+.all {
+  justify-content: space-between;
 }
 </style>

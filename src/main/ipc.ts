@@ -114,6 +114,9 @@ export function registerIpc(
   ipcMain.handle('export:cancel', (_e, id) => library.cancelExport(str(id)))
   ipcMain.handle('export:dismiss', (_e, id) => library.dismissExport(str(id)))
 
+  ipcMain.handle('activity:remove', (_e, id) => library.activity.remove(str(id)))
+  ipcMain.handle('activity:clear', () => library.activity.clear())
+
   const yt = youtube.accounts
   ipcMain.handle('youtube:state', () => yt.state())
   ipcMain.handle('youtube:add-account', (_e, clientId, secret, label) =>

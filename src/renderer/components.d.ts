@@ -11,7 +11,10 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
+    ActivityHistoryRow: typeof import('./src/components/ActivityHistoryRow.vue')['default']
+    ActivityLiveList: typeof import('./src/components/ActivityLiveList.vue')['default']
     ActivityPanel: typeof import('./src/components/ActivityPanel.vue')['default']
+    ActivityView: typeof import('./src/components/ActivityView.vue')['default']
     AnimatedList: typeof import('./src/components/bits/AnimatedList.vue')['default']
     Aurora: typeof import('./src/components/bits/Aurora.vue')['default']
     BlurText: typeof import('./src/components/bits/BlurText.vue')['default']
@@ -86,6 +89,7 @@ declare module 'vue' {
     USelectMenu: typeof import('./../../node_modules/@nuxt/ui/dist/runtime/components/SelectMenu.vue')['default']
     USkeleton: typeof import('./../../node_modules/@nuxt/ui/dist/runtime/components/Skeleton.vue')['default']
     USwitch: typeof import('./../../node_modules/@nuxt/ui/dist/runtime/components/Switch.vue')['default']
+    UTabs: typeof import('./../../node_modules/@nuxt/ui/dist/runtime/components/Tabs.vue')['default']
     UTextarea: typeof import('./../../node_modules/@nuxt/ui/dist/runtime/components/Textarea.vue')['default']
     UTooltip: typeof import('./../../node_modules/@nuxt/ui/dist/runtime/components/Tooltip.vue')['default']
     WhatsNewDialog: typeof import('./src/components/WhatsNewDialog.vue')['default']

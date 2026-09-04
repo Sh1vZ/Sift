@@ -1,5 +1,14 @@
 import { DatabaseSync, type StatementSync } from 'node:sqlite'
-import { DEFAULT_SETTINGS, type Clip, type LibraryFolder, type Settings } from '@shared/types'
+import {
+  ACTIVITY_CAP,
+  DEFAULT_SETTINGS,
+  type ActivityKind,
+  type ActivityRecord,
+  type ActivityStatus,
+  type Clip,
+  type LibraryFolder,
+  type Settings,
+} from '@shared/types'
 import { isVideoStage } from '@shared/youtube'
 
 interface LibraryData {
@@ -63,6 +72,9 @@ const MIGRATIONS: Array<(db: DatabaseSync) => void> = [
     db.exec('ALTER TABLE clips ADD COLUMN youtube_checked_at_ms REAL NOT NULL DEFAULT 0')
     db.exec('ALTER TABLE clips ADD COLUMN youtube_watch_until_ms REAL NOT NULL DEFAULT 0')
   },
+  // v7 -> v8: finished work (exports, uploads, renames…) is kept as history
+  // instead of vanishing seconds after the job ends.
+  (db) => db.exec(ACTIVITY_TABLE),
 ]
 const SCHEMA_VERSION = MIGRATIONS.length + 1
 
@@ -100,6 +112,27 @@ const GAME_ALIASES_TABLE = `
 CREATE TABLE IF NOT EXISTS game_aliases (
   source  TEXT PRIMARY KEY,
   display TEXT NOT NULL
+);
+`
+
+/**
+ * One row per finished piece of work, capped at `ACTIVITY_CAP`. Every string
+ * column defaults to '' so a row and an `ActivityRecord` have the same shape.
+ */
+const ACTIVITY_TABLE = `
+CREATE TABLE IF NOT EXISTS activity (
+  id             TEXT PRIMARY KEY,
+  kind           TEXT NOT NULL,
+  status         TEXT NOT NULL,
+  title          TEXT NOT NULL DEFAULT '',
+  detail         TEXT NOT NULL DEFAULT '',
+  error          TEXT NOT NULL DEFAULT '',
+  created_at_ms  REAL NOT NULL DEFAULT 0,
+  finished_at_ms REAL NOT NULL DEFAULT 0,
+  clip_id        TEXT NOT NULL DEFAULT '',
+  game           TEXT NOT NULL DEFAULT '',
+  video_id       TEXT NOT NULL DEFAULT '',
+  path           TEXT NOT NULL DEFAULT ''
 );
 `
 
@@ -159,6 +192,7 @@ CREATE TABLE IF NOT EXISTS clips (
 );
 ${YOUTUBE_ACCOUNTS_TABLE}
 ${GAME_ALIASES_TABLE}
+${ACTIVITY_TABLE}
 `
 
 /** Created after migrations run, since an index may name a column an older database only gains then. */
@@ -167,7 +201,37 @@ CREATE INDEX IF NOT EXISTS clips_folder   ON clips(folder_id);
 CREATE INDEX IF NOT EXISTS clips_game     ON clips(game);
 CREATE INDEX IF NOT EXISTS clips_recorded ON clips(recorded_at_ms DESC);
 CREATE INDEX IF NOT EXISTS clips_source   ON clips(source_id);
+CREATE INDEX IF NOT EXISTS activity_finished ON activity(finished_at_ms DESC);
 `
+
+const ACTIVITY_KINDS: readonly ActivityKind[] = [
+  'export',
+  'upload',
+  'copy-file',
+  'rename',
+  'delete',
+  'game-alias',
+  'scan',
+]
+const ACTIVITY_STATUSES: readonly ActivityStatus[] = ['done', 'failed']
+const isActivityKind = (v: string): v is ActivityKind => ACTIVITY_KINDS.includes(v as ActivityKind)
+const isActivityStatus = (v: string): v is ActivityStatus =>
+  ACTIVITY_STATUSES.includes(v as ActivityStatus)
+
+interface ActivityRow {
+  id: string
+  kind: string
+  status: string
+  title: string
+  detail: string
+  error: string
+  created_at_ms: number
+  finished_at_ms: number
+  clip_id: string
+  game: string
+  video_id: string
+  path: string
+}
 
 interface ClipRow {
   id: string
@@ -264,6 +328,12 @@ export class Store {
     deleteAccount: StatementSync
     setGameAlias: StatementSync
     deleteGameAlias: StatementSync
+    listActivity: StatementSync
+    insertActivity: StatementSync
+    trimActivity: StatementSync
+    deleteActivity: StatementSync
+    clearActivity: StatementSync
+    rekeyActivityClip: StatementSync
   }
   /**
    * Coalesced pending writes, keyed by row; the latest op for a key wins.
@@ -388,7 +458,92 @@ export class Store {
         'INSERT INTO game_aliases (source, display) VALUES (?, ?) ON CONFLICT(source) DO UPDATE SET display = excluded.display',
       ),
       deleteGameAlias: db.prepare('DELETE FROM game_aliases WHERE source = ?'),
+      listActivity: db.prepare(
+        'SELECT * FROM activity ORDER BY finished_at_ms DESC, rowid DESC LIMIT ?',
+      ),
+      insertActivity: db.prepare(`
+        INSERT INTO activity (id, kind, status, title, detail, error, created_at_ms,
+          finished_at_ms, clip_id, game, video_id, path)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`),
+      trimActivity: db.prepare(`
+        DELETE FROM activity WHERE id NOT IN (
+          SELECT id FROM activity ORDER BY finished_at_ms DESC, rowid DESC LIMIT ?)`),
+      deleteActivity: db.prepare('DELETE FROM activity WHERE id = ?'),
+      clearActivity: db.prepare('DELETE FROM activity'),
+      rekeyActivityClip: db.prepare('UPDATE activity SET clip_id = ?, path = ? WHERE clip_id = ?'),
     }
+  }
+
+  // ---------------------------------------------------------------- activity
+  // Written straight through, like game aliases: a handful of rows a session,
+  // and the panel re-reads the list as soon as a write returns. Not part of
+  // `data` — the `ActivityLog` in main is the only reader.
+
+  listActivity(): ActivityRecord[] {
+    if (!this.db) return []
+    const rows = this.stmts.listActivity.all(ACTIVITY_CAP) as unknown as ActivityRow[]
+    const records: ActivityRecord[] = []
+    for (const r of rows) {
+      // A row written by a future build with a kind this one cannot draw is
+      // skipped rather than rendered as something it is not.
+      if (!isActivityKind(r.kind) || !isActivityStatus(r.status)) continue
+      records.push({
+        id: r.id,
+        kind: r.kind,
+        status: r.status,
+        title: r.title,
+        detail: r.detail,
+        error: r.error,
+        createdAtMs: r.created_at_ms,
+        finishedAtMs: r.finished_at_ms,
+        clipId: r.clip_id,
+        game: r.game,
+        videoId: r.video_id,
+        path: r.path,
+      })
+    }
+    return records
+  }
+
+  /** Inserts and trims to the cap in one transaction, so the table never grows past it. */
+  addActivity(r: ActivityRecord): void {
+    if (!this.db) return
+    this.transaction(() => {
+      this.stmts.insertActivity.run(
+        r.id,
+        r.kind,
+        r.status,
+        r.title,
+        r.detail,
+        r.error,
+        r.createdAtMs,
+        r.finishedAtMs,
+        r.clipId,
+        r.game,
+        r.videoId,
+        r.path,
+      )
+      this.stmts.trimActivity.run(ACTIVITY_CAP)
+    })
+  }
+
+  removeActivity(id: string): void {
+    if (!this.db) return
+    this.stmts.deleteActivity.run(id)
+  }
+
+  clearActivity(): void {
+    if (!this.db) return
+    this.stmts.clearActivity.run()
+  }
+
+  /**
+   * Clip ids derive from the path, so a rename gives the clip a new id; the
+   * rows about it follow, or every one of them would read as "clip gone".
+   */
+  rekeyActivityClip(oldId: string, newId: string, newPath: string): void {
+    if (!this.db) return
+    this.stmts.rekeyActivityClip.run(newId, newPath, oldId)
   }
 
   // ------------------------------------------------------------ game names

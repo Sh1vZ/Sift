@@ -1,7 +1,8 @@
 import { computed, ref } from 'vue'
 import type { ExportJob, ExportRequest, ExportState } from '@shared/types'
-import { goClips } from './useLibrary'
+import { getClip, goClips } from './useLibrary'
 import { closePlayer } from './usePlayer'
+import { openResult } from './useSearch'
 import { toast } from './useToasts'
 
 const api = window.api
@@ -37,8 +38,15 @@ function apply(list: ExportJob[]): void {
     if (!prev || prev === j.state) continue
     if (j.state === 'done') {
       toast('success', 'Clip exported', j.name + j.ext, {
-        label: 'View in Clips',
+        label: 'View clip',
+        // Looked up when clicked, not now: the clip lands in the index a
+        // moment around this push, and the toast lives long enough to wait.
         onClick: () => {
+          const clip = j.clipId ? getClip(j.clipId) : undefined
+          if (clip) {
+            void openResult(clip)
+            return
+          }
           closePlayer()
           goClips()
         },

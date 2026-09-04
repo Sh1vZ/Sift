@@ -116,6 +116,7 @@ if (!app.requestSingleInstanceLock()) {
       listClips: () => Object.values(lib.store.data.clips),
       patchClip: (patch) => lib.patchClip(patch),
       checkStatus: () => lib.store.data.settings.youtubeCheckStatus,
+      recordActivity: (input) => lib.activity.record(input),
     })
     // Videos the last run left processing pick up where they stopped. Quitting
     // is never held up for one: `hasActive()` counts moving bytes only.

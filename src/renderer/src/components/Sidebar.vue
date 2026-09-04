@@ -115,7 +115,7 @@ const navUi = {
             <UButton
               class="activity"
               :icon="activityBusy ? 'i-lucide-loader-circle' : 'i-lucide-activity'"
-              :color="activityCount ? 'primary' : 'neutral'"
+              :color="activityCount || view === 'activity' ? 'primary' : 'neutral'"
               variant="ghost"
               square
               size="lg"

@@ -20,6 +20,7 @@ import type {
   Settings,
   WhatsNew,
 } from '@shared/types'
+import { ActivityLog } from './activity'
 import { fullChangelog, releaseNotesFor } from './changelog'
 import { copyFileToClipboard } from './clipboard'
 import { cleanTitle, clipId, deriveGame, parseRecordedAt, prettifyGame } from './clips'
@@ -65,6 +66,12 @@ const MAX_GAME_NAME = 120
 const isTerminal = (j: ExportJob): boolean =>
   j.state === 'done' || j.state === 'failed' || j.state === 'cancelled'
 
+/**
+ * Why a folder is being walked. A launch scan that changes nothing is not
+ * worth a history row — every folder would write one on every start.
+ */
+type ScanReason = 'launch' | 'added' | 'rescan'
+
 /** `statSync` for a path that may not exist: null instead of a throw. */
 function statOrNull(path: string): Stats | null {
   try {
@@ -81,6 +88,8 @@ function statOrNull(path: string): Stats | null {
  */
 export class Library {
   readonly store = new Store(libraryDb())
+  /** Finished work, for the History tab of the Activity panel. */
+  readonly activity: ActivityLog
   private readonly media: MediaQueue
   private readonly watchers = new Map<string, FSWatcher>()
   private scanChain: Promise<void> = Promise.resolve()
@@ -111,6 +120,7 @@ export class Library {
   private exportsTimer: NodeJS.Timeout | null = null
 
   constructor(private readonly emit: Emit) {
+    this.activity = new ActivityLog(this.store, emit)
     this.media = new MediaQueue(
       (clip) => this.processClip(clip),
       (patch) => this.applyPatch(patch),
@@ -130,7 +140,7 @@ export class Library {
       this.store.upsertFolder(folder)
       if (folder.available) {
         this.startWatcher(folder)
-        this.queueScan(folder)
+        this.queueScan(folder, 'launch')
       }
     }
   }
@@ -139,6 +149,7 @@ export class Library {
     // The running export removes its own temp file on abort; wait for that.
     this.exportAbort?.abort()
     await this.exportChain.catch(() => undefined)
+    this.activity.shutdown()
     this.media.stop()
     for (const w of this.watchers.values()) await w.close().catch(() => undefined)
     this.watchers.clear()
@@ -208,6 +219,7 @@ export class Library {
     // An alias that repeats its own source is stored as no alias at all, so the
     // table never fills up with rows that change nothing.
     this.store.writeGameAliases(names.map((n) => [n, label === n ? null : label]))
+    this.recordGameAlias(names, label)
 
     // Clips already indexed move now rather than at the next scan. The patches
     // ride the ordinary 150 ms `clips:updated` batch, so merging a game with
@@ -221,6 +233,29 @@ export class Library {
     return { ok: true }
   }
 
+  /** The whole sentence is composed here: the renderer shows it as-is. */
+  private recordGameAlias(names: string[], label: string | null): void {
+    const now = Date.now()
+    let detail: string
+    if (label)
+      detail = names.length === 1 ? `Renamed from ${names[0]}` : `Merged ${names.join(' + ')}`
+    else
+      detail =
+        names.length === 1 ? 'Back to the folder name' : `Split back into ${names.length} games`
+    this.activity.record({
+      kind: 'game-alias',
+      status: 'done',
+      title: label ?? names.join(', '),
+      detail,
+      error: '',
+      createdAtMs: now,
+      clipId: '',
+      game: label ?? names[0],
+      videoId: '',
+      path: '',
+    })
+  }
+
   snapshot(): LibrarySnapshot {
     const videos = app.getPath('videos')
     return {
@@ -229,6 +264,7 @@ export class Library {
       settings: this.settings,
       scan: { ...this.scanState },
       exports: [...this.exports.values()].map((j) => ({ ...j })),
+      activity: this.activity.list(),
       appVersion: app.getVersion(),
       suggestedFolders: existsSync(videos) ? [videos] : [],
       defaultClipsDir: this.defaultClipsDir(),
@@ -296,7 +332,7 @@ export class Library {
     this.emitFolders()
     if (folder.available) {
       this.startWatcher(folder)
-      this.queueScan(folder)
+      this.queueScan(folder, 'added')
     }
     return { folder }
   }
@@ -328,7 +364,7 @@ export class Library {
     for (const folder of targets) {
       folder.available = existsSync(folder.path)
       this.store.upsertFolder(folder)
-      if (folder.available) this.queueScan(folder)
+      if (folder.available) this.queueScan(folder, 'rescan')
     }
     this.emitFolders()
     return { ok: true }
@@ -420,7 +456,7 @@ export class Library {
     this.emitFolders()
     if (folder.available) {
       this.startWatcher(folder)
-      this.queueScan(folder)
+      this.queueScan(folder, 'added')
     }
     return { ok: true, folder }
   }
@@ -513,7 +549,9 @@ export class Library {
     try {
       await fsRename(clip.path, target)
     } catch (err) {
-      return { ok: false, error: (err as Error).message }
+      const error = (err as Error).message
+      this.recordClipAction('rename', clip, { error, title: name + clip.ext })
+      return { ok: false, error }
     }
 
     // Ids derive from the path, so a rename produces a new record. Cached
@@ -545,6 +583,9 @@ export class Library {
     this.added.set(next.id, next)
     this.scheduleFlush()
     if (!next.thumb || !next.sprite) this.media.enqueue(next, true)
+    // History about the old id follows the clip to its new one.
+    this.store.rekeyActivityClip(clip.id, next.id, target)
+    this.recordClipAction('rename', next, { detail: `was ${clip.name}${clip.ext}` })
     return { ok: true, clip: next }
   }
 
@@ -556,10 +597,42 @@ export class Library {
       if (permanent) await unlink(clip.path)
       else await shell.trashItem(clip.path)
     } catch (err) {
-      return { ok: false, error: (err as Error).message }
+      const error = (err as Error).message
+      this.recordClipAction('delete', clip, { error })
+      return { ok: false, error }
     }
     this.dropClip(clip)
+    // No clip id on purpose: the clip is gone by design, and the row must not
+    // read as one that went missing.
+    this.recordClipAction('delete', clip, {
+      detail: permanent ? 'Deleted permanently' : 'Moved to the Recycle Bin',
+      clipId: '',
+    })
     return { ok: true }
+  }
+
+  /**
+   * One row for a clip action. Instant actions start and finish at the same
+   * moment, so `createdAtMs` is now; a failure keeps the clip id so the row
+   * can still open what it was about.
+   */
+  private recordClipAction(
+    kind: 'rename' | 'delete' | 'copy-file',
+    clip: Clip,
+    over: { title?: string; detail?: string; error?: string; clipId?: string } = {},
+  ): void {
+    this.activity.record({
+      kind,
+      status: over.error ? 'failed' : 'done',
+      title: over.title ?? clip.name + clip.ext,
+      detail: over.detail ?? clip.game,
+      error: over.error ?? '',
+      createdAtMs: Date.now(),
+      clipId: over.clipId ?? clip.id,
+      game: clip.game,
+      videoId: '',
+      path: clip.path,
+    })
   }
 
   reveal(id: string): ActionResult {
@@ -588,8 +661,11 @@ export class Library {
     try {
       await copyFileToClipboard(clip.path)
     } catch (err) {
-      return { ok: false, error: (err as Error).message }
+      const error = (err as Error).message
+      this.recordClipAction('copy-file', clip, { error })
+      return { ok: false, error }
     }
+    this.recordClipAction('copy-file', clip)
     return { ok: true }
   }
 
@@ -758,7 +834,9 @@ export class Library {
       this.store.data.clips[clip.id] = clip
       this.store.upsertClip(clip)
       this.added.set(clip.id, clip)
-      this.scheduleFlush()
+      // Sent now, not on the timer: the done state and the history row that
+      // follow name this clip, and the renderer must already have it.
+      this.flushEvents()
       // The user is waiting for this poster: ahead of the backlog.
       this.media.remove(clip.id)
       this.media.enqueue(clip, true)
@@ -784,6 +862,22 @@ export class Library {
       this.exportTargets.delete(job.id)
       this.scheduleExportsEmit(true)
       this.pruneLater(job)
+      // A cancelled export made nothing, so there is nothing to keep. A failed
+      // one points at its source, so the row can open it for another try.
+      if (job.state === 'done' || job.state === 'failed') {
+        this.activity.record({
+          kind: 'export',
+          status: job.state,
+          title: job.name + job.ext,
+          detail: job.game,
+          error: job.error ?? '',
+          createdAtMs: job.createdAtMs,
+          clipId: job.state === 'done' ? (job.clipId ?? '') : job.sourceId,
+          game: job.game,
+          videoId: '',
+          path: job.state === 'done' ? out : '',
+        })
+      }
     }
   }
 
@@ -798,12 +892,15 @@ export class Library {
 
   // --------------------------------------------------------------- scanning
 
-  private queueScan(folder: LibraryFolder): void {
-    this.scanChain = this.scanChain.then(() => this.scanFolder(folder)).catch(() => undefined)
+  private queueScan(folder: LibraryFolder, reason: ScanReason): void {
+    this.scanChain = this.scanChain
+      .then(() => this.scanFolder(folder, reason))
+      .catch(() => undefined)
   }
 
-  private async scanFolder(folder: LibraryFolder): Promise<void> {
+  private async scanFolder(folder: LibraryFolder, reason: ScanReason): Promise<void> {
     if (!this.store.data.folders.some((f) => f.id === folder.id)) return
+    const startedAtMs = Date.now()
     this.scanState.active = true
     this.scanState.folder = folder.name
     this.scanState.found = 0
@@ -811,6 +908,7 @@ export class Library {
 
     const seen = new Set<string>()
     let count = 0
+    let dropped = 0
     // A library root may contain the clips folder; those files belong to the Clips view only.
     const skip = folder.kind === 'library' ? (dir: string) => this.isUnderClipsRoot(dir) : undefined
     for await (const file of walkVideos(folder.path, { skip })) {
@@ -835,15 +933,40 @@ export class Library {
     }
 
     for (const clip of Object.values(this.store.data.clips)) {
-      if (clip.folderId === folder.id && !seen.has(clip.id)) this.dropClip(clip)
+      if (clip.folderId === folder.id && !seen.has(clip.id)) {
+        this.dropClip(clip)
+        dropped++
+      }
     }
     folder.clipCount = count
     this.store.upsertFolder(folder)
     this.emitFolders()
 
+    const found = this.scanState.found
     this.scanState.active = false
     this.scanState.folder = ''
     this.scheduleScanEmit(true)
+
+    // The user asked for it, or it changed the index: either is worth a row.
+    if (reason !== 'launch' || found || dropped) {
+      const parts = [
+        found ? `${found} indexed` : '',
+        dropped ? `${dropped} removed` : '',
+        `${count} clip${count === 1 ? '' : 's'}`,
+      ]
+      this.activity.record({
+        kind: 'scan',
+        status: 'done',
+        title: folder.name,
+        detail: parts.filter(Boolean).join(' · '),
+        error: '',
+        createdAtMs: startedAtMs,
+        clipId: '',
+        game: '',
+        videoId: '',
+        path: folder.path,
+      })
+    }
   }
 
   private needsWork(clip: Clip): boolean {

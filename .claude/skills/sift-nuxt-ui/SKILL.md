@@ -203,6 +203,7 @@ Keep the app coherent by staying inside the vocabulary already in use:
 | `UPopover`       | The sidebar Activity panel                                             |
 | `UChip`          | Live-job count on the Activity button                                  |
 | `UDropdownMenu`  | Player ⋯ menu, playback speed, YouTube project rows                    |
+| `UTabs`          | Activity page: Active / History, `variant="link" :content="false"`     |
 
 **Not adopted, and not to be adopted without a strong case:** `UTable` (the grid is windowed by
 `useVirtualGrid` — this is load-bearing), `UCarousel`, `UForm`, the Tiptap editor family, and

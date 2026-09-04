@@ -12,7 +12,13 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { changelogReleases, changelogSection, parseChangelog } from '@shared/changelog'
-import { DEFAULT_SETTINGS, type Clip, type LibraryFolder } from '@shared/types'
+import {
+  ACTIVITY_CAP,
+  DEFAULT_SETTINGS,
+  type ActivityRecord,
+  type Clip,
+  type LibraryFolder,
+} from '@shared/types'
 import {
   buildExportArgs,
   exportExt,
@@ -261,7 +267,14 @@ async function migrationCase(): Promise<void> {
     ].every((c) => names.includes(c)),
     'migration added the YouTube processing columns',
   )
-  check(version === '7', 'schema version advanced to 7')
+  check(version === '8', 'schema version advanced to 8')
+  check(
+    count(
+      oldFile,
+      "SELECT COUNT(*) n FROM sqlite_master WHERE type = 'table' AND name = 'activity'",
+    ) === 1,
+    'migration added the activity table',
+  )
   check(store.data.clips.oc?.youtubeId === '', 'v2 clips migrate with no YouTube id')
   check(
     store.data.clips.oc?.youtubeStage === '' && store.data.clips.oc?.youtubeWatchUntilMs === 0,
@@ -507,10 +520,73 @@ async function gameNameCase(): Promise<void> {
   await again.close()
 }
 
+/**
+ * The Activity history: written straight through, capped at the newest
+ * `ACTIVITY_CAP` rows, and re-keyed when a rename gives a clip a new id.
+ */
+async function activityCase(): Promise<void> {
+  const file = join(dir, 'activity.db')
+  const store = new Store(file)
+  await store.load()
+
+  const record = (i: number, clipId = ''): ActivityRecord => ({
+    id: `r${i}`,
+    kind: 'export',
+    status: 'done',
+    title: `Clip ${i}.mp4`,
+    detail: 'Valorant',
+    error: '',
+    createdAtMs: i,
+    finishedAtMs: i,
+    clipId,
+    game: 'Valorant',
+    videoId: '',
+    path: `D:/Clips/Clip ${i}.mp4`,
+  })
+  for (let i = 1; i <= ACTIVITY_CAP + 5; i++) store.addActivity(record(i, i === 1 ? '' : 'old'))
+  check(
+    count(file, 'SELECT COUNT(*) n FROM activity') === ACTIVITY_CAP,
+    'the history never grows past the cap',
+  )
+  const list = store.listActivity()
+  check(
+    list.length === ACTIVITY_CAP &&
+      list[0]?.id === `r${ACTIVITY_CAP + 5}` &&
+      list.at(-1)?.id === 'r6',
+    'listActivity is newest first and the oldest rows fell off',
+  )
+  check(
+    list[0]?.title === `Clip ${ACTIVITY_CAP + 5}.mp4` && list[0]?.path.endsWith('.mp4'),
+    'a record round-trips its fields',
+  )
+
+  store.rekeyActivityClip('old', 'new', 'D:/Clips/Renamed.mp4')
+  check(
+    count(file, "SELECT COUNT(*) n FROM activity WHERE clip_id = 'old'") === 0 &&
+      count(
+        file,
+        "SELECT COUNT(*) n FROM activity WHERE clip_id = 'new' AND path = 'D:/Clips/Renamed.mp4'",
+      ) === ACTIVITY_CAP,
+    'rekeying follows a renamed clip',
+  )
+
+  store.removeActivity(`r${ACTIVITY_CAP + 5}`)
+  check(store.listActivity()[0]?.id === `r${ACTIVITY_CAP + 4}`, 'removing one row leaves the rest')
+  await store.close()
+
+  const again = new Store(file)
+  await again.load()
+  check(again.listActivity().length === ACTIVITY_CAP - 1, 'history survives reopen')
+  again.clearActivity()
+  check(again.listActivity().length === 0, 'clear empties the history')
+  await again.close()
+}
+
 async function main(): Promise<void> {
   await storeCases()
   await migrationCase()
   await gameNameCase()
+  await activityCase()
   exportHelperCases()
   changelogCases()
 }

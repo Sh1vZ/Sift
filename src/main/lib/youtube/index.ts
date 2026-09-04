@@ -5,7 +5,7 @@
  */
 
 import { clipboard, shell } from 'electron'
-import type { ActionResult, Clip, ClipPatch } from '@shared/types'
+import type { ActionResult, ActivityInput, Clip, ClipPatch } from '@shared/types'
 import { VIDEO_ID, youtubeUrl } from '@shared/youtube'
 import type { Emit } from '../library'
 import type { Store } from '../store'
@@ -41,6 +41,8 @@ export function createYouTube(deps: {
   patchClip(patch: ClipPatch): void
   /** Read fresh each time so flipping the setting takes effect without a restart. */
   checkStatus(): boolean
+  /** Finished uploads go into the same history as exports. */
+  recordActivity(input: ActivityInput): void
 }): YouTube {
   const openExternal = (url: string): void => {
     if (OPEN_ALLOWED.some((prefix) => url.startsWith(prefix))) void shell.openExternal(url)
@@ -68,6 +70,7 @@ export function createYouTube(deps: {
       watch.stop(clipId)
       deps.patchClip({ id: clipId, youtubeWatchUntilMs: 0 })
     },
+    record: (input) => deps.recordActivity(input),
   })
   watch = new YouTubeWatch({
     accounts,

@@ -1,5 +1,12 @@
 import { computed, ref, watch } from 'vue'
-import type { Clip, ExportJob, LibraryFolder, ScanState, Settings } from '@shared/types'
+import type {
+  ActivityRecord,
+  Clip,
+  ExportJob,
+  LibraryFolder,
+  ScanState,
+  Settings,
+} from '@shared/types'
 import { DEFAULT_SETTINGS } from '@shared/types'
 import { youtubeUrl } from '@shared/youtube'
 import { dateBucket } from '@/utils/format'
@@ -30,8 +37,10 @@ export const defaultClipsDir = ref('')
  * acyclic (useExports → usePlayer → useLibrary).
  */
 export const initialExports = ref<ExportJob[]>([])
+/** Same arrangement for the Activity history: seeded here, owned by `useActivityHistory`. */
+export const initialActivity = ref<ActivityRecord[]>([])
 export const selectedGame = ref<string | null>(null)
-export const view = ref<'library' | 'clips' | 'settings'>('library')
+export const view = ref<'library' | 'clips' | 'settings' | 'activity'>('library')
 
 /** Ticks once a minute so "2 minutes ago" labels stay honest. */
 export const now = ref(Date.now())
@@ -315,7 +324,7 @@ export function getClip(id: string): Clip | undefined {
 }
 
 /** Which screen the main area shows: the games browser is home, a game drills into its clips. */
-export const screen = computed<'games' | 'game' | 'clips' | 'settings'>(() => {
+export const screen = computed<'games' | 'game' | 'clips' | 'settings' | 'activity'>(() => {
   if (view.value !== 'library') return view.value
   return selectedGame.value ? 'game' : 'games'
 })
@@ -469,6 +478,7 @@ export async function initLibrary(): Promise<void> {
   suggestedFolders.value = snap.suggestedFolders
   defaultClipsDir.value = snap.defaultClipsDir
   initialExports.value = snap.exports
+  initialActivity.value = snap.activity
   version.value++
   ready.value = true
 
