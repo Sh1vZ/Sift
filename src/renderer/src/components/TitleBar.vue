@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { screen, selectedGame } from '@/composables/useLibrary'
+import { goGames, screen, selectedGame } from '@/composables/useLibrary'
 import { activityLabel } from '@/composables/useActivity'
-import { activeSection } from '@/composables/useSettings'
+import { activeSection, openSettings, settingsTab } from '@/composables/useSettings'
 import { installUpdate, update, updatePill } from '@/composables/useUpdates'
 
 const api = window.api
@@ -15,22 +15,29 @@ onMounted(async () => {
 })
 onBeforeUnmount(() => off?.())
 
-const crumbs = computed(() => {
-  const trail: string[] = []
+interface Crumb {
+  label: string
+  icon?: string
+  /** Set on every crumb but the current one: the trail is navigation, not a label. */
+  onSelect?: () => void
+}
+
+const crumbs = computed<Crumb[]>(() => {
+  const home: Crumb = { label: 'Sift', icon: 'i-lucide-play', onSelect: goGames }
   switch (screen.value) {
     case 'settings':
-      trail.push('Settings', activeSection.value.label)
-      break
+      return [
+        home,
+        { label: 'Settings', onSelect: () => openSettings(settingsTab.value) },
+        { label: activeSection.value.label },
+      ]
     case 'game':
-      trail.push('Games', selectedGame.value ?? '')
-      break
+      return [home, { label: 'Games', onSelect: goGames }, { label: selectedGame.value ?? '' }]
     case 'clips':
-      trail.push('Clips')
-      break
+      return [home, { label: 'Clips' }]
     default:
-      trail.push('Games')
+      return [home, { label: 'Games' }]
   }
-  return [{ label: 'Sift', icon: 'i-lucide-play' }, ...trail.map((label) => ({ label }))]
 })
 
 const status = activityLabel
@@ -42,12 +49,26 @@ const status = activityLabel
       <UBreadcrumb
         :items="crumbs"
         separator-icon="i-lucide-slash"
-        :ui="{
-          link: 'text-xs font-heading font-semibold uppercase tracking-wider gap-1.5',
-          linkLeadingIcon: 'size-3.5',
-          separatorIcon: 'size-3 text-dimmed',
-        }"
-      />
+        :ui="{ link: 'gap-0', separatorIcon: 'size-3.5 text-dimmed' }"
+      >
+        <template #item="{ item, active }">
+          <UButton
+            v-if="item.onSelect && !active"
+            class="crumb"
+            :icon="item.icon"
+            :label="item.label"
+            color="neutral"
+            variant="link"
+            size="sm"
+            :ui="{ base: 'p-0 gap-1.5', leadingIcon: 'size-4' }"
+            @click="item.onSelect()"
+          />
+          <span v-else class="crumb crumb-current">
+            <UIcon v-if="item.icon" :name="item.icon" class="size-4" />
+            {{ item.label }}
+          </span>
+        </template>
+      </UBreadcrumb>
     </div>
     <Transition name="fade">
       <UTooltip
@@ -66,7 +87,7 @@ const status = activityLabel
           :label="updatePill.label"
           :color="updatePill.ready ? 'primary' : 'neutral'"
           variant="subtle"
-          size="xs"
+          size="sm"
           :disabled="!updatePill.ready"
           @click="installUpdate()"
         />
@@ -137,6 +158,28 @@ const status = activityLabel
   height: 100%;
   padding-left: 14px;
   -webkit-app-region: drag;
+}
+/* Crumbs are buttons, so they must opt out of the drag strip around them;
+   the empty strip still moves the window. */
+.crumb {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-heading);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+  -webkit-app-region: no-drag;
+  transition: color var(--dur-fast) var(--ease-out);
+}
+.crumb:hover {
+  color: var(--fg);
+}
+.crumb-current {
+  color: var(--fg);
+  cursor: default;
 }
 .status {
   margin-right: 12px;

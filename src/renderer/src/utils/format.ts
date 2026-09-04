@@ -115,6 +115,17 @@ export function dateBucket(
   }
 }
 
+/** Last segment of a Windows or POSIX path; the path itself when it has none. */
+export function basename(path: string): string {
+  return path.split(/[\\/]/).filter(Boolean).pop() ?? path
+}
+
+/** Everything before the last segment; the path itself when it has no separator. */
+export function dirname(path: string): string {
+  const i = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'))
+  return i > 0 ? path.slice(0, i) : path
+}
+
 export function clamp(n: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, n))
 }

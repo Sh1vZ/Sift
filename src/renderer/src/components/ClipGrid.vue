@@ -3,28 +3,11 @@ import { computed, nextTick, onMounted, ref, toRef, watch } from 'vue'
 import type { Clip, ExportJob } from '@shared/types'
 import ClipCard from './ClipCard.vue'
 import { GRID_PAD_X, useVirtualGrid } from '@/composables/useVirtualGrid'
-import {
-  copyClipFile,
-  copyClipPath,
-  copyYouTubeLink,
-  deleteClip,
-  games,
-  getClip,
-  openGame,
-  openYouTube,
-  pendingByClip,
-  removeFromYouTube,
-  renameClip,
-  revealClip,
-  settings,
-  type Section,
-} from '@/composables/useLibrary'
-import { cancelExport, dismissExport } from '@/composables/useExports'
-import { cancelUpload, openUploadDialog, uploadByClip } from '@/composables/useUploads'
+import { pendingByClip, settings, type Section } from '@/composables/useLibrary'
+import { clipMenuItems } from '@/composables/useClipMenu'
+import { cancelUpload, uploadByClip } from '@/composables/useUploads'
 import { staggerIn, type Rect } from '@/composables/useMotion'
-import { openClip, openSource } from '@/composables/usePlayer'
-import { confirmWithAlt, prompt } from '@/composables/useDialogs'
-import { toast } from '@/composables/useToasts'
+import { current, openClip, source } from '@/composables/usePlayer'
 
 const props = withDefaults(
   defineProps<{
@@ -43,7 +26,7 @@ const JOB_PREFIX = 'job:'
 
 const scroller = ref<HTMLElement | null>(null)
 const gridSize = computed(() => settings.value.gridSize)
-const { layout, visibleRows, scrollToTop } = useVirtualGrid(
+const { layout, visibleRows, scrollToTop, scrollToClip } = useVirtualGrid(
   scroller,
   toRef(props, 'sections'),
   gridSize,
@@ -67,6 +50,13 @@ watch(
 )
 onMounted(() => void animateIn())
 
+// The grid keeps up with the player: stepping through clips with N/P scrolls
+// the card into view underneath, so closing lands on it and you are where you
+// left off rather than back at the top.
+watch(current, (c) => {
+  if (c && source.value === from.value) scrollToClip(c.id)
+})
+
 const jobOf = (clip: Clip): ExportJob | undefined =>
   clip.id.startsWith(JOB_PREFIX) ? props.jobsById[clip.id.slice(JOB_PREFIX.length)] : undefined
 
@@ -83,168 +73,9 @@ function rectOf(clip: Clip): Rect | null {
   return el ? el.getBoundingClientRect() : null
 }
 
-async function rename(clip: Clip): Promise<void> {
-  const name = await prompt({
-    title: 'Rename clip',
-    label: 'File name',
-    value: clip.name,
-    confirmLabel: 'Rename',
-  })
-  if (name?.trim() && name !== clip.name) await renameClip(clip, name)
-}
-
-async function remove(clip: Clip): Promise<void> {
-  const choice = await confirmWithAlt({
-    title: 'Delete this clip?',
-    message:
-      'It goes to the Recycle Bin, so you can still restore it from there. Deleting permanently erases the file from disk right away.',
-    detail: clip.name + clip.ext,
-    detailIcon: 'i-lucide-file-video',
-    confirmLabel: 'Delete',
-    danger: true,
-    alt: { label: 'Delete permanently', danger: true },
-  })
-  if (choice !== 'cancel') await deleteClip(clip, choice === 'alt')
-}
-
-function showSource(clip: Clip): void {
-  if (!openSource(clip))
-    toast(
-      'error',
-      'Source not found',
-      'The recording this clip was cut from is no longer in the library.',
-    )
-}
-
 /** Right-click menu per card, rendered by Nuxt UI's <UContextMenu>. */
-function menuItems(clip: Clip) {
-  const job = jobOf(clip)
-  if (job) {
-    const active = job.state === 'queued' || job.state === 'running'
-    return [
-      [
-        active
-          ? {
-              label: 'Cancel export',
-              icon: 'i-lucide-x',
-              color: 'error' as const,
-              onSelect: () => void cancelExport(job.id),
-            }
-          : { label: 'Dismiss', icon: 'i-lucide-x', onSelect: () => dismissExport(job.id) },
-      ],
-    ]
-  }
-  const trim = {
-    label: 'Trim & export',
-    icon: 'i-lucide-scissors',
-    disabled: clip.probeState !== 'ok' || !clip.duration,
-    onSelect: () => openClip(clip, rectOf(clip), from.value, true),
-  }
-  const main = [
-    {
-      label: 'Play',
-      icon: 'i-lucide-play',
-      onSelect: () => openClip(clip, rectOf(clip), from.value),
-    },
-    trim,
-  ]
-  if (props.variant === 'export') {
-    main.push(
-      {
-        label: 'Open source recording',
-        icon: 'i-lucide-link',
-        disabled: !clip.sourceId || !getClip(clip.sourceId),
-        onSelect: () => showSource(clip),
-      },
-      {
-        label: 'Go to game',
-        icon: 'i-lucide-gamepad-2',
-        disabled: !games.value.some((g) => g.name === clip.game),
-        onSelect: () => openGame(clip.game),
-      },
-    )
-  }
-  // Something slow is already running on this clip: the actions that would
-  // collide with it wait until it lands.
-  const busy = Boolean(pendingByClip.value[clip.id])
-  main.push(
-    { label: 'Show in Explorer', icon: 'i-lucide-folder-open', onSelect: () => revealClip(clip) },
-    {
-      label: 'Copy file',
-      icon: 'i-lucide-clipboard-copy',
-      disabled: busy,
-      onSelect: () => void copyClipFile(clip),
-    },
-    { label: 'Copy path', icon: 'i-lucide-copy', onSelect: () => void copyClipPath(clip) },
-    {
-      label: 'Rename',
-      icon: 'i-lucide-pencil',
-      disabled: busy,
-      onSelect: () => void rename(clip),
-    },
-  )
-  // Sharing gets its own group: a live upload swaps the entry for its Cancel.
-  const up = uploadByClip.value[clip.id]
-  const uploading = Boolean(up && (up.state === 'queued' || up.state === 'uploading'))
-  interface MenuItem {
-    label: string
-    icon: string
-    disabled?: boolean
-    color?: 'error'
-    onSelect: () => void
-  }
-  const share: MenuItem[] = uploading
-    ? [
-        {
-          label: 'Cancel upload',
-          icon: 'i-lucide-x',
-          color: 'error',
-          onSelect: () => void cancelUpload(up.id),
-        },
-      ]
-    : [
-        {
-          label: clip.youtubeId ? 'Upload to YouTube again' : 'Upload to YouTube',
-          icon: 'i-lucide-youtube',
-          disabled: clip.probeState !== 'ok' || busy,
-          onSelect: () => openUploadDialog(clip),
-        },
-      ]
-  if (clip.youtubeId && !uploading) {
-    share.push(
-      {
-        label: 'Open on YouTube',
-        icon: 'i-lucide-external-link',
-        onSelect: () => void openYouTube(clip),
-      },
-      {
-        label: 'Copy YouTube link',
-        icon: 'i-lucide-link-2',
-        onSelect: () => void copyYouTubeLink(clip),
-      },
-      {
-        label: 'Remove from YouTube',
-        icon: 'i-lucide-cloud-off',
-        color: 'error',
-        disabled: busy,
-        onSelect: () => void removeFromYouTube(clip),
-      },
-    )
-  }
-  return [
-    main,
-    share,
-    [
-      {
-        label: 'Delete',
-        icon: 'i-lucide-trash-2',
-        color: 'error' as const,
-        disabled: busy,
-        onSelect: () => void remove(clip),
-      },
-    ],
-  ]
-}
+const menuItems = (clip: Clip) =>
+  clipMenuItems(clip, { variant: props.variant, job: jobOf(clip), rectOf })
 </script>
 
 <template>
@@ -257,7 +88,7 @@ function menuItems(clip: Clip) {
           :style="{ transform: `translateY(${row.top}px)`, left: pad, right: pad }"
         >
           <h2>{{ row.title }}</h2>
-          <UBadge color="primary" variant="soft" size="sm" :label="row.count" />
+          <UBadge color="primary" variant="soft" size="md" :label="row.count" />
           <span class="rule" />
         </div>
         <div
@@ -273,7 +104,7 @@ function menuItems(clip: Clip) {
             v-for="clip in row.clips"
             :key="clip.id"
             :items="menuItems(clip)"
-            :ui="{ content: 'min-w-48' }"
+            :ui="{ content: 'min-w-52' }"
           >
             <ClipCard
               :clip="clip"

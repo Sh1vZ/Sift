@@ -6,7 +6,9 @@ import {
   clipsFolder,
   clipsStats,
   exportedClips,
+  exportQuery,
   goGames,
+  orderedExports,
   revealClipsDir,
   settings,
   SHARE_FILTERS,
@@ -15,9 +17,10 @@ import {
   type Section,
 } from '@/composables/useLibrary'
 import { motionEnabled } from '@/composables/useMotion'
+import { registerSearch } from '@/composables/useShortcuts'
 import { formatBytes, formatDuration } from '@/utils/format'
 import type { Clip, ExportJob, GridSize } from '@shared/types'
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import ClipGrid from './ClipGrid.vue'
 import CountUp from './bits/CountUp.vue'
 import SplitText from './bits/SplitText.vue'
@@ -27,6 +30,9 @@ const sizeOptions: Array<{ value: GridSize; icon: string; label: string }> = [
   { value: 'comfortable', icon: 'i-lucide-layout-grid', label: 'Comfortable cards' },
   { value: 'compact', icon: 'i-lucide-grid-3x3', label: 'Compact cards' },
 ]
+
+/** USelect shows only its own icon prop, so the active filter's glyph is bound by hand. */
+const shareIcon = computed(() => SHARE_FILTERS.find((f) => f.value === shareFilter.value)?.icon)
 
 /** A job's stand-in card until the real clip arrives through `clips:added`. */
 function placeholder(job: ExportJob): Clip {
@@ -81,9 +87,32 @@ const hasContent = computed(() => sectionsWithJobs.value.length > 0)
 const unreachable = computed(() =>
   Boolean(clipsFolder.value && !clipsFolder.value.available && exportedClips.value.length),
 )
-const resetKey = computed(() => `${settings.value.gridSize}|${shareFilter.value}`)
+const resetKey = computed(
+  () => `${settings.value.gridSize}|${shareFilter.value}|${exportQuery.value}`,
+)
 /** Exports exist, but the sharing filter hides all of them. */
 const filteredOut = computed(() => !hasContent.value && exportedClips.value.length > 0)
+/** The name filter or the sharing select is hiding some exports. */
+const narrowed = computed(() => orderedExports.value.length !== exportedClips.value.length)
+
+// ------------------------------------------------------------ name filter
+
+const filterInput = ref<{ inputRef: HTMLInputElement | null } | null>(null)
+
+/** Esc clears the filter; a second Esc leaves the field. */
+function onFilterKey(e: KeyboardEvent): void {
+  if (e.key !== 'Escape') return
+  e.stopPropagation()
+  if (exportQuery.value) exportQuery.value = ''
+  else filterInput.value?.inputRef?.blur()
+}
+
+// `/` and Ctrl+F land here while this view is up.
+let offSearch: (() => void) | null = null
+onMounted(() => {
+  offSearch = registerSearch(() => filterInput.value?.inputRef?.select())
+})
+onBeforeUnmount(() => offSearch?.())
 </script>
 
 <template>
@@ -110,6 +139,7 @@ const filteredOut = computed(() => !hasContent.value && exportedClips.value.leng
           <Transition name="dissolve">
             <p v-if="clipsStats.count" key="totals" class="stats">
               <span>
+                <template v-if="narrowed">{{ orderedExports.length }} of </template>
                 <CountUp v-if="motionEnabled" :to="clipsStats.count" :duration="0.9" /><template
                   v-else
                   >{{ clipsStats.count }}</template
@@ -127,20 +157,41 @@ const filteredOut = computed(() => !hasContent.value && exportedClips.value.leng
       </div>
 
       <div class="toolbar">
-        <UFieldGroup size="md" aria-label="Filter by sharing">
-          <UButton
-            v-for="f in SHARE_FILTERS"
-            :key="f.value"
-            :icon="f.icon"
-            :label="f.label"
-            :color="shareFilter === f.value ? 'primary' : 'neutral'"
-            :variant="shareFilter === f.value ? 'soft' : 'subtle'"
-            :aria-pressed="shareFilter === f.value"
-            @click="shareFilter = f.value"
-          />
-        </UFieldGroup>
+        <UInput
+          ref="filterInput"
+          v-model="exportQuery"
+          class="filter"
+          icon="i-lucide-search"
+          size="lg"
+          placeholder="Filter clips"
+          spellcheck="false"
+          autocomplete="off"
+          aria-label="Filter clips by name"
+          :ui="{ trailing: 'pe-1.5' }"
+          @keydown="onFilterKey"
+        >
+          <template v-if="exportQuery" #trailing>
+            <UButton
+              color="neutral"
+              variant="link"
+              size="sm"
+              icon="i-lucide-x"
+              aria-label="Clear filter"
+              @click="exportQuery = ''"
+            />
+          </template>
+        </UInput>
 
-        <UFieldGroup size="md" aria-label="Card size">
+        <USelect
+          v-model="shareFilter"
+          :items="SHARE_FILTERS"
+          :icon="shareIcon"
+          size="lg"
+          class="w-44"
+          aria-label="Filter by sharing"
+        />
+
+        <UFieldGroup size="lg" aria-label="Card size">
           <UTooltip v-for="s in sizeOptions" :key="s.value" :text="s.label">
             <UButton
               :icon="s.icon"
@@ -203,6 +254,26 @@ const filteredOut = computed(() => !hasContent.value && exportedClips.value.leng
           :jobs-by-id="jobsById"
           :reset-key="resetKey"
         />
+
+        <!-- The name filter hid every export: say so, ahead of the sharing filter. -->
+        <UEmpty
+          v-else-if="filteredOut && exportQuery"
+          key="nomatch"
+          class="empty"
+          icon="i-lucide-search-x"
+          :title="`No clips match “${exportQuery}”`"
+          description="Try a shorter name — the filter also ignores spaces and punctuation."
+        >
+          <template #actions>
+            <UButton
+              label="Clear filter"
+              color="neutral"
+              variant="subtle"
+              size="lg"
+              @click="exportQuery = ''"
+            />
+          </template>
+        </UEmpty>
 
         <UEmpty
           v-else-if="filteredOut"
@@ -289,6 +360,9 @@ const filteredOut = computed(() => !hasContent.value && exportedClips.value.leng
   gap: 10px;
   flex-wrap: wrap;
   justify-content: flex-end;
+}
+.filter {
+  width: 200px;
 }
 .warn {
   margin: 0 28px var(--s-4);

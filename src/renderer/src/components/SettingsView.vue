@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import FoldersPane from './settings/FoldersPane.vue'
 import ClipsPane from './settings/ClipsPane.vue'
 import IndexingPane from './settings/IndexingPane.vue'
@@ -18,6 +18,15 @@ import {
   type SettingsGroup,
   type SettingsTab,
 } from '@/composables/useSettings'
+import { registerSearch } from '@/composables/useShortcuts'
+
+// `/` and Ctrl+F land in the rail search while settings are up.
+const search = ref<{ inputRef: HTMLInputElement | null } | null>(null)
+let offSearch: (() => void) | null = null
+onMounted(() => {
+  offSearch = registerSearch(() => search.value?.inputRef?.select())
+})
+onBeforeUnmount(() => offSearch?.())
 
 interface RailGroup {
   label: string
@@ -41,8 +50,8 @@ const railGroups = computed<RailGroup[]>(() =>
 )
 
 const navUi = {
-  link: 'h-9 px-2.5 gap-2.5 text-sm font-medium rounded-lg',
-  linkLeadingIcon: 'size-4',
+  link: 'h-10 px-3 gap-2.5 text-base font-medium rounded-lg',
+  linkLeadingIcon: 'size-[18px]',
   linkLabel: 'truncate',
 }
 
@@ -66,9 +75,10 @@ function onSearchKey(e: KeyboardEvent): void {
     <nav class="rail" aria-label="Settings sections">
       <div class="rail-search">
         <UInput
+          ref="search"
           v-model="settingsQuery"
           icon="i-lucide-search"
-          size="md"
+          size="lg"
           placeholder="Search settings"
           spellcheck="false"
           autocomplete="off"
@@ -180,7 +190,7 @@ function onSearchKey(e: KeyboardEvent): void {
   font-weight: 600;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--fg-dim);
+  color: var(--fg-muted);
 }
 .rail-slot {
   position: relative;

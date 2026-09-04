@@ -169,5 +169,28 @@ export function useVirtualGrid(
     scrollTop.value = 0
   }
 
-  return { layout, visibleRows, scrollToTop }
+  /**
+   * Brings the row holding `id` on screen, centred, unless it already is.
+   * `scrollTop` is set here as well as on the element so `visibleRows` picks
+   * the row up on the next flush rather than after the scroll event's rAF —
+   * the player's close animation looks the card up straight away.
+   */
+  function scrollToClip(id: string): boolean {
+    const el = container.value
+    if (!el) return false
+    const row = layout.value.rows.find(
+      (r): r is CardRow => r.kind === 'cards' && r.clips.some((c) => c.id === id),
+    )
+    if (!row) return false
+    const top = scrollTop.value
+    const h = height.value
+    if (row.top >= top && row.top + row.height <= top + h) return true
+    const max = Math.max(0, layout.value.total - h)
+    const target = Math.min(max, Math.max(0, row.top + row.height / 2 - h / 2))
+    el.scrollTop = target
+    scrollTop.value = target
+    return true
+  }
+
+  return { layout, visibleRows, scrollToTop, scrollToClip }
 }

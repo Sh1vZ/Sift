@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import ShinyText from './bits/ShinyText.vue'
+import ActivityPanel from './ActivityPanel.vue'
 import { motionEnabled } from '@/composables/useMotion'
 import { exportedClips, games, goClips, goGames, screen, view } from '@/composables/useLibrary'
-import { activityLabel } from '@/composables/useActivity'
+import { activityCount, activityOpen } from '@/composables/useActivity'
 import { openSettings, settingsTab } from '@/composables/useSettings'
 
 /**
@@ -45,13 +46,11 @@ const footerItems = computed<NavItem[]>(() => [
   },
 ])
 
-const scanLabel = activityLabel
-
-/* Collapsed links are 40px squares centred in the rail; the pill background
+/* Collapsed links are 44px squares centred in the rail; the pill background
    and the focus ring both follow the link box. */
 const navUi = {
-  link: 'h-10 justify-center px-0 rounded-lg',
-  linkLeadingIcon: 'size-5',
+  link: 'h-11 justify-center px-0 rounded-lg',
+  linkLeadingIcon: 'size-6',
 }
 </script>
 
@@ -94,13 +93,42 @@ const navUi = {
     </nav>
 
     <div class="footer">
-      <Transition name="pop">
-        <UTooltip v-if="scanLabel" :text="scanLabel" :content="{ side: 'right' }">
-          <div class="activity" role="status" :aria-label="scanLabel">
-            <UIcon name="i-lucide-loader-circle" class="size-4 animate-spin" />
-          </div>
-        </UTooltip>
-      </Transition>
+      <!-- Everything running in the background, in one list. The badge counts
+           live jobs; finished ones wait in the panel until dismissed. -->
+      <UPopover
+        v-model:open="activityOpen"
+        :content="{ side: 'right', align: 'end', sideOffset: 10 }"
+        :ui="{ content: 'p-0' }"
+      >
+        <UChip
+          class="activity-chip"
+          :text="activityCount"
+          :show="activityCount > 0"
+          color="primary"
+          size="lg"
+          inset
+        >
+          <UTooltip
+            :text="activityCount ? `Activity · ${activityCount} running` : 'Activity'"
+            :content="{ side: 'right' }"
+          >
+            <UButton
+              class="activity"
+              :icon="activityCount ? 'i-lucide-loader-circle' : 'i-lucide-activity'"
+              :color="activityCount ? 'primary' : 'neutral'"
+              variant="ghost"
+              square
+              size="lg"
+              :ui="{ leadingIcon: activityCount ? 'animate-spin size-6' : 'size-6' }"
+              aria-label="Activity"
+              :aria-expanded="activityOpen"
+            />
+          </UTooltip>
+        </UChip>
+        <template #content>
+          <ActivityPanel />
+        </template>
+      </UPopover>
       <UNavigationMenu
         orientation="vertical"
         collapsed
@@ -153,23 +181,29 @@ const navUi = {
   flex: 1;
   min-height: 0;
   width: 100%;
-  padding: var(--s-3) 10px 0;
+  padding: var(--s-3) 8px 0;
 }
 .footer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s-2);
   width: 100%;
-  padding: 10px;
+  padding: 10px 8px;
   border-top: 1px solid var(--border);
 }
-/* Scan activity collapses to one spinning glyph; the detail is in the tooltip. */
-.activity {
+.footer :deep(nav) {
+  width: 100%;
+}
+.activity-chip {
   display: flex;
-  align-items: center;
+}
+/* Same box as a rail link, so the column reads as one stack. */
+.activity {
+  width: 44px;
+  height: 44px;
   justify-content: center;
-  height: 40px;
-  margin-bottom: var(--s-2);
+  padding: 0;
   border-radius: var(--r-md);
-  background: var(--bg-2);
-  border: 1px solid var(--border);
-  color: var(--secondary);
 }
 </style>

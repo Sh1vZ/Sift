@@ -200,6 +200,9 @@ Keep the app coherent by staying inside the vocabulary already in use:
 | `UCard`          | Settings group container                                               |
 | `UBreadcrumb`    | Title-bar trail                                                        |
 | `UAlert`         | Inline warnings (unavailable folder)                                   |
+| `UPopover`       | The sidebar Activity panel                                             |
+| `UChip`          | Live-job count on the Activity button                                  |
+| `UDropdownMenu`  | Player ⋯ menu, playback speed, YouTube project rows                    |
 
 **Not adopted, and not to be adopted without a strong case:** `UTable` (the grid is windowed by
 `useVirtualGrid` — this is load-bearing), `UCarousel`, `UForm`, the Tiptap editor family, and

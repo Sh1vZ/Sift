@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import type { Clip } from '@shared/types'
 import {
   clipsFolder,
@@ -9,12 +9,13 @@ import {
   getClip,
   openYouTube,
   pendingByClip,
-  removeFromYouTube,
+  renameClip,
   revealClip,
 } from '@/composables/useLibrary'
 import { cancelUpload, progressText, uploadByClip } from '@/composables/useUploads'
 import { youtubeUrl } from '@shared/youtube'
 import {
+  dirname,
   formatBytes,
   formatDuration,
   formatFull,
@@ -23,6 +24,12 @@ import {
 } from '@/utils/format'
 import { bitrate, formatBitrate, qualityTier } from '@/utils/quality'
 
+/**
+ * The pane beside the video. Facts sit in one table, and each place you could
+ * go — the source recording, the YouTube page, the folder on disk — is a row
+ * you press rather than a table plus a button. The name at the top is a field:
+ * type, leave it, and the file is renamed.
+ */
 const props = withDefaults(
   defineProps<{
     clip: Clip
@@ -33,7 +40,15 @@ const props = withDefaults(
   }>(),
   { editing: false, exportName: '' },
 )
-const emit = defineEmits<{ close: []; rename: []; remove: []; edit: []; source: []; upload: [] }>()
+const emit = defineEmits<{
+  close: []
+  remove: []
+  edit: []
+  source: []
+  upload: []
+  /** The rename went through; the record with the new id. */
+  renamed: [next: Clip]
+}>()
 
 interface Row {
   label: string
@@ -65,10 +80,7 @@ const codec = computed(() => {
 const resolution = computed(() =>
   formatResolution(props.clip.width, props.clip.height, props.clip.fps),
 )
-const folder = computed(() => {
-  const i = Math.max(props.clip.path.lastIndexOf('/'), props.clip.path.lastIndexOf('\\'))
-  return i > 0 ? props.clip.path.slice(0, i) : props.clip.path
-})
+const folder = computed(() => dirname(props.clip.path))
 
 const isExport = computed(() => Boolean(props.clip.sourceId))
 const upload = computed(() => uploadByClip.value[props.clip.id])
@@ -80,9 +92,9 @@ const uploading = computed(() =>
 )
 const uploadLabel = computed(() => {
   const u = upload.value
-  if (u?.state === 'uploading') return `Cancel upload · ${progressText(u)}`
-  if (u?.state === 'queued') return 'Cancel · waiting to upload'
-  return props.clip.youtubeId ? 'Upload to YouTube again' : 'Upload to YouTube'
+  if (u?.state === 'uploading') return `Cancel · ${progressText(u)}`
+  if (u?.state === 'queued') return 'Cancel · waiting'
+  return props.clip.youtubeId ? 'Upload again' : 'Upload to YouTube'
 })
 
 /** While a job is live the same button cancels it; otherwise it opens the upload form. */
@@ -93,50 +105,70 @@ function onUploadButton(): void {
 }
 const videoUrl = computed(() => (props.clip.youtubeId ? youtubeUrl(props.clip.youtubeId) : ''))
 const sourceClip = computed(() => (props.clip.sourceId ? getClip(props.clip.sourceId) : undefined))
+const sourceLine = computed(() => {
+  const c = props.clip
+  const parts = [`${formatTimecode(c.trimStart)} – ${formatTimecode(c.trimEnd)}`]
+  if (c.createdAtMs) parts.push(`Exported ${formatFull(c.createdAtMs)}`)
+  return parts.join(' · ')
+})
 const destination = computed(
   () => `${clipsFolder.value?.name ?? 'Sift Clips'}\\${props.clip.game}\\${props.exportName}`,
 )
 
-const videoRows = computed<Row[]>(() => {
+// ---------------------------------------------------------- inline rename
+
+const nameInput = ref<{ inputRef: HTMLInputElement | null } | null>(null)
+const draft = ref(props.clip.name)
+const nameFocused = ref(false)
+
+// A rename elsewhere (the More menu, the context menu) or a step to another
+// clip refreshes the field — unless you are mid-edit in it.
+watch(
+  () => [props.clip.id, props.clip.name],
+  () => {
+    if (!nameFocused.value) draft.value = props.clip.name
+  },
+)
+
+async function commitName(): Promise<void> {
+  nameFocused.value = false
+  const next = draft.value.trim()
+  if (!next || next === props.clip.name) {
+    draft.value = props.clip.name
+    return
+  }
+  const renamed = await renameClip(props.clip, next)
+  if (renamed) emit('renamed', renamed)
+  else draft.value = props.clip.name
+}
+
+function cancelName(): void {
+  draft.value = props.clip.name
+  nameInput.value?.inputRef?.blur()
+}
+
+// ------------------------------------------------------------------ rows
+
+const rows = computed<Row[]>(() => {
   const c = props.clip
+  const dims = c.width && c.height ? `${c.width} × ${c.height}` : ''
+  const fps = c.fps ? `${Math.round(c.fps)} fps` : ''
+  const rate = formatBitrate(bitrate(c))
   return [
     { label: 'Duration', value: c.duration ? formatDuration(c.duration) : '', mono: true },
-    {
-      label: 'Dimensions',
-      value: c.width && c.height ? `${c.width} × ${c.height}` : '',
-      mono: true,
-    },
-    { label: 'Frame rate', value: c.fps ? `${Math.round(c.fps)} fps` : '', mono: true },
-    { label: 'Codec', value: codec.value },
-    { label: 'Bitrate', value: formatBitrate(bitrate(c)), mono: true },
+    { label: 'Resolution', value: [dims, fps].filter(Boolean).join(' · '), mono: true },
+    { label: 'Codec', value: [codec.value, rate].filter(Boolean).join(' · ') },
     {
       label: 'Audio',
       value: c.probeState === 'ok' ? (c.hasAudio ? 'Included' : c.muted ? 'Removed' : 'None') : '',
     },
-  ]
-})
-
-const fileRows = computed<Row[]>(() => {
-  const c = props.clip
-  return [
-    { label: 'Size', value: formatBytes(c.size), mono: true },
-    { label: 'Format', value: c.ext.replace('.', '').toUpperCase() },
-    { label: 'Game', value: c.game },
-    { label: 'Recorded', value: formatFull(c.recordedAtMs) },
-    { label: 'Modified', value: formatFull(c.mtimeMs) },
-  ]
-})
-
-const sourceRows = computed<Row[]>(() => {
-  const c = props.clip
-  return [
-    { label: 'Cut from', value: sourceClip.value?.title ?? 'No longer in the library' },
     {
-      label: 'Trimmed',
-      value: `${formatTimecode(c.trimStart)} – ${formatTimecode(c.trimEnd)}`,
+      label: 'Size',
+      value: [formatBytes(c.size), c.ext.replace('.', '').toUpperCase()].join(' · '),
       mono: true,
     },
-    { label: 'Exported', value: c.createdAtMs ? formatFull(c.createdAtMs) : '' },
+    { label: 'Recorded', value: formatFull(c.recordedAtMs) },
+    { label: 'Game', value: c.game },
   ]
 })
 </script>
@@ -144,38 +176,65 @@ const sourceRows = computed<Row[]>(() => {
 <template>
   <aside class="details" aria-label="Clip details">
     <header class="head">
-      <h3 class="truncate" :title="clip.title">{{ clip.title }}</h3>
-      <UTooltip text="Hide details" :kbds="['I']">
-        <UButton
-          icon="i-lucide-panel-right-close"
-          color="neutral"
-          variant="ghost"
-          square
-          size="md"
-          aria-label="Hide details"
-          @click="$emit('close')"
-        />
-      </UTooltip>
+      <div class="head-row">
+        <label class="name-label" for="clip-name">File name</label>
+        <span class="name-hint" aria-live="polite">
+          {{ nameFocused ? 'Enter saves · Esc cancels' : 'Click to rename' }}
+        </span>
+        <UTooltip text="Hide details" :kbds="['I']">
+          <UButton
+            icon="i-lucide-panel-right-close"
+            color="neutral"
+            variant="ghost"
+            square
+            size="lg"
+            aria-label="Hide details"
+            @click="$emit('close')"
+          />
+        </UTooltip>
+      </div>
+      <!-- The name is the field. Leave it or press Enter to rename; Esc puts it back. -->
+      <UInput
+        id="clip-name"
+        ref="nameInput"
+        v-model="draft"
+        class="name"
+        variant="subtle"
+        size="lg"
+        icon="i-lucide-pencil"
+        spellcheck="false"
+        autocomplete="off"
+        placeholder="File name"
+        :loading="pendingAction?.kind === 'rename'"
+        :disabled="busy"
+        :ui="{ base: 'font-heading font-semibold text-[15px]', trailing: 'pe-3' }"
+        @focus="nameFocused = true"
+        @blur="commitName"
+        @keydown.enter.prevent="nameInput?.inputRef?.blur()"
+        @keydown.esc.prevent="cancelName"
+      >
+        <template #trailing>
+          <span class="ext mono">{{ clip.ext }}</span>
+        </template>
+      </UInput>
     </header>
 
     <div class="scroll">
-      <p class="filename" :title="clip.name + clip.ext">{{ clip.name + clip.ext }}</p>
-
       <div class="chips">
         <UBadge
           :color="tier.color"
           variant="soft"
-          size="sm"
+          size="md"
           icon="i-lucide-gauge"
           :label="tier.label"
         />
-        <UBadge v-if="resolution" color="neutral" variant="subtle" size="sm" :label="resolution" />
-        <UBadge v-if="codec" color="neutral" variant="subtle" size="sm" :label="codec" />
+        <UBadge v-if="resolution" color="neutral" variant="subtle" size="md" :label="resolution" />
+        <UBadge v-if="codec" color="neutral" variant="subtle" size="md" :label="codec" />
         <UBadge
           v-if="clip.youtubeId"
           color="error"
           variant="subtle"
-          size="sm"
+          size="md"
           icon="i-lucide-youtube"
           label="On YouTube"
         />
@@ -183,7 +242,7 @@ const sourceRows = computed<Row[]>(() => {
           v-if="isExport"
           color="primary"
           variant="subtle"
-          size="sm"
+          size="md"
           icon="i-lucide-scissors"
           label="Clip"
         />
@@ -209,23 +268,12 @@ const sourceRows = computed<Row[]>(() => {
       </section>
 
       <section>
-        <h4>Video</h4>
+        <h4>Details</h4>
         <dl class="rows">
-          <div v-for="row in videoRows" :key="row.label" class="row">
-            <dt>{{ row.label }}</dt>
-            <dd v-if="row.value" :class="{ mono: row.mono }">{{ row.value }}</dd>
-            <USkeleton v-else-if="pending" class="h-3 w-16" />
-            <dd v-else class="empty">—</dd>
-          </div>
-        </dl>
-      </section>
-
-      <section>
-        <h4>File</h4>
-        <dl class="rows">
-          <div v-for="row in fileRows" :key="row.label" class="row">
+          <div v-for="row in rows" :key="row.label" class="row">
             <dt>{{ row.label }}</dt>
             <dd v-if="row.value" :class="{ mono: row.mono }" :title="row.value">{{ row.value }}</dd>
+            <USkeleton v-else-if="pending" class="h-3.5 w-20" />
             <dd v-else class="empty">—</dd>
           </div>
         </dl>
@@ -233,148 +281,137 @@ const sourceRows = computed<Row[]>(() => {
 
       <section v-if="isExport">
         <h4>Source</h4>
-        <dl class="rows">
-          <div v-for="row in sourceRows" :key="row.label" class="row">
-            <dt>{{ row.label }}</dt>
-            <dd v-if="row.value" :class="{ mono: row.mono }" :title="row.value">{{ row.value }}</dd>
-            <dd v-else class="empty">—</dd>
-          </div>
-        </dl>
-        <UButton
-          class="source-btn"
-          icon="i-lucide-link"
-          label="Open source recording"
-          color="neutral"
-          variant="subtle"
-          size="md"
-          block
+        <button
+          type="button"
+          class="link-row"
           :disabled="!sourceClip"
+          :title="sourceClip ? 'Open the recording this was cut from' : ''"
           @click="$emit('source')"
-        />
+        >
+          <UIcon name="i-lucide-link" class="row-icon" />
+          <span class="link-text">
+            <span class="link-title truncate">
+              {{ sourceClip ? `Cut from ${sourceClip.title}` : 'Source recording is gone' }}
+            </span>
+            <span class="link-sub mono truncate">{{ sourceLine }}</span>
+          </span>
+          <UIcon v-if="sourceClip" name="i-lucide-chevron-right" class="row-chev" />
+        </button>
       </section>
 
       <section v-if="videoUrl">
         <h4>YouTube</h4>
-        <p class="path" :title="videoUrl">{{ videoUrl }}</p>
-        <div class="yt-actions">
-          <UButton
-            icon="i-lucide-external-link"
-            label="Open"
-            color="neutral"
-            variant="subtle"
-            size="md"
-            block
-            @click="openYouTube(clip)"
-          />
-          <UButton
-            icon="i-lucide-link-2"
-            label="Copy link"
-            color="neutral"
-            variant="subtle"
-            size="md"
-            block
-            @click="copyYouTubeLink(clip)"
-          />
-          <UButton
-            class="yt-remove"
-            icon="i-lucide-cloud-off"
-            label="Remove from YouTube"
-            color="error"
-            variant="subtle"
-            size="md"
-            block
-            :loading="pendingAction?.kind === 'remove-youtube'"
-            :disabled="uploading || busy"
-            @click="removeFromYouTube(clip)"
-          />
+        <div class="link-row static">
+          <UIcon name="i-lucide-youtube" class="row-icon" />
+          <span class="link-text">
+            <span class="link-title truncate">On your channel</span>
+            <span class="link-sub mono truncate" :title="videoUrl">{{ videoUrl }}</span>
+          </span>
+          <span class="row-actions">
+            <UTooltip text="Open on YouTube">
+              <UButton
+                icon="i-lucide-external-link"
+                color="neutral"
+                variant="ghost"
+                square
+                size="md"
+                aria-label="Open on YouTube"
+                @click="openYouTube(clip)"
+              />
+            </UTooltip>
+            <UTooltip text="Copy link">
+              <UButton
+                icon="i-lucide-link-2"
+                color="neutral"
+                variant="ghost"
+                square
+                size="md"
+                aria-label="Copy YouTube link"
+                @click="copyYouTubeLink(clip)"
+              />
+            </UTooltip>
+          </span>
         </div>
       </section>
 
       <section>
         <h4>Location</h4>
-        <!-- Selectable: a path is something you copy out by hand as often as
-             you copy it with the button below. -->
-        <p class="path" :title="clip.path">{{ folder }}</p>
+        <div class="link-pair">
+          <button type="button" class="link-row" title="Show in Explorer" @click="revealClip(clip)">
+            <UIcon name="i-lucide-folder-open" class="row-icon" />
+            <span class="link-text">
+              <span class="link-title truncate">Show in Explorer</span>
+              <span class="link-sub path" :title="clip.path">{{ folder }}</span>
+            </span>
+            <UIcon name="i-lucide-chevron-right" class="row-chev" />
+          </button>
+          <UTooltip text="Copy path">
+            <UButton
+              class="pair-btn"
+              icon="i-lucide-copy"
+              color="neutral"
+              variant="subtle"
+              square
+              size="lg"
+              aria-label="Copy path"
+              @click="copyClipPath(clip)"
+            />
+          </UTooltip>
+        </div>
       </section>
     </div>
 
     <footer class="actions">
       <UButton
-        class="wide"
         icon="i-lucide-scissors"
         :label="editing ? 'Leave edit mode' : 'Trim & export'"
         :color="editing ? 'neutral' : 'primary'"
         :variant="editing ? 'subtle' : 'solid'"
-        size="md"
+        size="lg"
         block
         :disabled="!canEdit"
         @click="$emit('edit')"
       />
-      <UButton
-        class="wide"
-        :icon="uploading ? 'i-lucide-x' : 'i-lucide-youtube'"
-        :color="uploading ? 'error' : 'neutral'"
-        :label="uploadLabel"
-        variant="subtle"
-        size="md"
-        block
-        :disabled="clip.probeState !== 'ok' || busy"
-        @click="onUploadButton"
-      />
-      <UButton
-        class="wide"
-        icon="i-lucide-clipboard-copy"
-        label="Copy file"
-        color="neutral"
-        variant="subtle"
-        size="md"
-        block
-        :loading="pendingAction?.kind === 'copy-file'"
-        :disabled="busy"
-        @click="copyClipFile(clip)"
-      />
-      <UButton
-        icon="i-lucide-folder-open"
-        label="Explorer"
-        color="neutral"
-        variant="subtle"
-        size="md"
-        block
-        @click="revealClip(clip)"
-      />
-      <UButton
-        icon="i-lucide-copy"
-        label="Copy path"
-        color="neutral"
-        variant="subtle"
-        size="md"
-        block
-        @click="copyClipPath(clip)"
-      />
-      <UButton
-        class="wide"
-        icon="i-lucide-pencil"
-        label="Rename"
-        color="neutral"
-        variant="subtle"
-        size="md"
-        block
-        :loading="pendingAction?.kind === 'rename'"
-        :disabled="busy"
-        @click="$emit('rename')"
-      />
-      <UButton
-        class="wide danger"
-        icon="i-lucide-trash-2"
-        label="Delete"
-        color="error"
-        variant="subtle"
-        size="md"
-        block
-        :loading="pendingAction?.kind === 'delete'"
-        :disabled="busy"
-        @click="$emit('remove')"
-      />
+      <div class="actions-row">
+        <UButton
+          class="grow"
+          :icon="uploading ? 'i-lucide-x' : 'i-lucide-youtube'"
+          :color="uploading ? 'error' : 'neutral'"
+          :label="uploadLabel"
+          variant="subtle"
+          size="lg"
+          block
+          :disabled="clip.probeState !== 'ok' || busy"
+          @click="onUploadButton"
+        />
+        <UTooltip text="Copy file">
+          <UButton
+            icon="i-lucide-clipboard-copy"
+            color="neutral"
+            variant="subtle"
+            square
+            size="lg"
+            aria-label="Copy file"
+            :loading="pendingAction?.kind === 'copy-file'"
+            :disabled="busy"
+            @click="copyClipFile(clip)"
+          />
+        </UTooltip>
+        <UTooltip text="Delete">
+          <UButton
+            class="danger"
+            icon="i-lucide-trash-2"
+            color="error"
+            variant="subtle"
+            square
+            size="lg"
+            aria-label="Delete"
+            :loading="pendingAction?.kind === 'delete'"
+            :disabled="busy"
+            @click="$emit('remove')"
+          />
+        </UTooltip>
+      </div>
     </footer>
   </aside>
 </template>
@@ -396,15 +433,44 @@ const sourceRows = computed<Row[]>(() => {
 }
 .head {
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: var(--s-2);
-  padding: var(--s-3) var(--s-3) var(--s-3) var(--s-5);
+  padding: var(--s-2) var(--s-4) var(--s-4);
   border-bottom: 1px solid var(--border);
 }
-.head h3 {
+.head-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+.name-label {
+  font-family: var(--font-heading);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+}
+.name-hint {
   flex: 1;
   min-width: 0;
-  font-size: var(--text-md);
+  font-size: var(--text-sm);
+  color: var(--fg-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.name {
+  width: 100%;
+}
+/* A field that says so: the hairline brightens on hover before you commit to a click. */
+.name :deep(input) {
+  color: var(--fg);
+  cursor: text;
+}
+.ext {
+  font-size: var(--text-sm);
+  color: var(--fg-muted);
 }
 .scroll {
   flex: 1;
@@ -414,14 +480,6 @@ const sourceRows = computed<Row[]>(() => {
   display: flex;
   flex-direction: column;
   gap: var(--s-5);
-}
-.filename {
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  line-height: 1.5;
-  color: var(--fg-muted);
-  word-break: break-all;
-  user-select: text;
 }
 .chips {
   display: flex;
@@ -434,11 +492,11 @@ const sourceRows = computed<Row[]>(() => {
 }
 h4 {
   margin-bottom: var(--s-2);
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   font-weight: 600;
-  letter-spacing: 0.09em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--fg-dim);
+  color: var(--fg-muted);
 }
 .rows {
   margin: 0;
@@ -451,15 +509,15 @@ h4 {
   align-items: center;
   justify-content: space-between;
   gap: var(--s-4);
-  min-height: 34px;
-  padding: var(--s-2) var(--s-3);
+  min-height: 40px;
+  padding: var(--s-2) var(--s-4);
 }
 .row + .row {
   border-top: 1px solid var(--border);
 }
 .row dt {
   flex: none;
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   color: var(--fg-muted);
 }
 .row dd {
@@ -468,7 +526,8 @@ h4 {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
+  font-weight: 500;
   color: var(--fg);
   user-select: text;
 }
@@ -476,12 +535,12 @@ h4 {
   color: var(--fg-dim);
 }
 .path {
-  padding: var(--s-3);
+  padding: var(--s-3) var(--s-4);
   border-radius: var(--r-md);
   background: var(--bg-2);
   box-shadow: inset 0 0 0 1px var(--border);
   font-family: var(--font-mono);
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   line-height: 1.6;
   color: var(--fg-muted);
   word-break: break-all;
@@ -489,37 +548,120 @@ h4 {
 }
 .note {
   margin-top: var(--s-2);
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   line-height: 1.5;
   color: var(--fg-muted);
 }
-.source-btn {
-  margin-top: var(--s-2);
+
+/* A place you can go: one row, pressed whole. */
+.link-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  width: 100%;
+  min-height: 56px;
+  padding: var(--s-3) var(--s-4);
+  border-radius: var(--r-md);
+  background: var(--bg-2);
+  box-shadow: inset 0 0 0 1px var(--border);
+  color: var(--fg);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
 }
-.yt-actions {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+.link-row:hover:not(:disabled) {
+  background: var(--bg-3);
+  box-shadow: inset 0 0 0 1px var(--border-hover);
+}
+.link-row:disabled {
+  cursor: default;
+  color: var(--fg-muted);
+}
+.link-row.static {
+  cursor: default;
+}
+.link-row.static:hover {
+  background: var(--bg-2);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+.row-icon {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  color: var(--secondary);
+}
+.link-row:disabled .row-icon {
+  color: var(--fg-dim);
+}
+.link-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.link-title {
+  font-size: var(--text-base);
+  font-weight: 500;
+}
+.link-sub {
+  font-size: var(--text-sm);
+  color: var(--fg-muted);
+}
+.link-sub.path {
+  white-space: normal;
+  word-break: break-all;
+  line-height: 1.45;
+}
+.row-chev {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  color: var(--fg-dim);
+  transition: transform var(--dur) var(--ease-spring);
+}
+.link-row:hover:not(:disabled) .row-chev {
+  transform: translateX(3px);
+  color: var(--secondary);
+}
+.row-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--s-1);
+  flex: none;
+}
+/* The row and its one side action share a line; the button matches the row's height. */
+.link-pair {
+  display: flex;
+  align-items: stretch;
   gap: var(--s-2);
-  margin-top: var(--s-2);
 }
-/* Destructive, so it spans the row and sits apart from Open / Copy link. */
-.yt-remove {
-  grid-column: 1 / -1;
+.link-pair .link-row {
+  flex: 1;
+  min-width: 0;
 }
+.pair-btn {
+  height: auto;
+  align-self: stretch;
+}
+
 .actions {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+  display: flex;
+  flex-direction: column;
   gap: var(--s-2);
   padding: var(--s-4) var(--s-5);
   border-top: 1px solid var(--border);
   background: var(--bg-1);
 }
-.actions .wide {
-  grid-column: 1 / -1;
+.actions-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
 }
-/* The destructive action ends the list and keeps its distance, so it is never
-   the button you hit reaching for Rename. */
-.actions .danger {
-  margin-top: var(--s-2);
+.actions-row .grow {
+  flex: 1;
+  min-width: 0;
 }
 </style>

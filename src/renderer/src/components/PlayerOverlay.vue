@@ -1,18 +1,15 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import type { DropdownMenuItem } from '@nuxt/ui'
+import type { Clip } from '@shared/types'
 import ElasticSlider from './bits/ElasticSlider.vue'
 import PlayerDetails from './PlayerDetails.vue'
 import TrimBar from './TrimBar.vue'
 import PendingBanner from './youtube/PendingBanner.vue'
 import UploadBanner from './youtube/UploadBanner.vue'
-import {
-  deleteClip,
-  pendingByClip,
-  renameClip,
-  revealClip,
-  settings,
-  updateSettings,
-} from '@/composables/useLibrary'
+import { pendingByClip, revealClip, settings, updateSettings } from '@/composables/useLibrary'
+import { clipMenuItems, deleteClipDialog } from '@/composables/useClipMenu'
+import { shortcutsOpen } from '@/composables/useShortcuts'
 import {
   closePlayer,
   current,
@@ -24,6 +21,7 @@ import {
   originRect,
   pendingEdit,
   prevClip,
+  source,
 } from '@/composables/usePlayer'
 import {
   canExport,
@@ -44,7 +42,7 @@ import {
 import { fadeOut, flipFrom, flipTo } from '@/composables/useMotion'
 import { activeTheme } from '@/composables/useTheme'
 import { visible as windowVisible } from '@/composables/useWindowVisibility'
-import { confirmWithAlt, dialog, prompt } from '@/composables/useDialogs'
+import { dialog } from '@/composables/useDialogs'
 import { openUploadDialog, uploadByClip, uploadDialog } from '@/composables/useUploads'
 import { toast } from '@/composables/useToasts'
 import {
@@ -59,7 +57,7 @@ import {
 import { bitrate, formatBitrate } from '@/utils/quality'
 
 const api = window.api
-const RATES = [1, 1.25, 1.5, 2, 0.5]
+const RATES = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2]
 /** Containers stream copy keeps as they are; everything else exports as mp4. */
 const KEEP_EXT = new Set(['.webm', '.avi', '.wmv', '.flv'])
 
@@ -158,6 +156,29 @@ const failedActions = computed(() => [
   },
 ])
 
+/**
+ * Every clip action, reachable whether or not the details pane is showing.
+ * Same list the card's right-click menu builds, minus Play and Trim, which
+ * the player already has in front of you.
+ */
+const moreItems = computed(() =>
+  clipMenuItems(clip.value, {
+    variant: source.value === 'clips' ? 'export' : 'recording',
+    omitOpen: true,
+    onRenamed,
+    beforeDelete,
+  }),
+)
+
+const rateItems = computed<DropdownMenuItem[]>(() =>
+  RATES.map((r) => ({
+    label: `${r}×`,
+    type: 'checkbox',
+    checked: rate.value === r,
+    onSelect: () => setRate(r),
+  })),
+)
+
 // ------------------------------------------------------------- sizing
 
 let observer: ResizeObserver | null = null
@@ -246,9 +267,9 @@ function setMuted(value: boolean): void {
   if (video.value) video.value.muted = value
   persistVolume()
 }
-function cycleRate(): void {
-  rate.value = RATES[(RATES.indexOf(rate.value) + 1) % RATES.length]
-  if (video.value) video.value.playbackRate = rate.value
+function setRate(r: number): void {
+  rate.value = r
+  if (video.value) video.value.playbackRate = r
 }
 async function toggleFullscreen(): Promise<void> {
   try {
@@ -390,45 +411,29 @@ function close(): void {
   else closePlayer()
 }
 
-async function rename(): Promise<void> {
-  const c = clip.value
-  const name = await prompt({
-    title: 'Rename clip',
-    label: 'File name',
-    value: c.name,
-    confirmLabel: 'Rename',
-  })
-  if (!name?.trim() || name === c.name) return
-  const next = await renameClip(c, name)
-  // Swap in place so prev/next keep walking the same list.
-  if (next) current.value = next
+/** A rename changes the id: swap in place so prev/next keep walking the same list. */
+function onRenamed(next: Clip): void {
+  current.value = next
 }
 
-async function remove(): Promise<void> {
-  const c = clip.value
-  const choice = await confirmWithAlt({
-    title: 'Delete this clip?',
-    message:
-      'It goes to the Recycle Bin, so you can still restore it from there. Deleting permanently erases the file from disk right away.',
-    detail: c.name + c.ext,
-    detailIcon: 'i-lucide-file-video',
-    confirmLabel: 'Delete',
-    danger: true,
-    alt: { label: 'Delete permanently', danger: true },
-  })
-  if (choice === 'cancel') return
+/** Runs once the delete is confirmed, before the file goes: step off the clip first. */
+function beforeDelete(): void {
   exitEdit()
   const target = neighbor()
   if (target) current.value = target
   else closePlayer()
-  await deleteClip(c, choice === 'alt')
+}
+
+function remove(): void {
+  void deleteClipDialog(clip.value, beforeDelete)
 }
 
 // ------------------------------------------------------------- keyboard
 
 function onKey(e: KeyboardEvent): void {
-  // A modal owns the keyboard: the confirm/prompt host, or the upload form.
-  if (dialog.value || uploadDialog.value) return
+  // A modal owns the keyboard: the confirm/prompt host, the upload form, or the
+  // shortcut list.
+  if (dialog.value || uploadDialog.value || shortcutsOpen.value) return
   const tag = (e.target as HTMLElement | null)?.tagName
   if (tag === 'INPUT' || tag === 'TEXTAREA') return
   let handled = true
@@ -681,6 +686,21 @@ onBeforeUnmount(() => {
             @click="toggleDetails"
           />
         </UTooltip>
+        <UDropdownMenu
+          :items="moreItems"
+          :content="{ align: 'end' }"
+          :ui="{ content: 'min-w-56' }"
+          @update:open="poke"
+        >
+          <UButton
+            icon="i-lucide-ellipsis"
+            color="neutral"
+            variant="ghost"
+            square
+            size="lg"
+            aria-label="More actions"
+          />
+        </UDropdownMenu>
       </div>
     </header>
 
@@ -799,7 +819,7 @@ onBeforeUnmount(() => {
         :editing="editing"
         :export-name="exportName + outExt"
         @close="toggleDetails"
-        @rename="rename"
+        @renamed="onRenamed"
         @remove="remove"
         @edit="toggleEdit"
         @source="goToSource"
@@ -1041,16 +1061,21 @@ onBeforeUnmount(() => {
               />
             </UTooltip>
           </template>
-          <UTooltip text="Playback speed">
+          <UDropdownMenu
+            :items="rateItems"
+            :content="{ side: 'top', align: 'end' }"
+            :ui="{ content: 'min-w-28', itemLabel: 'font-mono' }"
+            @update:open="poke"
+          >
             <UButton
               class="rate mono"
               :label="`${rate}×`"
               color="neutral"
               variant="ghost"
               size="md"
-              @click="cycleRate"
+              aria-label="Playback speed"
             />
-          </UTooltip>
+          </UDropdownMenu>
           <UTooltip v-if="!editing" text="Loop">
             <UButton
               icon="i-lucide-repeat"
@@ -1094,7 +1119,7 @@ onBeforeUnmount(() => {
   -webkit-app-region: no-drag;
   /* One width, one switch: everything that has to make room for the details
      pane reads --pane-w, which is 0 whenever the pane is not showing. */
-  --details-w: 340px;
+  --details-w: 380px;
   --pane-w: 0px;
   /* The controls block grows a row in edit mode; the stage gives it the room. */
   --controls-h: 108px;
@@ -1109,7 +1134,7 @@ onBeforeUnmount(() => {
    the larger share of the screen. */
 @media (max-width: 1240px) {
   .player {
-    --details-w: 296px;
+    --details-w: 320px;
   }
   .player.is-editing {
     --controls-h: 282px;
@@ -1515,7 +1540,7 @@ onBeforeUnmount(() => {
 }
 .time {
   margin-left: var(--s-3);
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   color: var(--fg);
 }
 .dim {

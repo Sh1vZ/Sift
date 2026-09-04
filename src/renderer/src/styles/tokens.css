@@ -58,8 +58,8 @@
   --font-body: 'Inter Variable', 'Segoe UI', system-ui, -apple-system, sans-serif;
   --font-mono: 'Cascadia Code', 'Consolas', ui-monospace, monospace;
 
-  --text-xs: 11px;
-  --text-sm: 12.5px;
+  --text-xs: 12px;
+  --text-sm: 13.5px;
   --text-base: 14px;
   --text-md: 15px;
   --text-lg: 18px;

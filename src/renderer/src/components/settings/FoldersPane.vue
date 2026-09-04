@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import type { LibraryFolder } from '@shared/types'
+import DropWash from '../DropWash.vue'
 import SettingsPanel from './SettingsPanel.vue'
 import SettingsRow from './SettingsRow.vue'
 import {
@@ -11,6 +12,7 @@ import {
   rescan,
   scan,
 } from '@/composables/useLibrary'
+import { useFolderDrop } from '@/composables/useDropFolders'
 import { confirm } from '@/composables/useDialogs'
 
 /** The clips folder has its own pane; this list is the recording roots only. */
@@ -19,11 +21,15 @@ const withThumbs = computed(() => recordings.value.filter((c) => c.thumb).length
 
 const summary = computed(() => {
   const f = libraryFolders.value.length
-  return `${recordings.value.length} clips indexed across ${f} folder${f === 1 ? '' : 's'} · ${withThumbs.value} with previews.`
+  return `${recordings.value.length} clips indexed across ${f} folder${f === 1 ? '' : 's'} · ${withThumbs.value} with previews. Drop a folder here to add it.`
 })
 
 /** Folders whose removal is still stopping watchers and dropping clips; their button spins. */
 const removing = ref<string[]>([])
+
+// The whole panel body takes a dropped folder.
+const zone = ref<HTMLElement | null>(null)
+const { dropping } = useFolderDrop(zone)
 
 async function remove(folder: LibraryFolder): Promise<void> {
   const ok = await confirm({
@@ -52,11 +58,12 @@ async function remove(folder: LibraryFolder): Promise<void> {
           icon="i-lucide-folder-plus"
           label="Add folder"
           color="primary"
+          size="lg"
           @click="addFolder()"
         />
       </template>
 
-      <div class="slot">
+      <div ref="zone" class="slot">
         <Transition name="dissolve">
           <UEmpty
             v-if="!libraryFolders.length"
@@ -64,7 +71,7 @@ async function remove(folder: LibraryFolder): Promise<void> {
             class="panel-empty"
             icon="i-lucide-folder"
             title="No folders yet"
-            description="Add the one ShadowPlay records to — usually your Videos folder."
+            description="Add the one ShadowPlay records to — usually your Videos folder — or drop it here."
             variant="subtle"
             size="sm"
             :actions="[
@@ -87,14 +94,14 @@ async function remove(folder: LibraryFolder): Promise<void> {
                     v-if="!f.available"
                     color="warning"
                     variant="subtle"
-                    size="sm"
+                    size="md"
                     label="Not reachable"
                   />
                   <UBadge
                     v-else-if="scan.active && scan.folder === f.name"
                     color="primary"
                     variant="subtle"
-                    size="sm"
+                    size="md"
                     icon="i-lucide-loader-circle"
                     label="Scanning"
                     :ui="{ leadingIcon: 'animate-spin' }"
@@ -108,7 +115,7 @@ async function remove(folder: LibraryFolder): Promise<void> {
                 <UBadge
                   color="neutral"
                   variant="soft"
-                  size="sm"
+                  size="md"
                   :label="`${f.clipCount} clips`"
                   class="mono count"
                 />
@@ -118,6 +125,7 @@ async function remove(folder: LibraryFolder): Promise<void> {
                     color="neutral"
                     variant="ghost"
                     square
+                    size="lg"
                     aria-label="Rescan folder"
                     :disabled="!f.available"
                     @click="rescan(f.id)"
@@ -130,6 +138,7 @@ async function remove(folder: LibraryFolder): Promise<void> {
                     color="error"
                     variant="ghost"
                     square
+                    size="lg"
                     :loading="removing.includes(f.id)"
                     :disabled="removing.includes(f.id)"
                     aria-label="Remove folder"
@@ -139,6 +148,9 @@ async function remove(folder: LibraryFolder): Promise<void> {
               </template>
             </SettingsRow>
           </ul>
+        </Transition>
+        <Transition name="fade">
+          <DropWash v-if="dropping" />
         </Transition>
       </div>
     </SettingsPanel>
@@ -152,6 +164,7 @@ async function remove(folder: LibraryFolder): Promise<void> {
         label="Rescan all folders"
         color="neutral"
         variant="subtle"
+        size="lg"
         :disabled="!libraryFolders.length || scan.active"
         :loading="scan.active"
         @click="rescan()"

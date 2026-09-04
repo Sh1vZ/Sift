@@ -7,7 +7,10 @@ A local-first clip library for NVIDIA ShadowPlay (and any other recorder) — El
 - **Watch folders.** New recordings appear seconds after they finish writing.
 - **Previews.** Poster frames plus hover-to-scrub strips, rendered once by a bundled ffmpeg at below-normal CPU priority and cached in `%APPDATA%\sift\thumbs`.
 - **Player.** Custom controls, keyboard shortcuts, prev/next through the grid, autoplay-next, loop, speed, fullscreen.
-- **Manage.** A details pane beside the video carries the file's video and file figures, its location, and the actions — show in Explorer, copy path, rename, delete (to the Recycle Bin, or permanently from the confirm dialog). The same actions are on every card's right-click menu.
+- **Manage.** A details pane beside the video carries the clip's figures, and rows that take you places — the folder on disk, the recording an export was cut from, the YouTube page. The file name at the top is a field: type and leave it to rename. Delete goes to the Recycle Bin, or permanently from the confirm dialog. Every action is also on each card's right-click menu and on the player's **⋯** menu, so nothing needs the pane open.
+- **Filter and find.** Games home has a search; inside a game a filter box narrows the grid by name. `/` focuses whichever is on screen.
+- **Activity.** The sidebar's activity button lists every export, upload and scan in flight, with progress and cancel.
+- **Drop a folder.** Drag one onto the Games screen or Settings → Folders to add it; the first-run screen also offers your Videos folder in one click.
 - **Trim & export.** Press `E` in the player to drop in/out handles on the timeline, optionally mute, name the clip and export. Exports are an ffmpeg stream copy (seconds, original quality, the start snaps to the previous keyframe) into `Videos\Sift Clips\<Game>\` — the recording is never touched. The folder is changeable under Settings → Clips.
 - **Clips.** Everything you exported, grouped by game, with in-flight exports shown as progress cards. Each clip links back to the recording it was cut from.
 
@@ -60,6 +63,19 @@ Installed copies check on launch and every four hours, download in the backgroun
 Installers are unsigned, so SmartScreen warns on a manual download from the Releases page. Auto-updates are not affected — the downloaded installer carries no mark-of-the-web.
 
 To exercise the update flow without publishing anything, see `MAIN_VITE_UPDATER_DEV` above.
+
+## Keyboard (library)
+
+Press `?` anywhere for the same list in the app.
+
+| Key | Action |
+| --- | --- |
+| `/` · Ctrl+F | Focus the games search, the clip filter, or the settings search |
+| Backspace · Alt+← | Back to games |
+| Esc | Clear the clip filter, then back to games |
+| ↑ ↓ · Enter | Move through games, open one |
+| Ctrl+, | Settings |
+| ? | Keyboard shortcuts |
 
 ## Keyboard (player)
 

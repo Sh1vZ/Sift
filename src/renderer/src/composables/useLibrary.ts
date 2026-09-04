@@ -153,9 +153,29 @@ export const shareFilter = ref<ShareFilter>('all')
 const matchesShare = (c: Clip): boolean =>
   shareFilter.value === 'all' || (shareFilter.value === 'shared') === Boolean(c.youtubeId)
 
+/** Letters and digits only, so "lords of the fallen" finds "LordsOfTheFallen_2026". */
+const squash = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]+/g, '')
+
+/**
+ * Narrows a game's grid by title. View state like `shareFilter`: it resets
+ * whenever you step into or out of a game, so a filter never outlives the
+ * screen it was typed on.
+ */
+export const clipQuery = ref('')
+/** The same for the Clips view; cleared each time the view is opened. */
+export const exportQuery = ref('')
+
+/** Title match for a query already lower-cased (`q`) and squashed (`qs`). */
+const matchesQuery = (c: Clip, q: string, qs: string): boolean =>
+  !q || c.title.toLowerCase().includes(q) || squash(c.title).includes(qs)
+
 export const visibleClips = computed<Clip[]>(() => {
   const game = selectedGame.value
-  const list = recordings.value.filter((c) => (!game || c.game === game) && matchesShare(c))
+  const q = clipQuery.value.trim().toLowerCase()
+  const qs = squash(q)
+  const list = recordings.value.filter(
+    (c) => (!game || c.game === game) && matchesShare(c) && matchesQuery(c, q, qs),
+  )
   return list.sort(compare(settings.value.sort))
 })
 
@@ -215,7 +235,9 @@ const exportedAt = (c: Clip): number => c.createdAtMs || c.recordedAtMs
 
 /** The Clips view: one section per game, latest export first, games by their latest export. */
 export const clipSections = computed<Section[]>(() => {
-  const list = exportedClips.value.filter(matchesShare)
+  const q = exportQuery.value.trim().toLowerCase()
+  const qs = squash(q)
+  const list = exportedClips.value.filter((c) => matchesShare(c) && matchesQuery(c, q, qs))
   if (!list.length) return []
   const byGame = new Map<string, { latest: number; clips: Clip[] }>()
   for (const c of list) {
@@ -260,15 +282,27 @@ export const screen = computed<'games' | 'game' | 'clips' | 'settings'>(() => {
 
 export function goGames(): void {
   selectedGame.value = null
+  clipQuery.value = ''
   view.value = 'library'
 }
 
 export function openGame(name: string): void {
   selectedGame.value = name
+  clipQuery.value = ''
   view.value = 'library'
 }
 
+/** The most recent recording of a game — what "show this game's folder" reveals. */
+export function newestClipOf(game: string): Clip | undefined {
+  let best: Clip | undefined
+  for (const c of recordings.value) {
+    if (c.game === game && (!best || c.recordedAtMs > best.recordedAtMs)) best = c
+  }
+  return best
+}
+
 export function goClips(): void {
+  exportQuery.value = ''
   view.value = 'clips'
 }
 
@@ -277,8 +311,6 @@ export function goClips(): void {
 export type GameSort = 'recent' | 'name' | 'count'
 export const gameQuery = ref('')
 export const gameSort = ref<GameSort>('recent')
-
-const squash = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]+/g, '')
 
 export const filteredGames = computed<GameSummary[]>(() => {
   const q = gameQuery.value.trim().toLowerCase()
@@ -353,6 +385,20 @@ export async function addFolder(path?: string): Promise<LibraryFolder | null> {
   if (res.error) toast('error', 'Could not add folder', res.error)
   else if (res.folder) toast('success', 'Folder added', `Scanning ${res.folder.name}…`)
   return res.folder
+}
+
+/**
+ * Folders dropped onto the window. Only main knows a path from a File, and
+ * only main can tell a folder from a file, so each one goes through the same
+ * `addFolder` path the picker uses and reports the same way.
+ */
+export async function addDroppedFolders(files: File[]): Promise<void> {
+  const paths = files.map((f) => api.pathForFile(f)).filter(Boolean)
+  if (!paths.length) {
+    toast('info', 'Drop a folder', 'Sift indexes folders, not single files.')
+    return
+  }
+  for (const path of paths) await addFolder(path)
 }
 
 export async function removeFolder(folder: LibraryFolder): Promise<void> {

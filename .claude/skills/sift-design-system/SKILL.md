@@ -143,7 +143,7 @@ Fonts are self-hosted through `@fontsource*` and imported once in `src/renderer/
 `.mono` also sets `font-variant-numeric: tabular-nums`. Use it for any number that updates in
 place (clip counts, timecodes, sizes) so the layout does not jitter.
 
-**Scale** — `--text-xs` 11px · `--text-sm` 12.5px · `--text-base` 14px · `--text-md` 15px ·
+**Scale** — `--text-xs` 12px · `--text-sm` 13.5px · `--text-base` 14px · `--text-md` 15px ·
 `--text-lg` 18px · `--text-xl` 22px · `--text-2xl` 28px.
 
 Desktop density: 14px base, not 16px. Do not use the browser-default 16px rhythm here, and do

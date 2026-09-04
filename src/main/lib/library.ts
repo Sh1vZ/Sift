@@ -1,6 +1,6 @@
 import { app, clipboard, shell } from 'electron'
 import { randomUUID } from 'node:crypto'
-import { existsSync, type Stats } from 'node:fs'
+import { existsSync, statSync, type Stats } from 'node:fs'
 import { mkdir, rename as fsRename, stat, unlink } from 'node:fs/promises'
 import { basename, dirname, extname, join, normalize } from 'node:path'
 import type { FSWatcher } from 'chokidar'
@@ -62,6 +62,15 @@ const EXPORT_PRUNE_FAILED_MS = 30_000
 
 const isTerminal = (j: ExportJob): boolean =>
   j.state === 'done' || j.state === 'failed' || j.state === 'cancelled'
+
+/** `statSync` for a path that may not exist: null instead of a throw. */
+function statOrNull(path: string): Stats | null {
+  try {
+    return statSync(path)
+  } catch {
+    return null
+  }
+}
 
 /**
  * Owns the library state and coordinates the store, folder scans, the ffmpeg
@@ -205,13 +214,20 @@ export class Library {
         }
       }
     }
+    // A drop can hand over a file's path. A missing drive still passes (the
+    // folder is kept as unavailable until it comes back), so only a path that
+    // exists and is not a directory is refused.
+    const st = statOrNull(path)
+    if (st && !st.isDirectory()) {
+      return { folder: null, error: 'That is a file. Drop the folder it lives in instead.' }
+    }
     const folder: LibraryFolder = {
       id: clipId(path),
       path,
       name: basename(path) || path,
       addedAtMs: Date.now(),
       clipCount: 0,
-      available: existsSync(path),
+      available: st !== null,
       kind: 'library',
     }
     this.store.data.folders.push(folder)

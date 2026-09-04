@@ -4,6 +4,7 @@ import SettingsPanel from './SettingsPanel.vue'
 import SettingsRow from './SettingsRow.vue'
 import { settings, updateSettings } from '@/composables/useLibrary'
 import { osReduced } from '@/composables/useMotion'
+import { openShortcuts } from '@/composables/useShortcuts'
 
 type ToggleKey = keyof Pick<Settings, 'hoverPreview' | 'editOnOpen' | 'autoplayNext'>
 
@@ -50,6 +51,29 @@ const toggles: Array<{ key: ToggleKey; icon: string; title: string; description:
             size="lg"
             :aria-label="t.title"
             @update:model-value="(v: boolean) => updateSettings({ [t.key]: v })"
+          />
+        </template>
+      </SettingsRow>
+    </SettingsPanel>
+
+    <SettingsPanel
+      title="Keyboard"
+      description="Sift is built to be driven without the mouse."
+      flush
+    >
+      <SettingsRow
+        icon="keyboard"
+        title="Keyboard shortcuts"
+        description="Every key for the library, the player and edit mode. Press ? anywhere to see them."
+      >
+        <template #trailing>
+          <UButton
+            icon="i-lucide-keyboard"
+            label="Show shortcuts"
+            color="neutral"
+            variant="subtle"
+            size="lg"
+            @click="openShortcuts()"
           />
         </template>
       </SettingsRow>

@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent } from 'vue'
+import { computed, defineAsyncComponent, onBeforeUnmount, ref, watch } from 'vue'
 import type { GridSize, GroupBy, SortBy } from '@shared/types'
 import Icon from './Icon.vue'
 import ClipGrid from './ClipGrid.vue'
+import DropWash from './DropWash.vue'
 import GamesBrowser from './GamesBrowser.vue'
 import BlurText from './bits/BlurText.vue'
 import CountUp from './bits/CountUp.vue'
@@ -11,6 +12,7 @@ import SplitText from './bits/SplitText.vue'
 import StarBorder from './bits/StarBorder.vue'
 import {
   addFolder,
+  clipQuery,
   folders,
   gameClipCount,
   games,
@@ -26,12 +28,15 @@ import {
   settings,
   SHARE_FILTERS,
   shareFilter,
+  suggestedFolders,
   updateSettings,
   visibleClips,
 } from '@/composables/useLibrary'
+import { useFolderDrop } from '@/composables/useDropFolders'
 import { motionEnabled } from '@/composables/useMotion'
+import { registerSearch } from '@/composables/useShortcuts'
 import { activeTheme } from '@/composables/useTheme'
-import { formatBytes, formatDuration } from '@/utils/format'
+import { basename, formatBytes, formatDuration } from '@/utils/format'
 
 // The WebGL aurora (and its ogl dependency) only loads when the empty state is actually shown.
 // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- .vue modules are untyped to eslint; vue-tsc type-checks this
@@ -41,14 +46,16 @@ const hasFolders = computed(() => folders.value.some((f) => f.kind === 'library'
 // Filter/sort/group/size changes restart the grid from the top with a stagger.
 const gridResetKey = computed(
   () =>
-    `${selectedGame.value}|${settings.value.sort}|${settings.value.groupBy}|${settings.value.gridSize}|${shareFilter.value}`,
+    `${selectedGame.value}|${settings.value.sort}|${settings.value.groupBy}|${settings.value.gridSize}|${shareFilter.value}|${clipQuery.value}`,
 )
 const inGame = computed(() => screen.value === 'game')
 const title = computed(() => (inGame.value ? (selectedGame.value ?? '') : 'Games'))
+/** The filter or the sharing select is hiding some of this game's clips. */
+const narrowed = computed(() => inGame.value && libraryStats.value.count !== gameClipCount.value)
 
 const groupOptions: Array<{ value: GroupBy; label: string; icon: string }> = [
-  { value: 'date', label: 'Date', icon: 'i-lucide-calendar' },
-  { value: 'none', label: 'None', icon: 'i-lucide-layout-grid' },
+  { value: 'date', label: 'Group by date', icon: 'i-lucide-calendar' },
+  { value: 'none', label: 'No grouping', icon: 'i-lucide-layout-grid' },
 ]
 const sizeOptions: Array<{ value: GridSize; icon: string; label: string }> = [
   { value: 'large', icon: 'i-lucide-grid-2x2', label: 'Large cards' },
@@ -67,157 +74,214 @@ const sortModel = computed({
   get: () => settings.value.sort,
   set: (v: SortBy) => void updateSettings({ sort: v }),
 })
+/** USelect shows only its own icon prop, so the active filter's glyph is bound by hand. */
+const shareIcon = computed(() => SHARE_FILTERS.find((f) => f.value === shareFilter.value)?.icon)
+
+// ------------------------------------------------------------ clip filter
+
+const filterInput = ref<{ inputRef: HTMLInputElement | null } | null>(null)
+
+/** Esc clears the filter; a second Esc leaves the field, so the next one goes back to Games. */
+function onFilterKey(e: KeyboardEvent): void {
+  if (e.key !== 'Escape') return
+  e.stopPropagation()
+  if (clipQuery.value) clipQuery.value = ''
+  else filterInput.value?.inputRef?.blur()
+}
+
+// `/` and Ctrl+F land in the filter while a game is open; the games browser
+// registers its own search for the home screen.
+let offSearch: (() => void) | null = null
+watch(
+  inGame,
+  (v) => {
+    offSearch?.()
+    offSearch = v ? registerSearch(() => filterInput.value?.inputRef?.select()) : null
+  },
+  { immediate: true },
+)
+onBeforeUnmount(() => offSearch?.())
+
+// ------------------------------------------------------------- drop zone
+
+// The whole stage takes a dropped folder on the home screen and the hero; a
+// game's grid does not, so a slip there cannot add a folder by accident.
+const stageEl = ref<HTMLElement | null>(null)
+const { dropping } = useFolderDrop(stageEl, () => !inGame.value)
 </script>
 
 <template>
   <section class="view">
     <header class="head">
       <div class="head-text">
-        <div class="back-slot" :class="{ open: inGame }">
-          <Transition name="fade">
-            <UButton
-              v-if="inGame"
-              class="back"
-              icon="i-lucide-chevron-left"
-              label="Games"
-              color="primary"
-              variant="link"
-              size="xs"
-              @click="goGames"
-            />
-          </Transition>
-        </div>
-        <SplitText
-          v-if="motionEnabled"
-          :text="title"
-          tag="h1"
-          class-name="title"
-          split-type="chars"
-          :delay="18"
-          :duration="0.55"
-          ease="power3.out"
-          :from="{ opacity: 0, y: 22 }"
-          :to="{ opacity: 1, y: 0 }"
-          text-align="left"
-          immediate
-        />
-        <h1 v-else class="title">{{ title }}</h1>
+        <UTooltip v-if="inGame" text="Back to games" :kbds="['backspace']">
+          <UButton
+            icon="i-lucide-arrow-left"
+            color="neutral"
+            variant="ghost"
+            square
+            size="lg"
+            aria-label="Back to games"
+            @click="goGames"
+          />
+        </UTooltip>
 
-        <!-- All three summaries share one box, so the first scan finishing (or a
-             step into a game) swaps the line in place instead of relaying the header. -->
-        <div class="stats-slot">
-          <Transition name="dissolve">
-            <p v-if="inGame && libraryStats.count" key="game" class="stats">
-              <span>
-                <CountUp v-if="motionEnabled" :to="libraryStats.count" :duration="0.9" /><template
-                  v-else
-                  >{{ libraryStats.count }}</template
-                >
-                clip{{ libraryStats.count === 1 ? '' : 's' }}
-              </span>
-              <span class="dot">·</span>
-              <span class="mono">{{ formatDuration(libraryStats.duration) }}</span>
-              <span class="dot">·</span>
-              <span>{{ formatBytes(libraryStats.size) }}</span>
-            </p>
-            <p v-else-if="!inGame && games.length" key="games" class="stats">
-              <span>
-                <CountUp v-if="motionEnabled" :to="games.length" :duration="0.9" /><template
-                  v-else
-                  >{{ games.length }}</template
-                >
-                game{{ games.length === 1 ? '' : 's' }}
-              </span>
-              <span class="dot">·</span>
-              <span>
-                <CountUp v-if="motionEnabled" :to="recordings.length" :duration="0.9" /><template
-                  v-else
-                  >{{ recordings.length }}</template
-                >
-                clip{{ recordings.length === 1 ? '' : 's' }}
-              </span>
-            </p>
-            <p v-else key="none" class="stats">Nothing here yet</p>
-          </Transition>
+        <div class="title-block">
+          <SplitText
+            v-if="motionEnabled"
+            :text="title"
+            tag="h1"
+            class-name="title"
+            split-type="chars"
+            :delay="18"
+            :duration="0.55"
+            ease="power3.out"
+            :from="{ opacity: 0, y: 22 }"
+            :to="{ opacity: 1, y: 0 }"
+            text-align="left"
+            immediate
+          />
+          <h1 v-else class="title">{{ title }}</h1>
+
+          <!-- All three summaries share one box, so the first scan finishing (or a
+               step into a game) swaps the line in place instead of relaying the header. -->
+          <div class="stats-slot">
+            <Transition name="dissolve">
+              <p v-if="inGame && gameClipCount" key="game" class="stats">
+                <span>
+                  <CountUp v-if="motionEnabled" :to="libraryStats.count" :duration="0.9" /><template
+                    v-else
+                    >{{ libraryStats.count }}</template
+                  >
+                  <template v-if="narrowed"> of {{ gameClipCount }}</template>
+                  clip{{ gameClipCount === 1 ? '' : 's' }}
+                </span>
+                <span class="dot">·</span>
+                <span class="mono">{{ formatDuration(libraryStats.duration) }}</span>
+                <span class="dot">·</span>
+                <span>{{ formatBytes(libraryStats.size) }}</span>
+              </p>
+              <p v-else-if="!inGame && games.length" key="games" class="stats">
+                <span>
+                  <CountUp v-if="motionEnabled" :to="games.length" :duration="0.9" /><template
+                    v-else
+                    >{{ games.length }}</template
+                  >
+                  game{{ games.length === 1 ? '' : 's' }}
+                </span>
+                <span class="dot">·</span>
+                <span>
+                  <CountUp v-if="motionEnabled" :to="recordings.length" :duration="0.9" /><template
+                    v-else
+                    >{{ recordings.length }}</template
+                  >
+                  clip{{ recordings.length === 1 ? '' : 's' }}
+                </span>
+              </p>
+              <p v-else key="none" class="stats">Nothing here yet</p>
+            </Transition>
+          </div>
         </div>
       </div>
 
       <Transition name="fade">
-        <div v-if="hasFolders" class="toolbar">
-          <!-- The per-game controls have no meaning on the games list, so they
-               fade with the step in and out rather than appearing mid-header. -->
-          <Transition name="fade">
-            <div v-if="inGame" class="game-tools">
-              <UFieldGroup size="md" aria-label="Group clips by">
+        <div v-if="hasFolders" class="toolbar" :class="{ 'in-game': inGame }">
+          <!-- Inside a game the toolbar is about that grid; the library-level
+               actions live on the home screen and under Settings → Folders. -->
+          <template v-if="inGame">
+            <UInput
+              ref="filterInput"
+              v-model="clipQuery"
+              class="filter"
+              icon="i-lucide-search"
+              size="lg"
+              placeholder="Filter clips"
+              spellcheck="false"
+              autocomplete="off"
+              aria-label="Filter clips by name"
+              :ui="{ trailing: 'pe-1.5' }"
+              @keydown="onFilterKey"
+            >
+              <template v-if="clipQuery" #trailing>
                 <UButton
-                  v-for="g in groupOptions"
-                  :key="g.value"
+                  color="neutral"
+                  variant="link"
+                  size="sm"
+                  icon="i-lucide-x"
+                  aria-label="Clear filter"
+                  @click="clipQuery = ''"
+                />
+              </template>
+            </UInput>
+
+            <UFieldGroup size="lg" aria-label="Group clips by">
+              <UTooltip v-for="g in groupOptions" :key="g.value" :text="g.label">
+                <UButton
                   :icon="g.icon"
-                  :label="g.label"
+                  square
                   :color="gridGroupBy === g.value ? 'primary' : 'neutral'"
                   :variant="gridGroupBy === g.value ? 'soft' : 'subtle'"
                   :aria-pressed="gridGroupBy === g.value"
+                  :aria-label="g.label"
                   @click="updateSettings({ groupBy: g.value })"
                 />
-              </UFieldGroup>
+              </UTooltip>
+            </UFieldGroup>
 
-              <USelect
-                v-model="sortModel"
-                :items="sortOptions"
-                size="md"
-                icon="i-lucide-arrow-up-down"
-                class="w-44"
-                aria-label="Sort clips"
-              />
-
-              <UFieldGroup size="md" aria-label="Filter by sharing">
-                <UButton
-                  v-for="f in SHARE_FILTERS"
-                  :key="f.value"
-                  :icon="f.icon"
-                  :label="f.label"
-                  :color="shareFilter === f.value ? 'primary' : 'neutral'"
-                  :variant="shareFilter === f.value ? 'soft' : 'subtle'"
-                  :aria-pressed="shareFilter === f.value"
-                  @click="shareFilter = f.value"
-                />
-              </UFieldGroup>
-
-              <UFieldGroup size="md" aria-label="Card size">
-                <UTooltip v-for="s in sizeOptions" :key="s.value" :text="s.label">
-                  <UButton
-                    :icon="s.icon"
-                    square
-                    :color="settings.gridSize === s.value ? 'primary' : 'neutral'"
-                    :variant="settings.gridSize === s.value ? 'soft' : 'subtle'"
-                    :aria-pressed="settings.gridSize === s.value"
-                    :aria-label="s.label"
-                    @click="updateSettings({ gridSize: s.value })"
-                  />
-                </UTooltip>
-              </UFieldGroup>
-            </div>
-          </Transition>
-
-          <UTooltip text="Rescan folders">
-            <UButton
-              icon="i-lucide-refresh-cw"
-              color="neutral"
-              variant="ghost"
-              square
+            <USelect
+              v-model="sortModel"
+              :items="sortOptions"
               size="lg"
-              :loading="scan.active"
-              aria-label="Rescan folders"
-              @click="rescan()"
+              icon="i-lucide-arrow-up-down"
+              class="w-44"
+              aria-label="Sort clips"
             />
-          </UTooltip>
-          <UButton
-            icon="i-lucide-folder-plus"
-            label="Add folder"
-            color="primary"
-            size="lg"
-            @click="addFolder()"
-          />
+
+            <USelect
+              v-model="shareFilter"
+              :items="SHARE_FILTERS"
+              :icon="shareIcon"
+              size="lg"
+              class="w-44"
+              aria-label="Filter by sharing"
+            />
+
+            <UFieldGroup size="lg" aria-label="Card size">
+              <UTooltip v-for="s in sizeOptions" :key="s.value" :text="s.label">
+                <UButton
+                  :icon="s.icon"
+                  square
+                  :color="settings.gridSize === s.value ? 'primary' : 'neutral'"
+                  :variant="settings.gridSize === s.value ? 'soft' : 'subtle'"
+                  :aria-pressed="settings.gridSize === s.value"
+                  :aria-label="s.label"
+                  @click="updateSettings({ gridSize: s.value })"
+                />
+              </UTooltip>
+            </UFieldGroup>
+          </template>
+
+          <template v-else>
+            <UTooltip text="Rescan folders">
+              <UButton
+                icon="i-lucide-refresh-cw"
+                color="neutral"
+                variant="ghost"
+                square
+                size="lg"
+                :loading="scan.active"
+                aria-label="Rescan folders"
+                @click="rescan()"
+              />
+            </UTooltip>
+            <UButton
+              icon="i-lucide-folder-plus"
+              label="Add folder"
+              color="primary"
+              size="lg"
+              @click="addFolder()"
+            />
+          </template>
         </div>
       </Transition>
     </header>
@@ -225,7 +289,7 @@ const sortModel = computed({
     <!-- Grid, games browser and both empty states share one box and cross-fade.
          The first folder finishing its scan, or a game's last clip going away,
          then reads as a dissolve rather than the screen blinking to a new one. -->
-    <div class="stage">
+    <div ref="stageEl" class="stage">
       <Transition name="crossfade">
         <ClipGrid
           v-if="inGame && visibleClips.length"
@@ -233,6 +297,26 @@ const sortModel = computed({
           :sections="sections"
           :reset-key="gridResetKey"
         />
+
+        <!-- The name filter hid every clip: say so, ahead of the sharing filter. -->
+        <UEmpty
+          v-else-if="inGame && clipQuery"
+          key="nomatch"
+          class="empty"
+          icon="i-lucide-search-x"
+          :title="`No clips match “${clipQuery}”`"
+          description="Try a shorter name — the filter also ignores spaces and punctuation."
+        >
+          <template #actions>
+            <UButton
+              label="Clear filter"
+              color="neutral"
+              variant="subtle"
+              size="lg"
+              @click="clipQuery = ''"
+            />
+          </template>
+        </UEmpty>
 
         <!-- The sharing filter hid every clip of this game: say so instead of
              showing the no-clips screen. -->
@@ -309,7 +393,19 @@ const sortModel = computed({
               <Icon name="folder-plus" :size="16" />
               Choose a folder
             </StarBorder>
+            <!-- The Videos folder main found: one click, no picker. -->
+            <UTooltip v-for="p in suggestedFolders" :key="p" :text="p">
+              <UButton
+                :label="`Add ${basename(p)}`"
+                icon="i-lucide-folder"
+                color="neutral"
+                variant="subtle"
+                size="lg"
+                @click="addFolder(p)"
+              />
+            </UTooltip>
           </div>
+          <p class="hero-hint">…or drop a folder anywhere on this screen.</p>
         </div>
 
         <UEmpty
@@ -325,6 +421,10 @@ const sortModel = computed({
           "
           :ui="{ icon: scan.active ? 'animate-spin' : '' }"
         />
+      </Transition>
+
+      <Transition name="fade">
+        <DropWash v-if="dropping" />
       </Transition>
     </div>
   </section>
@@ -345,6 +445,12 @@ const sortModel = computed({
   padding: 22px 28px 18px;
 }
 .head-text {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  min-width: 120px;
+}
+.title-block {
   min-width: 0;
 }
 .title {
@@ -354,19 +460,8 @@ const sortModel = computed({
   letter-spacing: 0.01em;
   overflow: hidden;
   white-space: nowrap;
+  text-overflow: ellipsis;
   max-width: 100%;
-}
-.back-slot {
-  height: 0;
-  overflow: hidden;
-  transition: height var(--dur) var(--ease-out);
-}
-.back-slot.open {
-  /* The xs button plus the 4px that used to sit under it as a margin. */
-  height: 28px;
-}
-.back {
-  margin: 0 0 0 -6px;
 }
 /* The gap lives on the slot, not on the line: the leaving line goes absolute
    mid-transition, where a margin would be dropped and shift it a few pixels. */
@@ -385,13 +480,20 @@ const sortModel = computed({
 .dot {
   color: var(--fg-dim);
 }
-.toolbar,
-.game-tools {
+.toolbar {
   display: flex;
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
   justify-content: flex-end;
+}
+/* Sized to hold one row at the 980px minimum; the title truncates instead. */
+.toolbar.in-game {
+  flex-wrap: nowrap;
+  flex: 0 0 auto;
+}
+.filter {
+  width: 200px;
 }
 /* Holds the box every branch animates inside; without it the leaving one, which
    goes absolute mid-transition, would anchor to the window. */
@@ -475,6 +577,10 @@ const sortModel = computed({
   flex-wrap: wrap;
   justify-content: center;
   margin-top: 12px;
+}
+.hero-hint {
+  font-size: var(--text-sm);
+  color: var(--fg-dim);
 }
 /* StarBorder ships its own dark inner pill; restyle it as our primary button. */
 .star-btn {

@@ -87,6 +87,11 @@ export function createMainWindow({ autoShow = true }: { autoShow?: boolean } = {
     pushVisible()
   })
 
+  // A file dropped where no handler claims it would otherwise navigate the
+  // window to file:// and take the app down with it. Nothing in Sift navigates
+  // on purpose (reloads go through webContents.reload, which does not fire this).
+  win.webContents.on('will-navigate', (e) => e.preventDefault())
+
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:/.test(url)) void shell.openExternal(url)
     return { action: 'deny' }

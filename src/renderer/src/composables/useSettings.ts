@@ -70,7 +70,7 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
     ],
   },
   {
-    label: 'Appearance',
+    label: 'App',
     sections: [
       {
         id: 'themes',
@@ -79,19 +79,14 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
         description: 'The colours the chrome is painted in. Thumbnails and clips are never tinted.',
         keywords: 'theme colour color oled black dark amoled accent palette appearance look',
       },
-    ],
-  },
-  {
-    label: 'System',
-    sections: [
       {
         id: 'os',
-        label: 'OS settings',
+        label: 'Window & tray',
         icon: 'i-lucide-app-window',
         description:
           'What closing the window does, and whether Sift keeps working once it is out of sight.',
         keywords:
-          'os tray background close minimize hide quit exit taskbar windows notification area system',
+          'os tray background close minimize hide quit exit taskbar windows notification area system window',
       },
     ],
   },

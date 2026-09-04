@@ -137,4 +137,6 @@ export interface Api {
   on<K extends EventName>(name: K, handler: (payload: EventMap[K]) => void): () => void
   mediaUrl(clipId: string): string
   thumbUrl(file: string): string
+  /** Absolute path behind a dropped `File`; `''` for one that is not backed by disk. */
+  pathForFile(file: File): string
 }

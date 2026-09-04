@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { nextTick, onMounted } from 'vue'
+import { nextTick, onBeforeUnmount, onMounted } from 'vue'
 import TitleBar from './components/TitleBar.vue'
 import Sidebar from './components/Sidebar.vue'
 import LibraryView from './components/LibraryView.vue'
@@ -9,6 +9,7 @@ import PlayerOverlay from './components/PlayerOverlay.vue'
 import DialogHost from './components/DialogHost.vue'
 import ToastBridge from './components/ToastBridge.vue'
 import WhatsNewDialog from './components/WhatsNewDialog.vue'
+import ShortcutsDialog from './components/ShortcutsDialog.vue'
 import UploadDialog from './components/youtube/UploadDialog.vue'
 import { initLibrary, initialExports, ready, view } from '@/composables/useLibrary'
 import { initExports } from '@/composables/useExports'
@@ -17,9 +18,14 @@ import { initUploads } from '@/composables/useUploads'
 import { initYouTube } from '@/composables/useYouTube'
 import { isOpen } from '@/composables/usePlayer'
 import { openSettings } from '@/composables/useSettings'
+import { installShortcuts } from '@/composables/useShortcuts'
+import { installDropGuard } from '@/composables/useDropFolders'
 import { initWindowVisibility } from '@/composables/useWindowVisibility'
 // Side-effect import: applies the persisted theme to <html> before first paint.
 import '@/composables/useTheme'
+
+let offShortcuts: (() => void) | null = null
+let offDropGuard: (() => void) | null = null
 
 onMounted(async () => {
   // The tray's Settings item. Subscribed here rather than in useLibrary because
@@ -28,6 +34,8 @@ onMounted(async () => {
   // Same reason: the window can hide at any point, so the subscription has to
   // outlive every view.
   initWindowVisibility()
+  offShortcuts = installShortcuts()
+  offDropGuard = installDropGuard()
   try {
     await initLibrary()
     initExports(initialExports.value)
@@ -44,6 +52,11 @@ onMounted(async () => {
     await nextTick()
     requestAnimationFrame(() => window.api.window.ready())
   }
+})
+
+onBeforeUnmount(() => {
+  offShortcuts?.()
+  offDropGuard?.()
 })
 </script>
 
@@ -71,6 +84,7 @@ onMounted(async () => {
       </Transition>
       <DialogHost />
       <WhatsNewDialog />
+      <ShortcutsDialog />
       <UploadDialog />
       <ToastBridge />
     </div>

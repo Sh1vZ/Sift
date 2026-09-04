@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { onBeforeUnmount, onMounted, ref } from 'vue'
 import Icon from './Icon.vue'
 import AnimatedList from './bits/AnimatedList.vue'
 import SpotlightCard from './bits/SpotlightCard.vue'
@@ -7,12 +8,17 @@ import {
   gameQuery,
   gameSort,
   games,
+  newestClipOf,
   now,
   openGame,
+  rescan,
+  revealClip,
+  scan,
   type GameSort,
   type GameSummary,
 } from '@/composables/useLibrary'
 import { motionEnabled } from '@/composables/useMotion'
+import { registerSearch } from '@/composables/useShortcuts'
 import { activeTheme } from '@/composables/useTheme'
 import { isOpen as playerOpen } from '@/composables/usePlayer'
 import { visible as windowVisible } from '@/composables/useWindowVisibility'
@@ -33,14 +39,49 @@ function onKey(e: KeyboardEvent): void {
   }
 }
 
+// `/` and Ctrl+F land here while this screen is up.
+const search = ref<{ inputRef: HTMLInputElement | null } | null>(null)
+let offSearch: (() => void) | null = null
+onMounted(() => {
+  offSearch = registerSearch(() => search.value?.inputRef?.select())
+})
+onBeforeUnmount(() => offSearch?.())
+
 const keyOf = (g: GameSummary): string => g.name
 const open = (g: GameSummary): void => openGame(g.name)
+
+/** Right-click on a game: what you can do to it without stepping in. */
+function gameMenu(g: GameSummary) {
+  const newest = newestClipOf(g.name)
+  return [
+    [
+      { label: 'Open', icon: 'i-lucide-arrow-right', onSelect: () => open(g) },
+      {
+        label: 'Show folder in Explorer',
+        icon: 'i-lucide-folder-open',
+        disabled: !newest,
+        onSelect: () => {
+          if (newest) revealClip(newest)
+        },
+      },
+    ],
+    [
+      {
+        label: 'Rescan folders',
+        icon: 'i-lucide-refresh-cw',
+        disabled: scan.value.active,
+        onSelect: () => void rescan(),
+      },
+    ],
+  ]
+}
 </script>
 
 <template>
   <div class="browser">
     <div class="tools">
       <UInput
+        ref="search"
         v-model="gameQuery"
         class="search"
         icon="i-lucide-search"
@@ -106,46 +147,48 @@ const open = (g: GameSummary): void => openGame(g.name)
           @item-selected="open"
         >
           <template #default="{ item: g, selected }">
-            <SpotlightCard
-              as="button"
-              class="game"
-              :class="{ 'is-selected': selected }"
-              :spotlight-color="activeTheme.spotlight"
-              :title="g.name"
-            >
-              <span class="cover">
-                <!-- The list is not windowed, so every cover stays decoded. Dropping
-                     them while the window is away is the bulk of what a hidden
-                     Games screen was holding; the box keeps its aspect ratio, so
-                     falling back to the placeholder shifts nothing. -->
-                <img
-                  v-if="g.cover && windowVisible"
-                  :src="api.thumbUrl(g.cover)"
-                  alt=""
-                  loading="lazy"
-                  decoding="async"
-                />
-                <Icon v-else name="gamepad" :size="24" :stroke="1.6" />
-              </span>
-              <span class="text">
-                <span class="name truncate">{{ g.name }}</span>
-                <span class="stats">
-                  <UBadge
-                    color="primary"
-                    variant="soft"
-                    size="sm"
-                    :label="`${g.count} clip${g.count === 1 ? '' : 's'}`"
+            <UContextMenu :items="gameMenu(g)" :ui="{ content: 'min-w-52' }">
+              <SpotlightCard
+                as="button"
+                class="game"
+                :class="{ 'is-selected': selected }"
+                :spotlight-color="activeTheme.spotlight"
+                :title="g.name"
+              >
+                <span class="cover">
+                  <!-- The list is not windowed, so every cover stays decoded. Dropping
+                       them while the window is away is the bulk of what a hidden
+                       Games screen was holding; the box keeps its aspect ratio, so
+                       falling back to the placeholder shifts nothing. -->
+                  <img
+                    v-if="g.cover && windowVisible"
+                    :src="api.thumbUrl(g.cover)"
+                    alt=""
+                    loading="lazy"
+                    decoding="async"
                   />
-                  <span class="mono">{{ formatDuration(g.totalDuration) }}</span>
-                  <span class="dot">·</span>
-                  <span>{{ formatBytes(g.totalSize) }}</span>
+                  <Icon v-else name="gamepad" :size="24" :stroke="1.6" />
                 </span>
-                <span class="last truncate"
-                  >Last clip {{ formatRelative(g.latestMs, now).toLowerCase() }}</span
-                >
-              </span>
-              <Icon name="chevron-right" :size="20" class="chev" />
-            </SpotlightCard>
+                <span class="text">
+                  <span class="name truncate">{{ g.name }}</span>
+                  <span class="stats">
+                    <UBadge
+                      color="primary"
+                      variant="soft"
+                      size="md"
+                      :label="`${g.count} clip${g.count === 1 ? '' : 's'}`"
+                    />
+                    <span class="mono">{{ formatDuration(g.totalDuration) }}</span>
+                    <span class="dot">·</span>
+                    <span>{{ formatBytes(g.totalSize) }}</span>
+                  </span>
+                  <span class="last truncate"
+                    >Last clip {{ formatRelative(g.latestMs, now).toLowerCase() }}</span
+                  >
+                </span>
+                <Icon name="chevron-right" :size="20" class="chev" />
+              </SpotlightCard>
+            </UContextMenu>
           </template>
         </AnimatedList>
 
@@ -191,8 +234,8 @@ const open = (g: GameSummary): void => openGame(g.name)
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: var(--text-xs);
-  color: var(--fg-dim);
+  font-size: var(--text-sm);
+  color: var(--fg-muted);
   white-space: nowrap;
 }
 .kbds span {
@@ -306,8 +349,8 @@ const open = (g: GameSummary): void => openGame(g.name)
   color: var(--fg-dim);
 }
 .last {
-  font-size: var(--text-xs);
-  color: var(--fg-dim);
+  font-size: var(--text-sm);
+  color: var(--fg-muted);
 }
 .game .chev {
   position: relative;

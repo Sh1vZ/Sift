@@ -53,6 +53,7 @@ const ICONS: Record<string, string> = {
   square: 'i-lucide-square',
   restore: 'i-lucide-copy',
   'hard-drive': 'i-lucide-hard-drive',
+  keyboard: 'i-lucide-keyboard',
   eye: 'i-lucide-eye',
   image: 'i-lucide-image',
   sparkles: 'i-lucide-sparkles',

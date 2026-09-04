@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { closeDialog, dialog, type ConfirmChoice } from '@/composables/useDialogs'
 
 const value = ref('')
+/** The prompt's UInput; its exposed `inputRef` is the native element. */
+const input = ref<{ inputRef: HTMLInputElement | null } | null>(null)
 const open = computed({
   get: () => dialog.value !== null,
   set: (v: boolean) => {
@@ -21,6 +23,11 @@ const canSubmit = computed(() => !isPrompt.value || value.value.trim().length > 
 
 watch(dialog, (d) => {
   value.value = d?.kind === 'prompt' ? d.value : ''
+  // A prompt opens with its text selected, so typing replaces the old name
+  // outright. The modal mounts its body a frame after `dialog` is set, hence
+  // the double wait.
+  if (d?.kind === 'prompt')
+    void nextTick(() => requestAnimationFrame(() => input.value?.inputRef?.select()))
 })
 
 function submit(choice: ConfirmChoice = 'confirm'): void {
@@ -61,6 +68,7 @@ watch(open, (v) => {
     <template v-if="isPrompt || detail" #body>
       <UFormField v-if="isPrompt" :label="dialog?.kind === 'prompt' ? dialog.label : ''">
         <UInput
+          ref="input"
           v-model="value"
           class="w-full"
           size="lg"

@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer, webFrame, type IpcRendererEvent } from 'electron'
+import { contextBridge, ipcRenderer, webFrame, webUtils, type IpcRendererEvent } from 'electron'
 import type { Api } from '@shared/api'
 import type { EventMap, EventName } from '@shared/types'
 
@@ -76,6 +76,8 @@ const api: Api = {
   },
   mediaUrl: (clipId) => `clip://media/${clipId}`,
   thumbUrl: (file) => `clip://thumb/${encodeURIComponent(file)}`,
+  // The renderer never sees `File.path`; this is the one sanctioned way to a path.
+  pathForFile: (file) => webUtils.getPathForFile(file),
 }
 
 contextBridge.exposeInMainWorld('api', api)
