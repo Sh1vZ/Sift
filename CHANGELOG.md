@@ -7,6 +7,21 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 uses [semantic versioning](https://semver.org/spec/v2.0.0.html) — beta builds carry a
 `-beta.N` suffix and update from the beta channel.
 
+## [1.0.0-beta.2] - 2026-09-03
+
+### Added
+
+- Three new themes. **Nox** is a deep plum canvas with a magenta identity and amber
+  punctuation; **Grim** is a near-black forest ground with a sage identity and
+  terracotta punctuation; **Space** is a deep-space navy with a cosmic blue identity
+  and starlight gold punctuation.
+
+### Removed
+
+- The Arctic and Verdant themes. If either was your pick, Sift falls back to the
+  default theme the next time it starts, and you can choose a new one in
+  Settings → Themes.
+
 ## [1.0.0-beta.1] - 2026-09-03
 
 The first public beta.
