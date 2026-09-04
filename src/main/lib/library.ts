@@ -22,7 +22,7 @@ import type {
 } from '@shared/types'
 import { fullChangelog, releaseNotesFor } from './changelog'
 import { copyFileToClipboard } from './clipboard'
-import { cleanTitle, clipId, deriveGame, parseRecordedAt } from './clips'
+import { cleanTitle, clipId, deriveGame, parseRecordedAt, prettifyGame } from './clips'
 import {
   INVALID_NAME,
   buildExportArgs,
@@ -59,6 +59,8 @@ const EXPORT_MAX_MS = 15 * 60_000
 /** How long a finished job stays in the list for the progress card to show its end state. */
 const EXPORT_PRUNE_DONE_MS = 10_000
 const EXPORT_PRUNE_FAILED_MS = 30_000
+/** Long enough for any real title, short enough to stay a label rather than a paragraph. */
+const MAX_GAME_NAME = 120
 
 const isTerminal = (j: ExportJob): boolean =>
   j.state === 'done' || j.state === 'failed' || j.state === 'cancelled'
@@ -174,6 +176,48 @@ export class Library {
   setSeen(id: string, seen: boolean): ActionResult {
     if (!this.store.data.clips[id]) return { ok: false, error: 'Clip not found.' }
     this.applyPatch({ id, seenAtMs: seen ? Date.now() : 0 })
+    return { ok: true }
+  }
+
+  // -------------------------------------------------------------- game names
+
+  /** What a folder-derived game is shown as: the name the user gave it, else its own. */
+  private displayGame(sourceGame: string): string {
+    return this.store.data.gameAliases[sourceGame] ?? sourceGame
+  }
+
+  /**
+   * Renames games, or merges several into one, for display only — nothing on
+   * disk is renamed or moved. `sources` are folder-derived names (`Clip.sourceGame`);
+   * pointing two of them at one display name is the merge. A null display drops
+   * the aliases, putting each game back under the name its folder gave it.
+   */
+  setGameAlias(sources: string[], display: string | null): ActionResult {
+    const names = [...new Set(sources.map((s) => s.trim()).filter(Boolean))]
+    if (!names.length) return { ok: false, error: 'No game to rename.' }
+
+    let label: string | null = null
+    if (display !== null) {
+      // Checked before prettifying: `prettifyGame` turns a blank name into
+      // "Clips", which is not what someone who cleared the field meant.
+      if (!display.trim()) return { ok: false, error: 'Give the game a name.' }
+      label = prettifyGame(display)
+      if (label.length > MAX_GAME_NAME) return { ok: false, error: 'That name is too long.' }
+    }
+
+    // An alias that repeats its own source is stored as no alias at all, so the
+    // table never fills up with rows that change nothing.
+    this.store.writeGameAliases(names.map((n) => [n, label === n ? null : label]))
+
+    // Clips already indexed move now rather than at the next scan. The patches
+    // ride the ordinary 150 ms `clips:updated` batch, so merging a game with
+    // 3,000 clips is one message rather than 3,000.
+    const affected = new Set(names)
+    for (const clip of Object.values(this.store.data.clips)) {
+      if (!affected.has(clip.sourceGame)) continue
+      const next = this.displayGame(clip.sourceGame)
+      if (next !== clip.game) this.applyPatch({ id: clip.id, game: next })
+    }
     return { ok: true }
   }
 
@@ -479,7 +523,7 @@ export class Library {
       id: clipId(target),
       path: target,
       name,
-      title: cleanTitle(name, clip.game),
+      title: cleanTitle(name, clip.sourceGame),
     }
     if (clip.thumb) {
       next.thumb = thumbName(next)
@@ -667,14 +711,20 @@ export class Library {
       const folder = this.clipsFolder()
       if (!folder) throw new Error('The clips folder was removed during the export.')
 
+      // The directory the export landed in, not `job.game`: `safeGameDir` may
+      // have dropped a character a folder name cannot carry, and this is what a
+      // rescan of the clips folder would derive for the file.
+      const sourceGame = deriveGame(folder, out)
+
       const clip: Clip = {
         id: clipId(out),
         path: out,
         name: job.name,
-        title: cleanTitle(job.name, job.game),
+        title: cleanTitle(job.name, sourceGame),
         ext: job.ext,
         folderId: folder.id,
-        game: job.game,
+        game: this.displayGame(sourceGame),
+        sourceGame,
         size: st.size,
         mtimeMs: st.mtimeMs,
         recordedAtMs: source.recordedAtMs,
@@ -801,15 +851,19 @@ export class Library {
     if (previous) void removeArtifacts(previous)
     const ext = extname(file)
     const name = basename(file, ext)
-    const game = deriveGame(folder, file)
+    const sourceGame = deriveGame(folder, file)
     const clip: Clip = {
       id: clipId(file),
       path: file,
       name,
-      title: cleanTitle(name, game),
+      // Pinned to the folder's own name: titles are computed once, here, so a
+      // later rename of the game must not leave old titles disagreeing with new.
+      title: cleanTitle(name, sourceGame),
       ext,
       folderId: folder.id,
-      game,
+      // Re-applied on every index pass, so a rename or merge survives a rescan.
+      game: this.displayGame(sourceGame),
+      sourceGame,
       size: st.size,
       mtimeMs: st.mtimeMs,
       recordedAtMs: parseRecordedAt(name) ?? Math.min(st.birthtimeMs || st.mtimeMs, st.mtimeMs),

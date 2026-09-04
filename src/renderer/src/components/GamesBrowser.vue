@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import GameMergeHints from './GameMergeHints.vue'
 import Icon from './Icon.vue'
 import AnimatedList from './bits/AnimatedList.vue'
 import SpotlightCard from './bits/SpotlightCard.vue'
+import { mergeGamesDialog, renameGameDialog, splitGameDialog } from '@/composables/useGameNames'
 import {
   filteredGames,
   gameQuery,
@@ -51,7 +53,7 @@ const keyOf = (g: GameSummary): string => g.name
 const open = (g: GameSummary): void => openGame(g.name)
 
 /** A game's actions: what you can do to it without stepping in. */
-function gameMenu(g: GameSummary) {
+function gameMenu(g: GameSummary, targets: GameSummary[]) {
   const newest = newestClipOf(g.name)
   return [
     [
@@ -64,6 +66,31 @@ function gameMenu(g: GameSummary) {
           if (newest) revealClip(newest)
         },
       },
+    ],
+    // Renaming and merging are what a card looks like, never what is on disk.
+    // Dragging one card onto another does the same merge; this is the path a
+    // keyboard reaches.
+    [
+      { label: 'Rename…', icon: 'i-lucide-pencil', onSelect: () => void renameGameDialog(g) },
+      {
+        label: 'Merge into…',
+        icon: 'i-lucide-merge',
+        disabled: targets.length < 2,
+        children: targets
+          .filter((t) => t.name !== g.name)
+          .map((t) => ({ label: t.name, onSelect: () => void mergeGamesDialog(g, t) })),
+      },
+      // Only a card showing a name the user chose has somewhere to go back to.
+      ...(g.renamed
+        ? [
+            {
+              label:
+                g.sources.length > 1 ? `Split into ${g.sources.length} games` : 'Use folder name',
+              icon: 'i-lucide-split',
+              onSelect: () => void splitGameDialog(g),
+            },
+          ]
+        : []),
     ],
     [
       {
@@ -82,10 +109,52 @@ function gameMenu(g: GameSummary) {
  * pointer. Two menus per card off the same map costs nothing.
  */
 const gameMenus = computed(() => {
+  const targets = filteredGames.value
   const menus: Record<string, ReturnType<typeof gameMenu>> = {}
-  for (const g of filteredGames.value) menus[g.name] = gameMenu(g)
+  for (const g of targets) menus[g.name] = gameMenu(g, targets)
   return menus
 })
+
+// ------------------------------------------------------------ drag to merge
+// Both ends of the drag live in the one v-for below, so the state is local.
+// `useFolderDrop` on the stage gates on `dataTransfer.types` carrying 'Files',
+// which a card drag never does — the two never see each other's drags.
+
+const DRAG_TYPE = 'application/x-sift-game'
+const dragging = ref<GameSummary | null>(null)
+const dropTarget = ref<string | null>(null)
+
+function onDragStart(e: DragEvent, g: GameSummary): void {
+  dragging.value = g
+  dropTarget.value = null
+  // Chromium refuses to start a drag that carries nothing.
+  e.dataTransfer?.setData(DRAG_TYPE, g.name)
+  if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move'
+}
+
+function onDragEnd(): void {
+  dragging.value = null
+  dropTarget.value = null
+}
+
+function onDragOver(e: DragEvent, g: GameSummary): void {
+  if (!dragging.value || dragging.value.name === g.name) return
+  e.preventDefault()
+  if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'
+  dropTarget.value = g.name
+}
+
+function onDragLeave(g: GameSummary): void {
+  if (dropTarget.value === g.name) dropTarget.value = null
+}
+
+function onDrop(e: DragEvent, g: GameSummary): void {
+  const from = dragging.value
+  onDragEnd()
+  if (!from || from.name === g.name) return
+  e.preventDefault()
+  void mergeGamesDialog(from, g)
+}
 
 // Arrow keys belong to an open menu while one is up, not to the list underneath.
 const menuOpen = ref(false)
@@ -147,6 +216,8 @@ const menuOpen = ref(false)
       />
     </div>
 
+    <GameMergeHints />
+
     <div class="stage">
       <Transition name="crossfade">
         <AnimatedList
@@ -168,7 +239,19 @@ const menuOpen = ref(false)
             >
               <!-- The card is a <button>, so the menu button cannot sit inside
                    it; it rides alongside and follows the card's nudge. -->
-              <div class="game-slot">
+              <div
+                class="game-slot"
+                :class="{
+                  'is-dragging': dragging?.name === g.name,
+                  'is-drop': dropTarget === g.name,
+                }"
+                draggable="true"
+                @dragstart="onDragStart($event, g)"
+                @dragend="onDragEnd"
+                @dragover="onDragOver($event, g)"
+                @dragleave="onDragLeave(g)"
+                @drop="onDrop($event, g)"
+              >
                 <SpotlightCard
                   as="button"
                   class="game"
@@ -216,8 +299,10 @@ const menuOpen = ref(false)
                   :ui="{ content: 'min-w-52' }"
                   @update:open="menuOpen = $event"
                 >
+                  <!-- Not draggable, so reaching for the menu never starts a merge. -->
                   <UButton
                     class="kebab"
+                    draggable="false"
                     icon="i-lucide-ellipsis-vertical"
                     color="neutral"
                     variant="ghost"
@@ -319,6 +404,18 @@ const menuOpen = ref(false)
 .game-slot {
   position: relative;
   height: 100%;
+}
+/* Drag to merge. Colour and opacity only: these are repeated elements, and
+   moving them would shuffle the grid under the pointer mid-drag. */
+.game-slot.is-dragging {
+  opacity: 0.45;
+}
+/* The same language `DropWash` speaks for a folder drop, so a drop target reads
+   the same wherever it is: the primary wash, never the rose/amber accent. */
+.game-slot.is-drop :deep(.game) {
+  border-color: var(--border-active);
+  background: var(--primary-soft);
+  box-shadow: var(--glow-primary);
 }
 /* Above the card's spotlight wash, clear of the chevron, and dim until the row
    is under the pointer or holds focus. */

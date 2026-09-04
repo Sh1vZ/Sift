@@ -50,10 +50,23 @@ export function registerIpc(
     if (p.theme !== undefined && !THEME_IDS.includes(p.theme)) delete p.theme
     if (p.autoCheckUpdates !== undefined) p.autoCheckUpdates = p.autoCheckUpdates === true
     if (p.lastSeenVersion !== undefined) p.lastSeenVersion = str(p.lastSeenVersion)
+    // Capped: an unbounded list of dismissals would grow with every rescan.
+    if (p.dismissedGameMerges !== undefined)
+      p.dismissedGameMerges = Array.isArray(p.dismissedGameMerges)
+        ? p.dismissedGameMerges.map(str).filter(Boolean).slice(-50)
+        : []
     const settings = library.setSettings(p)
     onSettingsApplied(settings)
     return settings
   })
+
+  // Rebuilt field by field: the payload crosses the bridge as plain JSON.
+  ipcMain.handle('library:set-game-alias', (_e, sources, display) =>
+    library.setGameAlias(
+      Array.isArray(sources) ? sources.map(str).filter(Boolean) : [],
+      display === null || display === undefined ? null : str(display),
+    ),
+  )
 
   ipcMain.handle('library:stats', () => library.stats())
   ipcMain.handle('library:reveal-data', () => library.revealData())

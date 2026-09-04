@@ -5,6 +5,11 @@ interface LibraryData {
   folders: LibraryFolder[]
   clips: Record<string, Clip>
   settings: Settings
+  /**
+   * Display names the user gave games, keyed by the name the folder gave them.
+   * Several sources pointing at one display name is a merge.
+   */
+  gameAliases: Record<string, string>
 }
 
 const FLUSH_MS = 200
@@ -39,6 +44,14 @@ const MIGRATIONS: Array<(db: DatabaseSync) => void> = [
     db.exec('ALTER TABLE clips ADD COLUMN favourite INTEGER NOT NULL DEFAULT 0')
     db.exec('ALTER TABLE clips ADD COLUMN seen_at_ms REAL NOT NULL DEFAULT 0')
   },
+  // v5 -> v6: games can be renamed and merged for display. `source_game` keeps
+  // the name the folder gave the clip, so a merge is undoable and can be
+  // re-applied on a rescan; `game` becomes the name the app shows.
+  (db) => {
+    db.exec("ALTER TABLE clips ADD COLUMN source_game TEXT NOT NULL DEFAULT ''")
+    db.exec('UPDATE clips SET source_game = game')
+    db.exec(GAME_ALIASES_TABLE)
+  },
 ]
 const SCHEMA_VERSION = MIGRATIONS.length + 1
 
@@ -65,6 +78,17 @@ CREATE TABLE IF NOT EXISTS youtube_accounts (
   exhausted_until_ms REAL NOT NULL DEFAULT 0,
   added_at_ms        REAL NOT NULL,
   sort               INTEGER NOT NULL DEFAULT 0
+);
+`
+
+/**
+ * One row per folder-derived game name the user renamed or merged away. Absent
+ * means "show the folder's own name", so clearing an alias is a DELETE.
+ */
+const GAME_ALIASES_TABLE = `
+CREATE TABLE IF NOT EXISTS game_aliases (
+  source  TEXT PRIMARY KEY,
+  display TEXT NOT NULL
 );
 `
 
@@ -114,9 +138,11 @@ CREATE TABLE IF NOT EXISTS clips (
   created_at_ms  REAL NOT NULL DEFAULT 0,
   youtube_id     TEXT NOT NULL DEFAULT '',
   favourite      INTEGER NOT NULL DEFAULT 0,
-  seen_at_ms     REAL NOT NULL DEFAULT 0
+  seen_at_ms     REAL NOT NULL DEFAULT 0,
+  source_game    TEXT NOT NULL DEFAULT ''
 );
 ${YOUTUBE_ACCOUNTS_TABLE}
+${GAME_ALIASES_TABLE}
 `
 
 /** Created after migrations run, since an index may name a column an older database only gains then. */
@@ -156,6 +182,7 @@ interface ClipRow {
   youtube_id: string
   favourite: number
   seen_at_ms: number
+  source_game: string
 }
 
 /** A `youtube_accounts` row as stored. The `_enc` columns hold base64 ciphertext or ''. */
@@ -198,7 +225,12 @@ interface FolderRow {
  * rewrite of the index.
  */
 export class Store {
-  data: LibraryData = { folders: [], clips: {}, settings: { ...DEFAULT_SETTINGS } }
+  data: LibraryData = {
+    folders: [],
+    clips: {},
+    settings: { ...DEFAULT_SETTINGS },
+    gameAliases: {},
+  }
 
   private db: DatabaseSync | null = null
   private stmts!: {
@@ -209,6 +241,8 @@ export class Store {
     setSetting: StatementSync
     upsertAccount: StatementSync
     deleteAccount: StatementSync
+    setGameAlias: StatementSync
+    deleteGameAlias: StatementSync
   }
   /**
    * Coalesced pending writes, keyed by row; the latest op for a key wins.
@@ -253,6 +287,16 @@ export class Store {
       clips[r.id] = rowToClip(r)
     this.data.clips = clips
 
+    const aliases: Record<string, string> = {}
+    for (const r of db
+      .prepare('SELECT source, display FROM game_aliases')
+      .all() as unknown as Array<{
+      source: string
+      display: string
+    }>)
+      aliases[r.source] = r.display
+    this.data.gameAliases = aliases
+
     const settings: Record<string, unknown> = { ...DEFAULT_SETTINGS }
     for (const r of db.prepare('SELECT key, value FROM settings').all() as unknown as Array<{
       key: string
@@ -281,8 +325,9 @@ export class Store {
       upsertClip: db.prepare(`
         INSERT INTO clips (id, path, name, title, ext, folder_id, game, size, mtime_ms, recorded_at_ms,
           duration, width, height, fps, vcodec, has_audio, thumb, sprite, sprite_frames, probe_state,
-          source_id, trim_start, trim_end, muted, created_at_ms, youtube_id, favourite, seen_at_ms)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          source_id, trim_start, trim_end, muted, created_at_ms, youtube_id, favourite, seen_at_ms,
+          source_game)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
           path = excluded.path, name = excluded.name, title = excluded.title, ext = excluded.ext,
           folder_id = excluded.folder_id, game = excluded.game, size = excluded.size,
@@ -293,7 +338,7 @@ export class Store {
           source_id = excluded.source_id, trim_start = excluded.trim_start, trim_end = excluded.trim_end,
           muted = excluded.muted, created_at_ms = excluded.created_at_ms,
           youtube_id = excluded.youtube_id, favourite = excluded.favourite,
-          seen_at_ms = excluded.seen_at_ms`),
+          seen_at_ms = excluded.seen_at_ms, source_game = excluded.source_game`),
       deleteClip: db.prepare('DELETE FROM clips WHERE id = ?'),
       setSetting: db.prepare(
         'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
@@ -312,6 +357,33 @@ export class Store {
           quota_local_used = excluded.quota_local_used, exhausted_until_ms = excluded.exhausted_until_ms,
           added_at_ms = excluded.added_at_ms, sort = excluded.sort`),
       deleteAccount: db.prepare('DELETE FROM youtube_accounts WHERE id = ?'),
+      setGameAlias: db.prepare(
+        'INSERT INTO game_aliases (source, display) VALUES (?, ?) ON CONFLICT(source) DO UPDATE SET display = excluded.display',
+      ),
+      deleteGameAlias: db.prepare('DELETE FROM game_aliases WHERE source = ?'),
+    }
+  }
+
+  // ------------------------------------------------------------ game names
+
+  /**
+   * Sets or clears display names for folder-derived games, in one transaction.
+   * A null display drops the row, putting the game back under its folder name.
+   * Written straight through rather than through the coalescing flush: there
+   * are a handful of rows, they change only when the user asks, and the games
+   * grid re-reads `data.gameAliases` as soon as this returns.
+   */
+  writeGameAliases(entries: Array<[source: string, display: string | null]>): void {
+    if (!this.db || !entries.length) return
+    this.transaction(() => {
+      for (const [source, display] of entries) {
+        if (display) this.stmts.setGameAlias.run(source, display)
+        else this.stmts.deleteGameAlias.run(source)
+      }
+    })
+    for (const [source, display] of entries) {
+      if (display) this.data.gameAliases[source] = display
+      else delete this.data.gameAliases[source]
     }
   }
 
@@ -484,6 +556,7 @@ export class Store {
       c.youtubeId,
       c.favourite ? 1 : 0,
       c.seenAtMs,
+      c.sourceGame,
     )
   }
 
@@ -518,6 +591,9 @@ function rowToClip(r: ClipRow): Clip {
     ext: r.ext,
     folderId: r.folder_id,
     game: r.game,
+    // Databases migrated from v5 backfill this, but a row written by an older
+    // build in between would not: fall back to the name it is shown under.
+    sourceGame: r.source_game || r.game,
     size: r.size,
     mtimeMs: r.mtime_ms,
     recordedAtMs: r.recorded_at_ms,

@@ -26,7 +26,8 @@ export function closeSearch(): void {
 /**
  * Ranked so the clip you meant is first: a title that starts with what you
  * typed beats one that merely contains it, which beats a punctuation-insensitive
- * match, which beats matching only the game. Recency breaks ties.
+ * match, which beats matching only the game — and last, a game the user renamed,
+ * matched on the name its folder still has. Recency breaks ties.
  */
 function score(c: Clip, q: string, qs: string): number {
   const title = c.title.toLowerCase()
@@ -35,6 +36,8 @@ function score(c: Clip, q: string, qs: string): number {
   if (qs && squash(c.title).includes(qs)) return 2
   const game = c.game.toLowerCase()
   if (game.includes(q) || (qs && squash(c.game).includes(qs))) return 3
+  // A renamed game is still findable by the folder name on disk.
+  if (c.sourceGame !== c.game && qs && squash(c.sourceGame).includes(qs)) return 4
   return -1
 }
 

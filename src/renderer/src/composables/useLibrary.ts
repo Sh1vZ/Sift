@@ -90,10 +90,14 @@ export interface GameSummary {
   latestMs: number
   totalDuration: number
   totalSize: number
+  /** The folder names folded into this card — more than one once games are merged. */
+  sources: string[]
+  /** The name shown is not the one the folders gave it: renamed, merged, or both. */
+  renamed: boolean
 }
 
 export const games = computed<GameSummary[]>(() => {
-  const map = new Map<string, GameSummary & { coverMs: number }>()
+  const map = new Map<string, GameSummary & { coverMs: number; sourceSet: Set<string> }>()
   for (const c of recordings.value) {
     let g = map.get(c.game)
     if (!g) {
@@ -104,10 +108,14 @@ export const games = computed<GameSummary[]>(() => {
         latestMs: 0,
         totalDuration: 0,
         totalSize: 0,
+        sources: [],
+        renamed: false,
         coverMs: -1,
+        sourceSet: new Set(),
       }
       map.set(c.game, g)
     }
+    g.sourceSet.add(c.sourceGame)
     g.count++
     g.totalDuration += c.duration
     g.totalSize += c.size
@@ -116,6 +124,10 @@ export const games = computed<GameSummary[]>(() => {
       g.cover = c.thumb
       g.coverMs = c.recordedAtMs
     }
+  }
+  for (const g of map.values()) {
+    g.sources = [...g.sourceSet].sort((a, b) => a.localeCompare(b))
+    g.renamed = g.sources.length > 1 || g.sources[0] !== g.name
   }
   return [...map.values()].sort((a, b) => b.latestMs - a.latestMs)
 })
@@ -354,6 +366,85 @@ export const filteredGames = computed<GameSummary[]>(() => {
       return list
   }
 })
+
+/**
+ * Games whose names differ only in case or punctuation — `apex_legends` beside
+ * `Apex Legends`. Offered as a merge, never applied on their own: two folders
+ * that look alike are not always the same game, and only the user knows.
+ */
+export interface MergeSuggestion {
+  /** The squashed name the group shares; what a dismissal is remembered by. */
+  key: string
+  /** The busiest name first — the one the others are offered to fold into. */
+  games: GameSummary[]
+}
+
+export const mergeSuggestions = computed<MergeSuggestion[]>(() => {
+  const dismissed = new Set(settings.value.dismissedGameMerges)
+  const byKey = new Map<string, GameSummary[]>()
+  for (const g of games.value) {
+    const key = squash(g.name)
+    if (!key || dismissed.has(key)) continue
+    const group = byKey.get(key)
+    if (group) group.push(g)
+    else byKey.set(key, [g])
+  }
+  const out: MergeSuggestion[] = []
+  for (const [key, group] of byKey) {
+    if (group.length < 2) continue
+    // The fullest name leads: it is the one most likely worth keeping, and it is
+    // what the merge button offers to fold the others into.
+    out.push({
+      key,
+      games: [...group].sort((a, b) => b.count - a.count || b.name.length - a.name.length),
+    })
+  }
+  return out.sort((a, b) => b.games[0].count - a.games[0].count)
+})
+
+/** Remembers that a look-alike pair is two different games, so the hint stays gone. */
+export async function dismissMergeSuggestion(key: string): Promise<void> {
+  const kept = settings.value.dismissedGameMerges.filter((k) => k !== key)
+  await updateSettings({ dismissedGameMerges: [...kept, key].slice(-50) })
+}
+
+/** Mirrors `prettifyGame` in the main process, so the optimistic name matches what comes back. */
+const prettyGameName = (s: string): string => s.replace(/_+/g, ' ').replace(/\s+/g, ' ').trim()
+
+/**
+ * Renames a game, or merges several into one — display only, nothing on disk
+ * moves. `sources` are `Clip.sourceGame` values; a null display puts each game
+ * back under the name its folder gave it. Optimistic like the star: the grid
+ * regroups in the same frame and the `clips:updated` push confirms after.
+ */
+export async function setGameAlias(sources: string[], display: string | null): Promise<boolean> {
+  const label = display === null ? null : prettyGameName(display)
+  if (label !== null && !label) return false
+
+  const affected = new Set(sources)
+  const before = new Map<string, string>()
+  for (const c of clipsById.values()) if (affected.has(c.sourceGame)) before.set(c.id, c.game)
+  if (!before.size) return false
+
+  for (const id of before.keys()) {
+    const c = clipsById.get(id)
+    if (c) patchLocal(id, { game: label ?? c.sourceGame })
+  }
+  // Follow the game the user is standing in rather than dropping them back to
+  // the grid when the watch below notices the old name is gone.
+  const wasSelected = selectedGame.value
+  if (wasSelected !== null && [...before.values()].includes(wasSelected))
+    selectedGame.value = label ?? [...affected].sort((a, b) => a.localeCompare(b))[0]
+
+  const res = await api.library.setGameAlias(sources, display)
+  if (!res.ok) {
+    for (const [id, game] of before) patchLocal(id, { game })
+    selectedGame.value = wasSelected
+    toast('error', 'Could not rename', res.error)
+    return false
+  }
+  return true
+}
 
 // If the selected game vanishes (folder removed, last clip deleted) fall back to
 // All. Gated on there being a selection: a watch re-runs its getter on every

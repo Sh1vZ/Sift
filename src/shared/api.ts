@@ -32,6 +32,12 @@ export interface Api {
     removeFolder(id: string): Promise<ActionResult>
     rescan(folderId?: string): Promise<ActionResult>
     setSettings(patch: Partial<Settings>): Promise<Settings>
+    /**
+     * Renames games, or merges several into one, for display only — nothing on
+     * disk is renamed or moved. `sources` are `Clip.sourceGame` values; a null
+     * display puts them back under the names their folders gave them.
+     */
+    setGameAlias(sources: string[], display: string | null): Promise<ActionResult>
     /** Disk and runtime figures for the stats screen; measured on demand. */
     stats(): Promise<AppStats>
     /** Opens %APPDATA%/sift in the file manager. */

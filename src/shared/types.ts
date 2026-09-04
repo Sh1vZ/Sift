@@ -15,8 +15,13 @@ export interface Clip {
   title: string
   ext: string
   folderId: string
-  /** Group the clip belongs to — the sub-folder name, i.e. the game. */
+  /** Group the clip belongs to — the game, as the app shows it. */
   game: string
+  /**
+   * The name the folder gave the clip, before any rename or merge. Equal to
+   * `game` unless the user renamed the game or merged it into another.
+   */
+  sourceGame: string
   size: number
   mtimeMs: number
   /** Best-effort recording time: parsed from the file name, else birthtime/mtime. */
@@ -163,6 +168,11 @@ export interface Settings {
    * fresh install, which suppresses the first-run "What's new". Never surfaced in the UI.
    */
   lastSeenVersion: string
+  /**
+   * Internal: squashed names of look-alike games the user said are *not* the same
+   * game, so the merge hint stays gone across launches. Never surfaced in the UI.
+   */
+  dismissedGameMerges: string[]
 }
 
 export interface ScanState {
@@ -352,4 +362,5 @@ export const DEFAULT_SETTINGS: Settings = {
   autoCheckUpdates: true,
   trayHintShown: false,
   lastSeenVersion: '',
+  dismissedGameMerges: [],
 }

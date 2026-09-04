@@ -10,6 +10,8 @@ const api: Api = {
     removeFolder: (id) => ipcRenderer.invoke('library:remove-folder', id),
     rescan: (folderId) => ipcRenderer.invoke('library:rescan', folderId ?? ''),
     setSettings: (patch) => ipcRenderer.invoke('library:set-settings', patch),
+    setGameAlias: (sources, display) =>
+      ipcRenderer.invoke('library:set-game-alias', sources, display),
     stats: () => ipcRenderer.invoke('library:stats'),
     revealData: () => ipcRenderer.invoke('library:reveal-data'),
     setClipsDir: (path) => ipcRenderer.invoke('library:set-clips-dir', path),

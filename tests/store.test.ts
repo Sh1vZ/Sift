@@ -44,6 +44,7 @@ const clip = (id: string): Clip => ({
   ext: '.mp4',
   folderId: 'f1',
   game: 'Valorant',
+  sourceGame: 'Valorant',
   size: 10,
   mtimeMs: 1,
   recordedAtMs: 1,
@@ -244,11 +245,20 @@ async function migrationCase(): Promise<void> {
     names.includes('favourite') && names.includes('seen_at_ms'),
     'migration added the user-state columns',
   )
-  check(version === '5', 'schema version advanced to 5')
+  check(names.includes('source_game'), 'migration added the source_game column')
+  check(version === '6', 'schema version advanced to 6')
   check(store.data.clips.oc?.youtubeId === '', 'v2 clips migrate with no YouTube id')
   check(
     store.data.clips.oc?.favourite === false && store.data.clips.oc?.seenAtMs === 0,
     'v2 clips migrate unfavourited and unwatched',
+  )
+  check(
+    store.data.clips.oc?.sourceGame === 'Game',
+    'older clips backfill source_game from the name they were shown under',
+  )
+  check(
+    Object.keys(store.data.gameAliases).length === 0,
+    'a migrated library starts with no renamed games',
   )
 
   // YouTube accounts and a clip's video id round-trip through the new table/column.
@@ -426,9 +436,62 @@ function changelogCases(): void {
   )
 }
 
+/**
+ * Renaming and merging games is a display concern: the alias lives in its own
+ * table, the clip keeps the name its folder gave it, and clearing the alias
+ * removes the row rather than writing an alias that says nothing.
+ */
+async function gameNameCase(): Promise<void> {
+  const file = join(dir, 'games.db')
+  const store = new Store(file)
+  await store.load()
+  store.upsertFolder({ ...folder, id: 'gf', path: 'D:/Videos/GF', clipCount: 0 })
+
+  const raw: Clip = {
+    ...clip('g1'),
+    folderId: 'gf',
+    game: 'apex_legends',
+    sourceGame: 'apex_legends',
+  }
+  const merged: Clip = {
+    ...clip('g2'),
+    folderId: 'gf',
+    game: 'Apex Legends',
+    sourceGame: 'Apex Legends',
+  }
+  store.upsertClip(raw)
+  store.upsertClip(merged)
+  store.writeGameAliases([['apex_legends', 'Apex Legends']])
+  // The alias table is written straight through, so it lands before this flush.
+  check(
+    count(file, 'SELECT COUNT(*) n FROM game_aliases') === 1,
+    'a renamed game is written without waiting for the next flush',
+  )
+  await store.flush()
+  await store.close()
+
+  const again = new Store(file)
+  await again.load()
+  check(again.data.gameAliases.apex_legends === 'Apex Legends', 'a renamed game survives reopen')
+  check(
+    again.data.clips.g1?.sourceGame === 'apex_legends' &&
+      again.data.clips.g2?.sourceGame === 'Apex Legends',
+    'each clip keeps the name its own folder gave it',
+  )
+
+  again.writeGameAliases([['apex_legends', null]])
+  check(
+    count(file, 'SELECT COUNT(*) n FROM game_aliases') === 0 &&
+      again.data.gameAliases.apex_legends === undefined,
+    'clearing a name drops the row, on disk and in memory',
+  )
+  await again.close()
+}
+
 async function main(): Promise<void> {
   await storeCases()
   await migrationCase()
+  await gameNameCase()
   exportHelperCases()
   changelogCases()
 }

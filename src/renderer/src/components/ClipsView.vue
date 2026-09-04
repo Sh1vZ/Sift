@@ -56,6 +56,7 @@ function placeholder(job: ExportJob): Clip {
     ext: job.ext,
     folderId: '',
     game: job.game,
+    sourceGame: job.game,
     size: 0,
     mtimeMs: 0,
     recordedAtMs: job.createdAtMs,
