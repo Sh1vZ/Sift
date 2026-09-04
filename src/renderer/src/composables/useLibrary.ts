@@ -1,6 +1,7 @@
 import { computed, ref, watch } from 'vue'
 import type { Clip, ExportJob, LibraryFolder, ScanState, Settings } from '@shared/types'
 import { DEFAULT_SETTINGS } from '@shared/types'
+import { youtubeUrl } from '@shared/youtube'
 import { dateBucket } from '@/utils/format'
 import { confirm } from './useDialogs'
 import { toast } from './useToasts'
@@ -134,10 +135,34 @@ function compare(sort: Settings['sort']): (a: Clip, b: Clip) => number {
   }
 }
 
+export type ShareFilter = 'all' | 'shared' | 'unshared'
+
+export const SHARE_FILTERS: Array<{ value: ShareFilter; label: string; icon: string }> = [
+  { value: 'all', label: 'All', icon: 'i-lucide-layers' },
+  { value: 'shared', label: 'On YouTube', icon: 'i-lucide-youtube' },
+  { value: 'unshared', label: 'Not shared', icon: 'i-lucide-cloud-off' },
+]
+
+/**
+ * Narrows both grids to clips that have, or have not, been uploaded to YouTube.
+ * View state rather than a setting: a filter left on across launches would look
+ * like clips had vanished.
+ */
+export const shareFilter = ref<ShareFilter>('all')
+
+const matchesShare = (c: Clip): boolean =>
+  shareFilter.value === 'all' || (shareFilter.value === 'shared') === Boolean(c.youtubeId)
+
 export const visibleClips = computed<Clip[]>(() => {
   const game = selectedGame.value
-  const list = game ? recordings.value.filter((c) => c.game === game) : recordings.value.slice()
+  const list = recordings.value.filter((c) => (!game || c.game === game) && matchesShare(c))
   return list.sort(compare(settings.value.sort))
+})
+
+/** Clips in the current game before the sharing filter, so an empty grid can say why. */
+export const gameClipCount = computed<number>(() => {
+  const game = selectedGame.value
+  return game ? recordings.value.filter((c) => c.game === game).length : recordings.value.length
 })
 
 export interface Section {
@@ -190,7 +215,7 @@ const exportedAt = (c: Clip): number => c.createdAtMs || c.recordedAtMs
 
 /** The Clips view: one section per game, latest export first, games by their latest export. */
 export const clipSections = computed<Section[]>(() => {
-  const list = exportedClips.value
+  const list = exportedClips.value.filter(matchesShare)
   if (!list.length) return []
   const byGame = new Map<string, { latest: number; clips: Clip[] }>()
   for (const c of list) {
@@ -377,29 +402,75 @@ export async function revealClipsDir(): Promise<void> {
   if (!res.ok) toast('error', 'Could not open the clips folder', res.error)
 }
 
-export async function renameClip(clip: Clip, name: string): Promise<Clip | null> {
-  const res = await api.clips.rename(clip.id, name)
-  if (!res.ok || !res.clip) {
-    toast('error', 'Rename failed', res.error)
-    return null
+// ------------------------------------------------------------ pending work
+
+export type PendingKind = 'delete' | 'rename' | 'remove-youtube'
+
+export interface PendingAction {
+  kind: PendingKind
+  /** What the card veil and the player banner say while it runs. */
+  label: string
+}
+
+/**
+ * Clip actions that take a moment — a Recycle Bin move, a rename on a slow
+ * drive, a YouTube request — keyed by clip id while they run. Cards veil,
+ * buttons spin and menu entries disable off this, so a click always answers.
+ */
+export const pendingByClip = ref<Record<string, PendingAction>>({})
+
+async function withPending<T>(
+  clipId: string,
+  kind: PendingKind,
+  label: string,
+  run: () => Promise<T>,
+): Promise<T> {
+  pendingByClip.value = { ...pendingByClip.value, [clipId]: { kind, label } }
+  try {
+    return await run()
+  } finally {
+    const rest = { ...pendingByClip.value }
+    delete rest[clipId]
+    pendingByClip.value = rest
   }
-  // Swap the record now so the UI never sees a gap before the events arrive.
-  clipsById.delete(clip.id)
-  clipsById.set(res.clip.id, res.clip)
-  version.value++
-  return res.clip
+}
+
+export async function renameClip(clip: Clip, name: string): Promise<Clip | null> {
+  return withPending(clip.id, 'rename', 'Renaming…', async () => {
+    const res = await api.clips.rename(clip.id, name)
+    if (!res.ok || !res.clip) {
+      toast('error', 'Rename failed', res.error)
+      return null
+    }
+    // Swap the record now so the UI never sees a gap before the events arrive.
+    clipsById.delete(clip.id)
+    clipsById.set(res.clip.id, res.clip)
+    version.value++
+    return res.clip
+  })
 }
 
 export async function deleteClip(clip: Clip, permanent = false): Promise<boolean> {
-  const res = await api.clips.delete(clip.id, permanent)
-  if (!res.ok) {
-    toast('error', 'Delete failed', res.error)
-    return false
-  }
-  clipsById.delete(clip.id)
-  version.value++
-  toast('success', permanent ? 'Deleted permanently' : 'Moved to Recycle Bin', clip.name + clip.ext)
-  return true
+  return withPending(
+    clip.id,
+    'delete',
+    permanent ? 'Deleting…' : 'Moving to the Recycle Bin…',
+    async () => {
+      const res = await api.clips.delete(clip.id, permanent)
+      if (!res.ok) {
+        toast('error', 'Delete failed', res.error)
+        return false
+      }
+      clipsById.delete(clip.id)
+      version.value++
+      toast(
+        'success',
+        permanent ? 'Deleted permanently' : 'Moved to Recycle Bin',
+        clip.name + clip.ext,
+      )
+      return true
+    },
+  )
 }
 
 export function revealClip(clip: Clip): void {
@@ -412,4 +483,45 @@ export async function copyClipPath(clip: Clip): Promise<void> {
   const res = await api.clips.copyPath(clip.id)
   if (res.ok) toast('success', 'Path copied', clip.path)
   else toast('error', 'Could not copy path', res.error)
+}
+
+/** Opens the clip's YouTube page in the browser; main builds the URL from the stored id. */
+export async function openYouTube(clip: Clip): Promise<void> {
+  const res = await api.clips.openYouTube(clip.id)
+  if (!res.ok) toast('error', 'Could not open YouTube', res.error)
+}
+
+export async function copyYouTubeLink(clip: Clip): Promise<void> {
+  const res = await api.clips.copyYouTubeLink(clip.id)
+  if (res.ok) toast('success', 'Link copied', youtubeUrl(clip.youtubeId))
+  else toast('error', 'Could not copy the link', res.error)
+}
+
+/** Deletes the video on YouTube. Confirmed first: YouTube has no trash to get it back from. */
+export async function removeFromYouTube(clip: Clip): Promise<boolean> {
+  const ok = await confirm({
+    title: 'Remove this video from YouTube?',
+    message:
+      'The video is deleted from your channel for good — YouTube keeps no copy and the link stops working. The clip itself stays in Sift and on disk.',
+    detail: youtubeUrl(clip.youtubeId),
+    detailIcon: 'i-lucide-youtube',
+    confirmLabel: 'Remove from YouTube',
+    danger: true,
+  })
+  if (!ok) return false
+  return withPending(clip.id, 'remove-youtube', 'Removing from YouTube…', async () => {
+    const res = await api.clips.removeFromYouTube(clip.id)
+    if (!res.ok) {
+      toast('error', 'Could not remove the video', res.error)
+      return false
+    }
+    // The badge goes now; the clips:updated push confirms it a moment later.
+    const c = clipsById.get(clip.id)
+    if (c) {
+      clipsById.set(clip.id, { ...c, youtubeId: '' })
+      version.value++
+    }
+    toast('success', 'Removed from YouTube', clip.title)
+    return true
+  })
 }

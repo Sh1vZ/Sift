@@ -12,8 +12,8 @@ export interface Toast {
   kind: ToastKind
   title: string
   message?: string
-  /** One optional follow-up, e.g. "View in Clips" after an export lands. */
-  action?: ToastAction
+  /** Optional follow-ups, e.g. "View in Clips" after an export lands; usually one, at most two. */
+  actions: ToastAction[]
 }
 
 /**
@@ -27,9 +27,10 @@ export function toast(
   kind: ToastKind,
   title: string,
   message?: string,
-  action?: ToastAction,
+  action?: ToastAction | ToastAction[],
 ): void {
-  pending.value = [...pending.value, { id: ++seq, kind, title, message, action }]
+  const actions = action ? (Array.isArray(action) ? action : [action]) : []
+  pending.value = [...pending.value, { id: ++seq, kind, title, message, actions }]
 }
 
 export function drain(): Toast[] {

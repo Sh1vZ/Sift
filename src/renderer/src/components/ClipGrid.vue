@@ -5,16 +5,21 @@ import ClipCard from './ClipCard.vue'
 import { GRID_PAD_X, useVirtualGrid } from '@/composables/useVirtualGrid'
 import {
   copyClipPath,
+  copyYouTubeLink,
   deleteClip,
   games,
   getClip,
   openGame,
+  openYouTube,
+  pendingByClip,
+  removeFromYouTube,
   renameClip,
   revealClip,
   settings,
   type Section,
 } from '@/composables/useLibrary'
 import { cancelExport, dismissExport } from '@/composables/useExports'
+import { cancelUpload, openUploadDialog, uploadByClip } from '@/composables/useUploads'
 import { staggerIn, type Rect } from '@/composables/useMotion'
 import { openClip, openSource } from '@/composables/usePlayer'
 import { confirmWithAlt, prompt } from '@/composables/useDialogs'
@@ -158,18 +163,76 @@ function menuItems(clip: Clip) {
       },
     )
   }
+  // Something slow is already running on this clip: the actions that would
+  // collide with it wait until it lands.
+  const busy = Boolean(pendingByClip.value[clip.id])
   main.push(
     { label: 'Show in Explorer', icon: 'i-lucide-folder-open', onSelect: () => revealClip(clip) },
     { label: 'Copy path', icon: 'i-lucide-copy', onSelect: () => void copyClipPath(clip) },
-    { label: 'Rename', icon: 'i-lucide-pencil', onSelect: () => void rename(clip) },
+    {
+      label: 'Rename',
+      icon: 'i-lucide-pencil',
+      disabled: busy,
+      onSelect: () => void rename(clip),
+    },
   )
+  // Sharing gets its own group: a live upload swaps the entry for its Cancel.
+  const up = uploadByClip.value[clip.id]
+  const uploading = Boolean(up && (up.state === 'queued' || up.state === 'uploading'))
+  interface MenuItem {
+    label: string
+    icon: string
+    disabled?: boolean
+    color?: 'error'
+    onSelect: () => void
+  }
+  const share: MenuItem[] = uploading
+    ? [
+        {
+          label: 'Cancel upload',
+          icon: 'i-lucide-x',
+          color: 'error',
+          onSelect: () => void cancelUpload(up.id),
+        },
+      ]
+    : [
+        {
+          label: clip.youtubeId ? 'Upload to YouTube again' : 'Upload to YouTube',
+          icon: 'i-lucide-youtube',
+          disabled: clip.probeState !== 'ok' || busy,
+          onSelect: () => openUploadDialog(clip),
+        },
+      ]
+  if (clip.youtubeId && !uploading) {
+    share.push(
+      {
+        label: 'Open on YouTube',
+        icon: 'i-lucide-external-link',
+        onSelect: () => void openYouTube(clip),
+      },
+      {
+        label: 'Copy YouTube link',
+        icon: 'i-lucide-link-2',
+        onSelect: () => void copyYouTubeLink(clip),
+      },
+      {
+        label: 'Remove from YouTube',
+        icon: 'i-lucide-cloud-off',
+        color: 'error',
+        disabled: busy,
+        onSelect: () => void removeFromYouTube(clip),
+      },
+    )
+  }
   return [
     main,
+    share,
     [
       {
         label: 'Delete',
         icon: 'i-lucide-trash-2',
         color: 'error' as const,
+        disabled: busy,
         onSelect: () => void remove(clip),
       },
     ],
@@ -205,7 +268,15 @@ function menuItems(clip: Clip) {
             :items="menuItems(clip)"
             :ui="{ content: 'min-w-48' }"
           >
-            <ClipCard :clip="clip" :variant="variant" :job="jobOf(clip)" @open="onOpen" />
+            <ClipCard
+              :clip="clip"
+              :variant="variant"
+              :job="jobOf(clip)"
+              :upload="uploadByClip[clip.id]"
+              :pending="pendingByClip[clip.id]"
+              @open="onOpen"
+              @cancel-upload="(id) => void cancelUpload(id)"
+            />
           </UContextMenu>
         </div>
       </template>

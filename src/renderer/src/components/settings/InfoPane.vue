@@ -281,12 +281,12 @@ onMounted(() => {
       />
       <SettingsRow
         icon="database"
-        title="Nothing is uploaded"
-        description="The index, the previews and every number on these screens are built and kept on this PC."
+        title="Nothing is uploaded unless you say so"
+        description="The index, the previews and every number on these screens are built and kept on this PC. The only thing that ever leaves is a clip you send to YouTube yourself, through your own Google project."
       />
     </SettingsPanel>
 
-    <p class="about">Sift {{ appVersion }} · Local-first, nothing leaves your PC.</p>
+    <p class="about">Sift {{ appVersion }} · Local-first, nothing leaves your PC unasked.</p>
   </div>
 </template>
 

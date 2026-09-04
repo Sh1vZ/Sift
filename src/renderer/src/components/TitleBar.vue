@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { scan, screen, selectedGame } from '@/composables/useLibrary'
-import { exportLabel } from '@/composables/useExports'
+import { screen, selectedGame } from '@/composables/useLibrary'
+import { activityLabel } from '@/composables/useActivity'
 import { activeSection } from '@/composables/useSettings'
 import { installUpdate, update, updatePill } from '@/composables/useUpdates'
 
@@ -33,12 +33,7 @@ const crumbs = computed(() => {
   return [{ label: 'Sift', icon: 'i-lucide-play' }, ...trail.map((label) => ({ label }))]
 })
 
-const status = computed(() => {
-  if (exportLabel.value) return exportLabel.value
-  if (scan.value.active) return `Scanning ${scan.value.folder}…`
-  if (scan.value.pending) return `Generating previews · ${scan.value.pending} left`
-  return ''
-})
+const status = activityLabel
 </script>
 
 <template>

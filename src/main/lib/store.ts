@@ -28,8 +28,40 @@ const MIGRATIONS: Array<(db: DatabaseSync) => void> = [
     db.exec('ALTER TABLE clips ADD COLUMN muted INTEGER NOT NULL DEFAULT 0')
     db.exec('ALTER TABLE clips ADD COLUMN created_at_ms REAL NOT NULL DEFAULT 0')
   },
+  // v3 -> v4: clips remember the YouTube video they were uploaded as, and the
+  // Google projects used to upload them get a table of their own.
+  (db) => {
+    db.exec("ALTER TABLE clips ADD COLUMN youtube_id TEXT NOT NULL DEFAULT ''")
+    db.exec(YOUTUBE_ACCOUNTS_TABLE)
+  },
 ]
 const SCHEMA_VERSION = MIGRATIONS.length + 1
+
+/**
+ * One row per Google Cloud project the user connected. Secrets are stored as
+ * base64 of `safeStorage.encryptString` output, never in the clear; the quota
+ * columns cache what Cloud Monitoring last reported plus Sift's own spend since.
+ */
+const YOUTUBE_ACCOUNTS_TABLE = `
+CREATE TABLE IF NOT EXISTS youtube_accounts (
+  id                 TEXT PRIMARY KEY,
+  label              TEXT NOT NULL,
+  project_id         TEXT NOT NULL DEFAULT '',
+  client_id          TEXT NOT NULL,
+  client_secret_enc  TEXT NOT NULL,
+  refresh_token_enc  TEXT NOT NULL DEFAULT '',
+  channel_json       TEXT NOT NULL DEFAULT '',
+  quota_limit        INTEGER NOT NULL DEFAULT 10000,
+  quota_limit_source TEXT NOT NULL DEFAULT 'default',
+  quota_day          TEXT NOT NULL DEFAULT '',
+  quota_google_used  INTEGER NOT NULL DEFAULT 0,
+  quota_synced_at_ms REAL NOT NULL DEFAULT 0,
+  quota_local_used   INTEGER NOT NULL DEFAULT 0,
+  exhausted_until_ms REAL NOT NULL DEFAULT 0,
+  added_at_ms        REAL NOT NULL,
+  sort               INTEGER NOT NULL DEFAULT 0
+);
+`
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS meta (
@@ -74,8 +106,10 @@ CREATE TABLE IF NOT EXISTS clips (
   trim_start     REAL NOT NULL DEFAULT 0,
   trim_end       REAL NOT NULL DEFAULT 0,
   muted          INTEGER NOT NULL DEFAULT 0,
-  created_at_ms  REAL NOT NULL DEFAULT 0
+  created_at_ms  REAL NOT NULL DEFAULT 0,
+  youtube_id     TEXT NOT NULL DEFAULT ''
 );
+${YOUTUBE_ACCOUNTS_TABLE}
 `
 
 /** Created after migrations run, since an index may name a column an older database only gains then. */
@@ -112,6 +146,27 @@ interface ClipRow {
   trim_end: number
   muted: number
   created_at_ms: number
+  youtube_id: string
+}
+
+/** A `youtube_accounts` row as stored. The `_enc` columns hold base64 ciphertext or ''. */
+export interface YouTubeAccountRow {
+  id: string
+  label: string
+  project_id: string
+  client_id: string
+  client_secret_enc: string
+  refresh_token_enc: string
+  channel_json: string
+  quota_limit: number
+  quota_limit_source: string
+  quota_day: string
+  quota_google_used: number
+  quota_synced_at_ms: number
+  quota_local_used: number
+  exhausted_until_ms: number
+  added_at_ms: number
+  sort: number
 }
 
 interface FolderRow {
@@ -143,6 +198,8 @@ export class Store {
     upsertClip: StatementSync
     deleteClip: StatementSync
     setSetting: StatementSync
+    upsertAccount: StatementSync
+    deleteAccount: StatementSync
   }
   /**
    * Coalesced pending writes, keyed by row; the latest op for a key wins.
@@ -215,8 +272,8 @@ export class Store {
       upsertClip: db.prepare(`
         INSERT INTO clips (id, path, name, title, ext, folder_id, game, size, mtime_ms, recorded_at_ms,
           duration, width, height, fps, vcodec, has_audio, thumb, sprite, sprite_frames, probe_state,
-          source_id, trim_start, trim_end, muted, created_at_ms)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          source_id, trim_start, trim_end, muted, created_at_ms, youtube_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
           path = excluded.path, name = excluded.name, title = excluded.title, ext = excluded.ext,
           folder_id = excluded.folder_id, game = excluded.game, size = excluded.size,
@@ -225,12 +282,46 @@ export class Store {
           vcodec = excluded.vcodec, has_audio = excluded.has_audio, thumb = excluded.thumb,
           sprite = excluded.sprite, sprite_frames = excluded.sprite_frames, probe_state = excluded.probe_state,
           source_id = excluded.source_id, trim_start = excluded.trim_start, trim_end = excluded.trim_end,
-          muted = excluded.muted, created_at_ms = excluded.created_at_ms`),
+          muted = excluded.muted, created_at_ms = excluded.created_at_ms,
+          youtube_id = excluded.youtube_id`),
       deleteClip: db.prepare('DELETE FROM clips WHERE id = ?'),
       setSetting: db.prepare(
         'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
       ),
+      upsertAccount: db.prepare(`
+        INSERT INTO youtube_accounts (id, label, project_id, client_id, client_secret_enc,
+          refresh_token_enc, channel_json, quota_limit, quota_limit_source, quota_day,
+          quota_google_used, quota_synced_at_ms, quota_local_used, exhausted_until_ms, added_at_ms, sort)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          label = excluded.label, project_id = excluded.project_id, client_id = excluded.client_id,
+          client_secret_enc = excluded.client_secret_enc, refresh_token_enc = excluded.refresh_token_enc,
+          channel_json = excluded.channel_json, quota_limit = excluded.quota_limit,
+          quota_limit_source = excluded.quota_limit_source, quota_day = excluded.quota_day,
+          quota_google_used = excluded.quota_google_used, quota_synced_at_ms = excluded.quota_synced_at_ms,
+          quota_local_used = excluded.quota_local_used, exhausted_until_ms = excluded.exhausted_until_ms,
+          added_at_ms = excluded.added_at_ms, sort = excluded.sort`),
+      deleteAccount: db.prepare('DELETE FROM youtube_accounts WHERE id = ?'),
     }
+  }
+
+  // ------------------------------------------------------- youtube accounts
+  // Not part of `data`: the rows carry ciphertext and are read once by the
+  // YouTube module, which keeps its own working copy and never broadcasts them.
+
+  listYouTubeAccounts(): YouTubeAccountRow[] {
+    if (!this.db) return []
+    return this.db
+      .prepare('SELECT * FROM youtube_accounts ORDER BY sort, added_at_ms')
+      .all() as unknown as YouTubeAccountRow[]
+  }
+
+  upsertYouTubeAccount(row: YouTubeAccountRow): void {
+    this.enqueue(this.pending.other, `yt:${row.id}`, () => this.writeAccount(row))
+  }
+
+  deleteYouTubeAccount(id: string): void {
+    this.enqueue(this.pending.other, `yt:${id}`, () => this.stmts.deleteAccount.run(id))
   }
 
   private migrate(db: DatabaseSync): void {
@@ -380,6 +471,28 @@ export class Store {
       c.trimEnd,
       c.muted ? 1 : 0,
       c.createdAtMs,
+      c.youtubeId,
+    )
+  }
+
+  private writeAccount(a: YouTubeAccountRow): void {
+    this.stmts.upsertAccount.run(
+      a.id,
+      a.label,
+      a.project_id,
+      a.client_id,
+      a.client_secret_enc,
+      a.refresh_token_enc,
+      a.channel_json,
+      a.quota_limit,
+      a.quota_limit_source,
+      a.quota_day,
+      a.quota_google_used,
+      a.quota_synced_at_ms,
+      a.quota_local_used,
+      a.exhausted_until_ms,
+      a.added_at_ms,
+      a.sort,
     )
   }
 }
@@ -411,5 +524,6 @@ function rowToClip(r: ClipRow): Clip {
     trimEnd: r.trim_end,
     muted: Boolean(r.muted),
     createdAtMs: r.created_at_ms,
+    youtubeId: r.youtube_id,
   }
 }

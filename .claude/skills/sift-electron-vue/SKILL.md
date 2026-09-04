@@ -58,7 +58,8 @@ Other choices that matter:
 - `minWidth: 980, minHeight: 620` — below this the sidebar plus a two-column grid stops fitting.
 - `setWindowOpenHandler` denies every popup and hands `http(s)` URLs to `shell.openExternal`.
   **Keep the scheme test.** Passing an unchecked URL to `openExternal` is remote code execution
-  on Windows (`file:`, `ms-msdt:`, and friends).
+  on Windows (`file:`, `ms-msdt:`, and friends). The YouTube module's own `openExternal` calls
+  go through a prefix allowlist (`accounts.google.com/o/oauth2/`, `youtu.be/`) for the same reason.
 
 ### The isolated dev profile
 
@@ -228,7 +229,10 @@ font-src 'self' data:; connect-src 'self' ws://localhost:* http://localhost:*
 - `connect-src` allows localhost only so the dev server's HMR websocket works; production loads
   from `file://` and needs nothing.
 - **Widening this policy is a decision, not a fix.** If a change needs a remote origin, stop and
-  raise it — "local-first, no network" is a product promise.
+  raise it — "local-first, no network" is a product promise. The one sanctioned exception, the
+  YouTube upload module, lives entirely in main (`src/main/lib/youtube/`), which is exactly why
+  the policy never needed an extra origin: fetch in main, results back over IPC, remote images
+  delivered as `data:` URLs. Follow that shape rather than adding a host here.
 
 ---
 

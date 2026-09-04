@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import type { LibraryFolder } from '@shared/types'
 import SettingsPanel from './SettingsPanel.vue'
 import SettingsRow from './SettingsRow.vue'
@@ -22,6 +22,9 @@ const summary = computed(() => {
   return `${recordings.value.length} clips indexed across ${f} folder${f === 1 ? '' : 's'} · ${withThumbs.value} with previews.`
 })
 
+/** Folders whose removal is still stopping watchers and dropping clips; their button spins. */
+const removing = ref<string[]>([])
+
 async function remove(folder: LibraryFolder): Promise<void> {
   const ok = await confirm({
     title: 'Remove this folder?',
@@ -31,7 +34,13 @@ async function remove(folder: LibraryFolder): Promise<void> {
     confirmLabel: 'Remove',
     danger: true,
   })
-  if (ok) await removeFolder(folder)
+  if (!ok) return
+  removing.value = [...removing.value, folder.id]
+  try {
+    await removeFolder(folder)
+  } finally {
+    removing.value = removing.value.filter((id) => id !== folder.id)
+  }
 }
 </script>
 
@@ -121,6 +130,8 @@ async function remove(folder: LibraryFolder): Promise<void> {
                     color="error"
                     variant="ghost"
                     square
+                    :loading="removing.includes(f.id)"
+                    :disabled="removing.includes(f.id)"
                     aria-label="Remove folder"
                     @click="remove(f)"
                   />

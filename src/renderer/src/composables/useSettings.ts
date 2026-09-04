@@ -7,7 +7,16 @@ import { view } from './useLibrary'
  * section table so a new pane only has to be described once.
  */
 export type SettingsTab =
-  'folders' | 'clips' | 'indexing' | 'playback' | 'themes' | 'os' | 'stats' | 'storage' | 'info'
+  | 'folders'
+  | 'clips'
+  | 'indexing'
+  | 'playback'
+  | 'themes'
+  | 'os'
+  | 'youtube'
+  | 'stats'
+  | 'storage'
+  | 'info'
 
 export interface SettingsSection {
   id: SettingsTab
@@ -83,6 +92,20 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
           'What closing the window does, and whether Sift keeps working once it is out of sight.',
         keywords:
           'os tray background close minimize hide quit exit taskbar windows notification area system',
+      },
+    ],
+  },
+  {
+    label: 'Sharing',
+    sections: [
+      {
+        id: 'youtube',
+        label: 'YouTube',
+        icon: 'i-lucide-youtube',
+        description:
+          'Send clips to your channel from their cards, using your own Google projects and their daily quotas.',
+        keywords:
+          'youtube upload share google oauth playlist publish channel video link connect quota project',
       },
     ],
   },

@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import type { Clip, ExportJob } from '@shared/types'
+import type { UploadJob } from '@shared/youtube'
 import Icon from './Icon.vue'
-import { now, settings } from '@/composables/useLibrary'
+import { now, settings, type PendingAction } from '@/composables/useLibrary'
+import { progressText } from '@/composables/useUploads'
 import {
   clamp,
   formatBytes,
@@ -18,10 +20,14 @@ const props = withDefaults(
     variant?: 'recording' | 'export'
     /** An export still in flight: the card is a progress placeholder, not something you can open. */
     job?: ExportJob
+    /** A YouTube upload of this clip: a progress veil over a card that stays a real, openable clip. */
+    upload?: UploadJob
+    /** A slow action on this clip (delete, rename, remove from YouTube) still running. */
+    pending?: PendingAction
   }>(),
-  { variant: 'recording', job: undefined },
+  { variant: 'recording', job: undefined, upload: undefined, pending: undefined },
 )
-const emit = defineEmits<{ open: [clip: Clip, rect: DOMRect] }>()
+const emit = defineEmits<{ open: [clip: Clip, rect: DOMRect]; cancelUpload: [jobId: string] }>()
 
 const api = window.api
 const thumbEl = ref<HTMLElement | null>(null)
@@ -34,7 +40,13 @@ const poster = computed(() => (props.clip.thumb ? api.thumbUrl(props.clip.thumb)
 const sprite = computed(() => (props.clip.sprite ? api.thumbUrl(props.clip.sprite) : ''))
 const frames = computed(() => props.clip.spriteFrames)
 const canScrub = computed(
-  () => !props.job && settings.value.hoverPreview && Boolean(sprite.value) && frames.value > 1,
+  () =>
+    !props.job &&
+    !props.upload &&
+    !props.pending &&
+    settings.value.hoverPreview &&
+    Boolean(sprite.value) &&
+    frames.value > 1,
 )
 const resolution = computed(() =>
   formatResolution(props.clip.width, props.clip.height, props.clip.fps),
@@ -65,6 +77,53 @@ const jobLabel = computed(() => {
 })
 const jobFailed = computed(() => props.job?.state === 'failed' || props.job?.state === 'cancelled')
 
+interface Veil {
+  icon: string
+  label: string
+  /** Bar value while active; null for an indeterminate bar; undefined for no bar. */
+  bar: number | null | undefined
+  failed: boolean
+  busy: boolean
+}
+
+/** What sits over the thumbnail: the export placeholder, or a YouTube upload's state. */
+const veil = computed<Veil | null>(() => {
+  if (props.job) {
+    return {
+      icon: jobFailed.value ? 'alert' : 'scissors',
+      label: jobLabel.value,
+      bar: jobFailed.value ? undefined : props.job.state === 'running' ? jobPct.value : null,
+      failed: jobFailed.value,
+      busy: !jobFailed.value,
+    }
+  }
+  if (props.pending) {
+    return { icon: 'loader', label: props.pending.label, bar: null, failed: false, busy: true }
+  }
+  const u = props.upload
+  if (!u) return null
+  const pct = Math.round(u.progress * 100)
+  const failed = u.state === 'failed' || u.state === 'cancelled'
+  const busy = u.state === 'queued' || u.state === 'uploading'
+  const label =
+    u.state === 'queued'
+      ? 'Waiting to upload…'
+      : u.state === 'uploading'
+        ? `Uploading · ${progressText(u)}`
+        : u.state === 'done'
+          ? 'Uploaded'
+          : u.state === 'failed'
+            ? 'Upload failed'
+            : 'Upload cancelled'
+  return {
+    icon: failed ? 'alert' : u.state === 'done' ? 'check' : 'cloud-upload',
+    label,
+    bar: u.state === 'uploading' ? pct : u.state === 'queued' ? null : undefined,
+    failed,
+    busy,
+  }
+})
+
 function onMove(e: MouseEvent): void {
   if (!canScrub.value || !thumbEl.value) return
   const r = thumbEl.value.getBoundingClientRect()
@@ -92,7 +151,7 @@ function open(): void {
     :tabindex="job ? -1 : 0"
     :role="job ? undefined : 'button'"
     :aria-label="job ? `${jobLabel} ${clip.title}` : `Play ${clip.title}`"
-    :aria-busy="job ? !jobFailed : undefined"
+    :aria-busy="veil?.busy || undefined"
     @click="open"
     @keydown.enter.prevent="open"
     @keydown.space.prevent="open"
@@ -137,22 +196,49 @@ function open(): void {
           <div class="scrub-bar" :style="{ width: `${((frame + 0.5) / frames) * 100}%` }" />
         </div>
 
-        <!-- Progress veil for an export in flight: the source poster sits
-             behind it so the card already looks like the clip it will become. -->
-        <div v-if="job" class="job-veil" :class="{ 'is-failed': jobFailed }">
-          <Icon :name="jobFailed ? 'alert' : 'scissors'" :size="22" :stroke="1.8" />
-          <span class="job-label">{{ jobLabel }}</span>
+        <!-- Progress veil for an export in flight (the source poster sits behind
+             it so the card already looks like the clip it will become) or for a
+             YouTube upload of this clip. -->
+        <div v-if="veil" class="job-veil" :class="{ 'is-failed': veil.failed, 'is-upload': !job }">
+          <Icon
+            :name="veil.icon"
+            :size="22"
+            :stroke="1.8"
+            :class="{ spin: veil.icon === 'loader' }"
+          />
+          <span class="job-label">{{ veil.label }}</span>
           <UProgress
-            v-if="!jobFailed"
+            v-if="veil.bar !== undefined"
             class="job-progress"
-            :model-value="job.state === 'running' ? jobPct : null"
+            :model-value="veil.bar"
             size="xs"
             color="primary"
-            :aria-label="`Export progress ${jobPct}%`"
+            :aria-label="veil.label"
+          />
+          <UButton
+            v-if="upload && !job && (upload.state === 'queued' || upload.state === 'uploading')"
+            class="veil-cancel"
+            icon="i-lucide-x"
+            label="Cancel"
+            color="neutral"
+            variant="subtle"
+            size="xs"
+            @click.stop="emit('cancelUpload', upload.id)"
+            @keydown.enter.stop
+            @keydown.space.stop
           />
         </div>
 
         <UBadge v-if="resolution && !job" class="badge res" size="sm" :label="resolution" />
+        <UBadge
+          v-if="clip.youtubeId && !veil"
+          class="badge yt"
+          size="sm"
+          icon="i-lucide-youtube"
+          label="YouTube"
+          aria-label="On YouTube"
+          title="On YouTube"
+        />
         <UBadge
           v-if="clip.duration"
           class="badge duration mono"
@@ -160,7 +246,8 @@ function open(): void {
           :label="formatDuration(clip.duration)"
         />
 
-        <span v-if="!job" class="play-hint" aria-hidden="true">
+        <!-- No play hint while a veil is up: it would sit on the veil's label. -->
+        <span v-if="!veil" class="play-hint" aria-hidden="true">
           <Icon name="play" :size="20" />
         </span>
       </div>
@@ -297,6 +384,15 @@ function open(): void {
 .job-veil.is-failed {
   color: var(--warning);
 }
+/* An upload or pending-action veil sits over a real clip: the card underneath keeps its click. */
+.job-veil.is-upload {
+  pointer-events: none;
+}
+/* The one thing on the veil you can press; it stops the click reaching the card. */
+.veil-cancel {
+  margin-top: var(--s-1);
+  pointer-events: auto;
+}
 .job-label {
   font-family: var(--font-heading);
   font-size: var(--text-sm);
@@ -327,6 +423,16 @@ function open(): void {
   bottom: auto;
   right: auto;
   color: var(--secondary);
+}
+/* Already on YouTube: one glyph, top right, in the reserved rose. */
+/* Already on YouTube: same size as the other chips, told apart by the word and
+   the rose accent rather than by bulk. */
+.badge.yt {
+  top: 8px;
+  right: 8px;
+  bottom: auto;
+  color: var(--accent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent);
 }
 .play-hint {
   position: absolute;

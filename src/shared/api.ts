@@ -1,5 +1,13 @@
 import type { ChangelogRelease } from './changelog'
 import type {
+  UploadJob,
+  UploadRequest,
+  YouTubeAccount,
+  YouTubePlaylist,
+  YouTubePrivacy,
+  YouTubeState,
+} from './youtube'
+import type {
   ActionResult,
   AppStats,
   Clip,
@@ -43,8 +51,52 @@ export interface Api {
     copyPath(id: string): Promise<ActionResult>
     /** Queues a stream-copy export; progress arrives through `exports:changed`. */
     export(req: ExportRequest): Promise<ActionResult & { job?: ExportJob }>
+    /** Opens the clip's YouTube page in the browser. */
+    openYouTube(id: string): Promise<ActionResult>
+    /** Puts `https://youtu.be/<id>` on the system clipboard. */
+    copyYouTubeLink(id: string): Promise<ActionResult>
+    /** Deletes the video from YouTube (permanent) and forgets the id on the clip. */
+    removeFromYouTube(id: string): Promise<ActionResult>
   }
   exports: {
+    cancel(id: string): Promise<ActionResult>
+    /** Drops a finished/failed job from the list ahead of its automatic pruning. */
+    dismiss(id: string): Promise<void>
+  }
+  youtube: {
+    state(): Promise<YouTubeState>
+    /** New project from pasted values. The secret is encrypted before it touches disk and never comes back. */
+    addAccount(
+      clientId: string,
+      clientSecret: string,
+      label: string,
+    ): Promise<ActionResult & { account?: YouTubeAccount }>
+    /** New project from the text of a `client_secret_*.json`. */
+    addAccountJson(text: string): Promise<ActionResult & { account?: YouTubeAccount }>
+    /** Native file picker for one or more `client_secret_*.json` files. */
+    importAccountFiles(): Promise<ActionResult & { added: number; cancelled?: boolean }>
+    renameAccount(id: string, label: string): Promise<ActionResult>
+    /** Runs the browser sign-in for that project; resolves when it finished, failed or timed out. */
+    connect(id: string): Promise<ActionResult>
+    cancelConnect(): Promise<void>
+    /** Revokes the token (best effort) and forgets the channel; the client stays for a one-click reconnect. */
+    disconnect(id: string): Promise<ActionResult>
+    /** Forgets the project entirely. */
+    removeAccount(id: string): Promise<ActionResult>
+    playlists(
+      accountId: string,
+      refresh?: boolean,
+    ): Promise<ActionResult & { playlists?: YouTubePlaylist[] }>
+    createPlaylist(
+      accountId: string,
+      title: string,
+      privacy: YouTubePrivacy,
+    ): Promise<ActionResult & { playlist?: YouTubePlaylist }>
+  }
+  uploads: {
+    list(): Promise<UploadJob[]>
+    /** Queues a resumable upload; progress arrives through `uploads:changed`. */
+    start(req: UploadRequest): Promise<ActionResult & { job?: UploadJob }>
     cancel(id: string): Promise<ActionResult>
     /** Drops a finished/failed job from the list ahead of its automatic pruning. */
     dismiss(id: string): Promise<void>

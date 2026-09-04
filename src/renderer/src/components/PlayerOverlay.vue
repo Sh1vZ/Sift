@@ -3,8 +3,11 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import ElasticSlider from './bits/ElasticSlider.vue'
 import PlayerDetails from './PlayerDetails.vue'
 import TrimBar from './TrimBar.vue'
+import PendingBanner from './youtube/PendingBanner.vue'
+import UploadBanner from './youtube/UploadBanner.vue'
 import {
   deleteClip,
+  pendingByClip,
   renameClip,
   revealClip,
   settings,
@@ -42,6 +45,7 @@ import { fadeOut, flipFrom, flipTo } from '@/composables/useMotion'
 import { activeTheme } from '@/composables/useTheme'
 import { visible as windowVisible } from '@/composables/useWindowVisibility'
 import { confirmWithAlt, dialog, prompt } from '@/composables/useDialogs'
+import { openUploadDialog, uploadByClip, uploadDialog } from '@/composables/useUploads'
 import { toast } from '@/composables/useToasts'
 import {
   clamp,
@@ -66,6 +70,10 @@ const seekEl = ref<HTMLElement | null>(null)
 
 // The overlay only mounts while a clip is open.
 const clip = computed(() => current.value!)
+/** This clip's YouTube upload, live or just finished, for the banner over the stage. */
+const upload = computed(() => uploadByClip.value[clip.value.id])
+/** A slow action (delete, rename, YouTube removal) running on this clip. */
+const pending = computed(() => pendingByClip.value[clip.value.id])
 /**
  * Set while the window is off screen: the media is unloaded to stop the decoder,
  * but the overlay stays mounted so a trim in progress, the rate and the details
@@ -419,7 +427,8 @@ async function remove(): Promise<void> {
 // ------------------------------------------------------------- keyboard
 
 function onKey(e: KeyboardEvent): void {
-  if (dialog.value) return
+  // A modal owns the keyboard: the confirm/prompt host, or the upload form.
+  if (dialog.value || uploadDialog.value) return
   const tag = (e.target as HTMLElement | null)?.tagName
   if (tag === 'INPUT' || tag === 'TEXTAREA') return
   let handled = true
@@ -717,6 +726,11 @@ onBeforeUnmount(() => {
           />
 
           <Transition name="fade">
+            <UploadBanner v-if="upload" :key="upload.id" :job="upload" :clip="clip" />
+            <PendingBanner v-else-if="pending" :label="pending.label" />
+          </Transition>
+
+          <Transition name="fade">
             <div v-if="buffering && !failed" class="veil">
               <UIcon name="i-lucide-loader-circle" class="spin big-icon" />
             </div>
@@ -789,6 +803,7 @@ onBeforeUnmount(() => {
         @remove="remove"
         @edit="toggleEdit"
         @source="goToSource"
+        @upload="openUploadDialog(clip)"
       />
     </Transition>
 

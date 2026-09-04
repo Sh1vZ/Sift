@@ -141,6 +141,15 @@ export class Library {
     return this.store.data.clips[id]?.path
   }
 
+  clip(id: string): Clip | undefined {
+    return this.store.data.clips[id]
+  }
+
+  /** For modules outside the library (the YouTube uploader) that learn something about a clip. */
+  patchClip(patch: ClipPatch): void {
+    this.applyPatch(patch)
+  }
+
   snapshot(): LibrarySnapshot {
     const videos = app.getPath('videos')
     return {
@@ -633,6 +642,7 @@ export class Library {
         trimEnd: job.end,
         muted: job.muted,
         createdAtMs: Date.now(),
+        youtubeId: '',
       }
       const previous = this.store.data.clips[clip.id]
       if (previous) void removeArtifacts(previous)
@@ -767,6 +777,8 @@ export class Library {
       muted: previous?.muted ?? false,
       createdAtMs:
         previous?.createdAtMs ?? (folder.kind === 'clips' ? st.birthtimeMs || st.mtimeMs : 0),
+      // A re-probed file is still the video that was uploaded.
+      youtubeId: previous?.youtubeId ?? '',
     }
     this.store.data.clips[clip.id] = clip
     this.store.upsertClip(clip)

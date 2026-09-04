@@ -1,7 +1,18 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { Clip } from '@shared/types'
-import { clipsFolder, copyClipPath, getClip, revealClip } from '@/composables/useLibrary'
+import {
+  clipsFolder,
+  copyClipPath,
+  copyYouTubeLink,
+  getClip,
+  openYouTube,
+  pendingByClip,
+  removeFromYouTube,
+  revealClip,
+} from '@/composables/useLibrary'
+import { cancelUpload, progressText, uploadByClip } from '@/composables/useUploads'
+import { youtubeUrl } from '@shared/youtube'
 import {
   formatBytes,
   formatDuration,
@@ -21,7 +32,7 @@ const props = withDefaults(
   }>(),
   { editing: false, exportName: '' },
 )
-defineEmits<{ close: []; rename: []; remove: []; edit: []; source: [] }>()
+const emit = defineEmits<{ close: []; rename: []; remove: []; edit: []; source: []; upload: [] }>()
 
 interface Row {
   label: string
@@ -59,6 +70,27 @@ const folder = computed(() => {
 })
 
 const isExport = computed(() => Boolean(props.clip.sourceId))
+const upload = computed(() => uploadByClip.value[props.clip.id])
+/** A delete, rename or YouTube removal still in flight for this clip. */
+const pendingAction = computed(() => pendingByClip.value[props.clip.id])
+const busy = computed(() => Boolean(pendingAction.value))
+const uploading = computed(() =>
+  Boolean(upload.value && (upload.value.state === 'queued' || upload.value.state === 'uploading')),
+)
+const uploadLabel = computed(() => {
+  const u = upload.value
+  if (u?.state === 'uploading') return `Cancel upload · ${progressText(u)}`
+  if (u?.state === 'queued') return 'Cancel · waiting to upload'
+  return props.clip.youtubeId ? 'Upload to YouTube again' : 'Upload to YouTube'
+})
+
+/** While a job is live the same button cancels it; otherwise it opens the upload form. */
+function onUploadButton(): void {
+  const u = upload.value
+  if (uploading.value && u) void cancelUpload(u.id)
+  else emit('upload')
+}
+const videoUrl = computed(() => (props.clip.youtubeId ? youtubeUrl(props.clip.youtubeId) : ''))
 const sourceClip = computed(() => (props.clip.sourceId ? getClip(props.clip.sourceId) : undefined))
 const destination = computed(
   () => `${clipsFolder.value?.name ?? 'Sift Clips'}\\${props.clip.game}\\${props.exportName}`,
@@ -139,6 +171,14 @@ const sourceRows = computed<Row[]>(() => {
         <UBadge v-if="resolution" color="neutral" variant="subtle" size="sm" :label="resolution" />
         <UBadge v-if="codec" color="neutral" variant="subtle" size="sm" :label="codec" />
         <UBadge
+          v-if="clip.youtubeId"
+          color="error"
+          variant="subtle"
+          size="sm"
+          icon="i-lucide-youtube"
+          label="On YouTube"
+        />
+        <UBadge
           v-if="isExport"
           color="primary"
           variant="subtle"
@@ -212,6 +252,43 @@ const sourceRows = computed<Row[]>(() => {
         />
       </section>
 
+      <section v-if="videoUrl">
+        <h4>YouTube</h4>
+        <p class="path" :title="videoUrl">{{ videoUrl }}</p>
+        <div class="yt-actions">
+          <UButton
+            icon="i-lucide-external-link"
+            label="Open"
+            color="neutral"
+            variant="subtle"
+            size="md"
+            block
+            @click="openYouTube(clip)"
+          />
+          <UButton
+            icon="i-lucide-link-2"
+            label="Copy link"
+            color="neutral"
+            variant="subtle"
+            size="md"
+            block
+            @click="copyYouTubeLink(clip)"
+          />
+          <UButton
+            class="yt-remove"
+            icon="i-lucide-cloud-off"
+            label="Remove from YouTube"
+            color="error"
+            variant="subtle"
+            size="md"
+            block
+            :loading="pendingAction?.kind === 'remove-youtube'"
+            :disabled="uploading || busy"
+            @click="removeFromYouTube(clip)"
+          />
+        </div>
+      </section>
+
       <section>
         <h4>Location</h4>
         <!-- Selectable: a path is something you copy out by hand as often as
@@ -231,6 +308,17 @@ const sourceRows = computed<Row[]>(() => {
         block
         :disabled="!canEdit"
         @click="$emit('edit')"
+      />
+      <UButton
+        class="wide"
+        :icon="uploading ? 'i-lucide-x' : 'i-lucide-youtube'"
+        :color="uploading ? 'error' : 'neutral'"
+        :label="uploadLabel"
+        variant="subtle"
+        size="md"
+        block
+        :disabled="clip.probeState !== 'ok' || busy"
+        @click="onUploadButton"
       />
       <UButton
         icon="i-lucide-folder-open"
@@ -258,6 +346,8 @@ const sourceRows = computed<Row[]>(() => {
         variant="subtle"
         size="md"
         block
+        :loading="pendingAction?.kind === 'rename'"
+        :disabled="busy"
         @click="$emit('rename')"
       />
       <UButton
@@ -268,6 +358,8 @@ const sourceRows = computed<Row[]>(() => {
         variant="subtle"
         size="md"
         block
+        :loading="pendingAction?.kind === 'delete'"
+        :disabled="busy"
         @click="$emit('remove')"
       />
     </footer>
@@ -390,6 +482,16 @@ h4 {
 }
 .source-btn {
   margin-top: var(--s-2);
+}
+.yt-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--s-2);
+  margin-top: var(--s-2);
+}
+/* Destructive, so it spans the row and sits apart from Open / Copy link. */
+.yt-remove {
+  grid-column: 1 / -1;
 }
 .actions {
   display: grid;

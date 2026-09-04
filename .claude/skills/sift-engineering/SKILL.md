@@ -10,9 +10,11 @@ description: Use for any Sift code change, review, or implementation; covers the
 Sift is a **local-first Electron desktop app** that indexes video clips in place. It is
 built with **electron-vite 5** across three isolated processes, written in **TypeScript strict
 mode**, with a **Vue 3.5** renderer using `<script setup>` and module-scope composables for
-state. There is no router, no Pinia, no server, no network, and no database — clip metadata
-lives in one debounced JSON document, and the media pipeline is a bounded queue around a
-bundled ffmpeg.
+state. There is no router, no Pinia, and no server — clip metadata lives in a SQLite index
+written through Node's built-in `node:sqlite`, and the media pipeline is a bounded queue around
+a bundled ffmpeg. The only network code is the opt-in YouTube upload module under
+`src/main/lib/youtube/`, and it runs only when the user has connected a Google project and
+asked for an upload.
 
 The defining constraint: **this app runs while the user is playing a game.** Every design
 decision — bounded concurrency, below-normal process priority, batched IPC, a windowed grid,
@@ -45,7 +47,7 @@ src/
     ipc.ts              Every ipcMain.handle in one file
     lib/
       library.ts        Library class: owns state, batches renderer events
-      store.ts          Store class: one debounced, atomically written JSON document
+      store.ts          Store class: the SQLite index (clips, folders, settings, YouTube projects)
       scanner.ts        Folder walking for video files
       media.ts          MediaQueue + ffprobe/ffmpeg jobs (thumbs, sprite strips)
       watcher.ts        chokidar folder watchers
@@ -53,6 +55,8 @@ src/
       protocol.ts       The clip:// scheme with HTTP range support
       paths.ts          Cache dirs and bundled ffmpeg resolution
       window.ts         BrowserWindow creation
+      youtube/          The ONLY module allowed to use fetch: OAuth (PKCE + loopback), the
+                        Data API wrapper, resumable uploads, the upload queue
   preload/
     index.ts            The single contextBridge surface exposed as window.api
   renderer/
@@ -72,6 +76,7 @@ src/
       utils/            Pure formatting helpers
   shared/
     types.ts            Domain types, EventMap, DEFAULT_SETTINGS, VIDEO_EXTENSIONS
+    youtube.ts          YouTube types, request validation, Pacific-day helpers
     api.ts              The Api interface — the contract window.api must satisfy
 design-system/sift/  MASTER.md and page overrides
 ```
@@ -94,6 +99,7 @@ This is the rule that matters most. Getting it wrong is either a security hole o
 | ---------------------------------------------------- | ---------- |
 | Filesystem, `child_process`, `shell`, `dialog`, `app` | **main**   |
 | Persisted state, scanning, watching, ffmpeg           | **main**   |
+| Network (YouTube OAuth, uploads)                      | **main**, `lib/youtube/` only |
 | Channel wiring and nothing else                       | **preload** |
 | Types shared by two or more processes                 | **shared** |
 | Rendering, view state, formatting, input handling     | **renderer** |
@@ -266,6 +272,33 @@ const props = withDefaults(defineProps<{ name: string; size?: number }>(), { siz
 
 ## Main-Process Rules
 
+### Network (YouTube only)
+
+`src/main/lib/youtube/` is the one place in Sift that talks to the network, and it does so
+only after the user has added a Google Cloud project and connected it. Keep it that way:
+
+- `fetch` appears only under `lib/youtube/`, in main. The renderer's CSP `connect-src` stays
+  `'self'` + localhost; anything the renderer needs from Google arrives over IPC. Remote images
+  (channel avatars) are fetched in main and handed over as `data:` URLs, never as remote URLs.
+- Allowed hosts are exactly `accounts.google.com` (sign-in, via the browser), `oauth2.googleapis.com`,
+  `www.googleapis.com` and the `ggpht.com`/`googleusercontent.com`
+  avatar hosts. A new host is a decision to raise, not a line to add.
+- Client secrets and refresh tokens are encrypted with `safeStorage` and stored in the
+  `youtube_accounts` table — never in `Settings`, which is broadcast to the renderer whole.
+  The renderer sees `hasSecret`, not the secret.
+- Sign-in is a loopback OAuth flow: `node:http` bound to `127.0.0.1` on a random port, PKCE,
+  a `state` check that ignores any response it did not ask for, and a server that closes on
+  completion, timeout or cancel. `shell.openExternal` only ever receives Google's sign-in URL
+  or a `https://youtu.be/` link, both checked by prefix.
+- Every request is bounded: a timeout, and for uploads a stall watchdog plus an attempt cap
+  with backoff. User-facing messages come from `friendlyError`, never raw JSON.
+- Sift does not count or estimate quota. Google exposes usage only through Cloud Monitoring on
+  billing-enabled projects, and the Quotas / Service Usage APIs return limits without usage,
+  so the one quota signal is YouTube's `quotaExceeded`: it parks the project until midnight
+  Pacific and, under Auto, the upload moves to the next project. Do not add a counter.
+- Uploads run one at a time through `YouTubeUploads`, mirroring the export chain: a job map,
+  a promise chain, one `AbortController`, a 250 ms debounced emit, terminal jobs pruned.
+
 ### Child processes (ffmpeg / ffprobe)
 
 - Spawn only through the helpers in `lib/media.ts`. Every job must keep:
@@ -330,11 +363,14 @@ The renderer loads only local content, but the rules still hold:
   of defence: `default-src 'self'`, `script-src 'self'`, `img-src 'self' clip: data: blob:`,
   `media-src clip: blob:`, `font-src 'self' data:`, and `connect-src` limited to `'self'` plus
   localhost (for the dev server's websocket). `style-src` allows `'unsafe-inline'` because Vue
-  scoped styles and Nuxt UI need it. **Adding a remote asset, font, or API call means widening
-  this policy — which is the signal to stop and ask, not to edit the tag.**
+  scoped styles and Nuxt UI need it. **Adding a remote asset, font, or API call to the renderer
+  means widening this policy — which is the signal to stop and ask, not to edit the tag.** The
+  YouTube feature did not widen it: every call happens in main and the results cross IPC.
 - No `eval`, no `new Function`, no remote script or font, no `webSecurity: false`.
-- Nothing in this app talks to the network. If a change would introduce a network call, stop
-  and raise it — "local-first" is a product promise, not an implementation detail.
+- Nothing in this app talks to the network **except `lib/youtube/`**, and that only when the
+  user has connected a project and asked for an upload (see "Network (YouTube only)"). Any other
+  network call: stop and raise it — "local-first" is a product promise, not an implementation
+  detail.
 
 ---
 
@@ -477,7 +513,7 @@ SIFT_USER_DATA=./.tmp-profile npm run dev
 - ❌ Do not `unlink` a user's file — use `shell.trashItem` (only an export's own `~` temp file may be unlinked)
 - ❌ Do not do blocking or sync I/O on the main process event loop
 - ❌ Do not relax `contextIsolation`, `nodeIntegration`, or `webSecurity`
-- ❌ Do not add a network request, remote font, or CDN asset
+- ❌ Do not add a network request, remote font, or CDN asset outside `src/main/lib/youtube/`
 - ❌ Do not use `npm`-adjacent tools (pnpm, yarn) or hand-edit the lockfile
 - ❌ Do not add a state-management library or a router
 - ❌ Do not leave `console.log` in committed code

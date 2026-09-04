@@ -74,6 +74,15 @@ const ICONS: Record<string, string> = {
   download: 'i-lucide-download',
   link: 'i-lucide-link',
   tray: 'i-lucide-panel-bottom',
+  youtube: 'i-lucide-youtube',
+  'cloud-upload': 'i-lucide-cloud-upload',
+  upload: 'i-lucide-upload',
+  key: 'i-lucide-key-round',
+  'external-link': 'i-lucide-external-link',
+  'shield-check': 'i-lucide-shield-check',
+  'list-music': 'i-lucide-list-music',
+  'file-json': 'i-lucide-file-json',
+  lock: 'i-lucide-lock',
 }
 
 const icon = computed(() => ICONS[props.name] ?? `i-lucide-${props.name}`)

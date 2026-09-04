@@ -22,10 +22,35 @@ const api: Api = {
     reveal: (id) => ipcRenderer.invoke('clip:reveal', id),
     copyPath: (id) => ipcRenderer.invoke('clip:copy-path', id),
     export: (req) => ipcRenderer.invoke('clip:export', req),
+    openYouTube: (id) => ipcRenderer.invoke('clip:open-youtube', id),
+    copyYouTubeLink: (id) => ipcRenderer.invoke('clip:copy-youtube-link', id),
+    removeFromYouTube: (id) => ipcRenderer.invoke('clip:remove-youtube', id),
   },
   exports: {
     cancel: (id) => ipcRenderer.invoke('export:cancel', id),
     dismiss: (id) => ipcRenderer.invoke('export:dismiss', id),
+  },
+  youtube: {
+    state: () => ipcRenderer.invoke('youtube:state'),
+    addAccount: (clientId, clientSecret, label) =>
+      ipcRenderer.invoke('youtube:add-account', clientId, clientSecret, label),
+    addAccountJson: (text) => ipcRenderer.invoke('youtube:add-account-json', text),
+    importAccountFiles: () => ipcRenderer.invoke('youtube:import-account-files'),
+    renameAccount: (id, label) => ipcRenderer.invoke('youtube:rename-account', id, label),
+    connect: (id) => ipcRenderer.invoke('youtube:connect', id),
+    cancelConnect: () => ipcRenderer.invoke('youtube:cancel-connect'),
+    disconnect: (id) => ipcRenderer.invoke('youtube:disconnect', id),
+    removeAccount: (id) => ipcRenderer.invoke('youtube:remove-account', id),
+    playlists: (accountId, refresh) =>
+      ipcRenderer.invoke('youtube:playlists', accountId, refresh === true),
+    createPlaylist: (accountId, title, privacy) =>
+      ipcRenderer.invoke('youtube:create-playlist', accountId, title, privacy),
+  },
+  uploads: {
+    list: () => ipcRenderer.invoke('upload:list'),
+    start: (req) => ipcRenderer.invoke('upload:start', req),
+    cancel: (id) => ipcRenderer.invoke('upload:cancel', id),
+    dismiss: (id) => ipcRenderer.invoke('upload:dismiss', id),
   },
   updates: {
     get: () => ipcRenderer.invoke('updates:get'),

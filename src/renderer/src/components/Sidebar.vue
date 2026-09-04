@@ -2,16 +2,8 @@
 import { computed } from 'vue'
 import ShinyText from './bits/ShinyText.vue'
 import { motionEnabled } from '@/composables/useMotion'
-import {
-  exportedClips,
-  games,
-  goClips,
-  goGames,
-  scan,
-  screen,
-  view,
-} from '@/composables/useLibrary'
-import { exportLabel } from '@/composables/useExports'
+import { exportedClips, games, goClips, goGames, screen, view } from '@/composables/useLibrary'
+import { activityLabel } from '@/composables/useActivity'
 import { openSettings, settingsTab } from '@/composables/useSettings'
 
 /**
@@ -53,12 +45,7 @@ const footerItems = computed<NavItem[]>(() => [
   },
 ])
 
-const scanLabel = computed(() => {
-  if (exportLabel.value) return exportLabel.value
-  if (scan.value.active) return `Scanning ${scan.value.folder} · ${scan.value.found} new`
-  if (scan.value.pending) return `Generating previews · ${scan.value.pending} queued`
-  return ''
-})
+const scanLabel = activityLabel
 
 /* Collapsed links are 40px squares centred in the rail; the pill background
    and the focus ring both follow the link box. */

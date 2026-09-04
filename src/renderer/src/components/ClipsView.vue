@@ -9,6 +9,8 @@ import {
   goGames,
   revealClipsDir,
   settings,
+  SHARE_FILTERS,
+  shareFilter,
   updateSettings,
   type Section,
 } from '@/composables/useLibrary'
@@ -54,6 +56,7 @@ function placeholder(job: ExportJob): Clip {
     trimEnd: job.end,
     muted: job.muted,
     createdAtMs: job.createdAtMs,
+    youtubeId: '',
   }
 }
 
@@ -78,7 +81,9 @@ const hasContent = computed(() => sectionsWithJobs.value.length > 0)
 const unreachable = computed(() =>
   Boolean(clipsFolder.value && !clipsFolder.value.available && exportedClips.value.length),
 )
-const resetKey = computed(() => settings.value.gridSize)
+const resetKey = computed(() => `${settings.value.gridSize}|${shareFilter.value}`)
+/** Exports exist, but the sharing filter hides all of them. */
+const filteredOut = computed(() => !hasContent.value && exportedClips.value.length > 0)
 </script>
 
 <template>
@@ -122,6 +127,19 @@ const resetKey = computed(() => settings.value.gridSize)
       </div>
 
       <div class="toolbar">
+        <UFieldGroup size="md" aria-label="Filter by sharing">
+          <UButton
+            v-for="f in SHARE_FILTERS"
+            :key="f.value"
+            :icon="f.icon"
+            :label="f.label"
+            :color="shareFilter === f.value ? 'primary' : 'neutral'"
+            :variant="shareFilter === f.value ? 'soft' : 'subtle'"
+            :aria-pressed="shareFilter === f.value"
+            @click="shareFilter = f.value"
+          />
+        </UFieldGroup>
+
         <UFieldGroup size="md" aria-label="Card size">
           <UTooltip v-for="s in sizeOptions" :key="s.value" :text="s.label">
             <UButton
@@ -185,6 +203,19 @@ const resetKey = computed(() => settings.value.gridSize)
           :jobs-by-id="jobsById"
           :reset-key="resetKey"
         />
+
+        <UEmpty
+          v-else-if="filteredOut"
+          key="filtered"
+          class="empty"
+          icon="i-lucide-filter-x"
+          :title="shareFilter === 'shared' ? 'No clips on YouTube yet' : 'Every clip is on YouTube'"
+          description="The sharing filter is hiding the rest."
+        >
+          <template #actions>
+            <UButton label="Show all" color="primary" size="lg" @click="shareFilter = 'all'" />
+          </template>
+        </UEmpty>
 
         <UEmpty
           v-else

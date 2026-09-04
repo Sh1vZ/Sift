@@ -9,9 +9,12 @@ import PlayerOverlay from './components/PlayerOverlay.vue'
 import DialogHost from './components/DialogHost.vue'
 import ToastBridge from './components/ToastBridge.vue'
 import WhatsNewDialog from './components/WhatsNewDialog.vue'
+import UploadDialog from './components/youtube/UploadDialog.vue'
 import { initLibrary, initialExports, ready, view } from '@/composables/useLibrary'
 import { initExports } from '@/composables/useExports'
 import { initUpdates } from '@/composables/useUpdates'
+import { initUploads } from '@/composables/useUploads'
+import { initYouTube } from '@/composables/useYouTube'
 import { isOpen } from '@/composables/usePlayer'
 import { openSettings } from '@/composables/useSettings'
 import { initWindowVisibility } from '@/composables/useWindowVisibility'
@@ -28,6 +31,9 @@ onMounted(async () => {
   try {
     await initLibrary()
     initExports(initialExports.value)
+    // Seeded from main like the updater: neither is part of the library snapshot.
+    await initYouTube()
+    await initUploads()
     // Not awaited: the splash must not wait on the updater, and a failure here
     // is never a reason to hold up the library.
     void initUpdates()
@@ -65,6 +71,7 @@ onMounted(async () => {
       </Transition>
       <DialogHost />
       <WhatsNewDialog />
+      <UploadDialog />
       <ToastBridge />
     </div>
   </UApp>

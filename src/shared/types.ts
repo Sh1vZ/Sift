@@ -1,6 +1,7 @@
 /** Types shared between the main process, the preload bridge and the renderer. */
 
 import type { ChangelogBlock } from './changelog'
+import type { UploadJob, YouTubeState } from './youtube'
 
 export type ProbeState = 'pending' | 'ok' | 'failed'
 
@@ -40,6 +41,8 @@ export interface Clip {
   muted: boolean
   /** Export time; for files copied into the clips folder by hand, the file's birthtime; 0 for recordings. */
   createdAtMs: number
+  /** YouTube video id once uploaded from Sift; '' otherwise. */
+  youtubeId: string
 }
 
 /**
@@ -306,6 +309,10 @@ export interface EventMap {
   'app:open-settings': null
   /** The whole updater state on every transition; the renderer replaces its copy. */
   'update:changed': UpdateState
+  /** Every YouTube project with its connection and quota; the renderer replaces its copy. */
+  'youtube:changed': YouTubeState
+  /** Every live upload job; a job is sent once in its terminal state and then dropped. */
+  'uploads:changed': UploadJob[]
 }
 
 export type EventName = keyof EventMap

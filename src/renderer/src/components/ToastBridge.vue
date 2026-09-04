@@ -25,16 +25,14 @@ watch(pending, (list) => {
       description: t.message,
       color: color[t.kind],
       icon: icon[t.kind],
-      actions: t.action
-        ? [
-            {
-              label: t.action.label,
-              color: 'neutral',
-              variant: 'outline',
-              size: 'xs',
-              onClick: t.action.onClick,
-            },
-          ]
+      actions: t.actions.length
+        ? t.actions.map((a) => ({
+            label: a.label,
+            color: 'neutral' as const,
+            variant: 'outline' as const,
+            size: 'xs' as const,
+            onClick: a.onClick,
+          }))
         : undefined,
     })
   }

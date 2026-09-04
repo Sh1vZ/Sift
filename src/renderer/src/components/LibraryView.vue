@@ -12,6 +12,7 @@ import StarBorder from './bits/StarBorder.vue'
 import {
   addFolder,
   folders,
+  gameClipCount,
   games,
   goGames,
   gridGroupBy,
@@ -23,6 +24,8 @@ import {
   sections,
   selectedGame,
   settings,
+  SHARE_FILTERS,
+  shareFilter,
   updateSettings,
   visibleClips,
 } from '@/composables/useLibrary'
@@ -38,7 +41,7 @@ const hasFolders = computed(() => folders.value.some((f) => f.kind === 'library'
 // Filter/sort/group/size changes restart the grid from the top with a stagger.
 const gridResetKey = computed(
   () =>
-    `${selectedGame.value}|${settings.value.sort}|${settings.value.groupBy}|${settings.value.gridSize}`,
+    `${selectedGame.value}|${settings.value.sort}|${settings.value.groupBy}|${settings.value.gridSize}|${shareFilter.value}`,
 )
 const inGame = computed(() => screen.value === 'game')
 const title = computed(() => (inGame.value ? (selectedGame.value ?? '') : 'Games'))
@@ -167,6 +170,19 @@ const sortModel = computed({
                 aria-label="Sort clips"
               />
 
+              <UFieldGroup size="md" aria-label="Filter by sharing">
+                <UButton
+                  v-for="f in SHARE_FILTERS"
+                  :key="f.value"
+                  :icon="f.icon"
+                  :label="f.label"
+                  :color="shareFilter === f.value ? 'primary' : 'neutral'"
+                  :variant="shareFilter === f.value ? 'soft' : 'subtle'"
+                  :aria-pressed="shareFilter === f.value"
+                  @click="shareFilter = f.value"
+                />
+              </UFieldGroup>
+
               <UFieldGroup size="md" aria-label="Card size">
                 <UTooltip v-for="s in sizeOptions" :key="s.value" :text="s.label">
                   <UButton
@@ -217,6 +233,25 @@ const sortModel = computed({
           :sections="sections"
           :reset-key="gridResetKey"
         />
+
+        <!-- The sharing filter hid every clip of this game: say so instead of
+             showing the no-clips screen. -->
+        <UEmpty
+          v-else-if="inGame && gameClipCount"
+          key="filtered"
+          class="empty"
+          icon="i-lucide-filter-x"
+          :title="
+            shareFilter === 'shared'
+              ? 'Nothing from this game is on YouTube yet'
+              : 'Every clip of this game is on YouTube'
+          "
+          description="The sharing filter is hiding the rest."
+        >
+          <template #actions>
+            <UButton label="Show all" color="primary" size="lg" @click="shareFilter = 'all'" />
+          </template>
+        </UEmpty>
 
         <GamesBrowser v-else-if="!inGame && games.length" key="games" />
 

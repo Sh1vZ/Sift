@@ -62,6 +62,7 @@ const clip = (id: string): Clip => ({
   trimEnd: 0,
   muted: false,
   createdAtMs: 0,
+  youtubeId: '',
 })
 
 const count = (file: string, sql: string): number => {
@@ -229,8 +230,47 @@ async function migrationCase(): Promise<void> {
     names.includes('created_at_ms') && names.includes('source_id'),
     'migration added the provenance columns',
   )
-  check(version === '3', 'schema version advanced to 3')
+  check(names.includes('youtube_id'), 'migration added the youtube_id column')
+  check(version === '4', 'schema version advanced to 4')
+  check(store.data.clips.oc?.youtubeId === '', 'v2 clips migrate with no YouTube id')
+
+  // YouTube accounts and a clip's video id round-trip through the new table/column.
+  store.upsertYouTubeAccount({
+    id: 'a1',
+    label: 'sift-proj',
+    project_id: 'sift-proj',
+    client_id: 'x.apps.googleusercontent.com',
+    client_secret_enc: 'c2VjcmV0',
+    refresh_token_enc: '',
+    channel_json: '',
+    quota_limit: 10000,
+    quota_limit_source: 'default',
+    quota_day: '',
+    quota_google_used: 0,
+    quota_synced_at_ms: 0,
+    quota_local_used: 1601,
+    exhausted_until_ms: 0,
+    added_at_ms: 5,
+    sort: 0,
+  })
+  const oc = store.data.clips.oc
+  oc.youtubeId = 'dQw4w9WgXcQ'
+  store.upsertClip(oc)
   await store.close()
+  const again = new Store(oldFile)
+  await again.load()
+  const rows = again.listYouTubeAccounts()
+  check(
+    rows.length === 1 &&
+      rows[0].client_secret_enc === 'c2VjcmV0' &&
+      rows[0].quota_local_used === 1601,
+    'youtube account row survives reopen',
+  )
+  check(again.data.clips.oc?.youtubeId === 'dQw4w9WgXcQ', 'clip youtubeId survives reopen')
+  again.deleteYouTubeAccount('a1')
+  await again.flush()
+  check(again.listYouTubeAccounts().length === 0, 'youtube account row deletes')
+  await again.close()
 }
 
 function exportHelperCases(): void {

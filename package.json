@@ -25,7 +25,9 @@
     "release:notes": "esbuild scripts/release-notes.ts --bundle --platform=node --format=cjs --alias:@shared=./src/shared --outfile=out/scripts/release-notes.cjs --log-level=warning && node out/scripts/release-notes.cjs",
     "release:win": "npm run build && electron-builder --win --config electron-builder.yml --publish always",
     "release:ci": "electron-vite build && electron-builder --win --config electron-builder.yml --publish always",
-    "test": "esbuild tests/store.test.ts --bundle --platform=node --format=cjs --alias:@shared=./src/shared --outfile=out/test/store.cjs --log-level=warning && node --no-warnings out/test/store.cjs"
+    "test": "npm run test:store && npm run test:youtube",
+    "test:store": "esbuild tests/store.test.ts --bundle --platform=node --format=cjs --alias:@shared=./src/shared --outfile=out/test/store.cjs --log-level=warning && node --no-warnings out/test/store.cjs",
+    "test:youtube": "esbuild tests/youtube.test.ts --bundle --platform=node --format=cjs --alias:@shared=./src/shared --outfile=out/test/youtube.cjs --log-level=warning && node --no-warnings out/test/youtube.cjs"
   },
   "dependencies": {
     "@electron-toolkit/utils": "^4.0.0",

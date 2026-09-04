@@ -1,10 +1,18 @@
 import { type BrowserWindow, dialog, ipcMain } from 'electron'
+import { readFile } from 'node:fs/promises'
+import { basename } from 'node:path'
 import { THEME_IDS, type ExportRequest, type Settings } from '@shared/types'
+import { YOUTUBE_PRIVACIES, type UploadRequest, type YouTubePrivacy } from '@shared/youtube'
 import type { Library } from './lib/library'
 import type { Updater } from './lib/updater'
+import type { YouTube } from './lib/youtube'
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : '')
 const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : NaN)
+const privacy = (v: unknown): YouTubePrivacy =>
+  YOUTUBE_PRIVACIES.includes(v as YouTubePrivacy) ? (v as YouTubePrivacy) : 'private'
+/** A client secret file is a few hundred bytes; anything larger is not one. */
+const CLIENT_SECRET_MAX_BYTES = 64 * 1024
 
 async function pickFolder(win: BrowserWindow | null, title: string): Promise<string | null> {
   const opts: Electron.OpenDialogOptions = {
@@ -23,6 +31,8 @@ export function registerIpc(
   onSettingsApplied: (settings: Settings) => void,
   /** The auto-update state machine; inert in development builds. */
   updates: Updater,
+  /** Google projects, the upload queue and the quota ledger. */
+  youtube: YouTube,
 ): void {
   ipcMain.handle('library:snapshot', () => library.snapshot())
 
@@ -74,8 +84,72 @@ export function registerIpc(
     return library.exportClip(req)
   })
 
+  ipcMain.handle('clip:open-youtube', (_e, id) => youtube.openVideo(str(id)))
+  ipcMain.handle('clip:copy-youtube-link', (_e, id) => youtube.copyLink(str(id)))
+  ipcMain.handle('clip:remove-youtube', (_e, id) => youtube.removeVideo(str(id)))
+
   ipcMain.handle('export:cancel', (_e, id) => library.cancelExport(str(id)))
   ipcMain.handle('export:dismiss', (_e, id) => library.dismissExport(str(id)))
+
+  const yt = youtube.accounts
+  ipcMain.handle('youtube:state', () => yt.state())
+  ipcMain.handle('youtube:add-account', (_e, clientId, secret, label) =>
+    yt.add(str(clientId), str(secret), str(label)),
+  )
+  ipcMain.handle('youtube:add-account-json', (_e, text) => yt.addJson(str(text)))
+  ipcMain.handle('youtube:import-account-files', async () => {
+    const win = getWindow()
+    const opts: Electron.OpenDialogOptions = {
+      title: 'Choose the client secret files downloaded from Google Cloud',
+      properties: ['openFile', 'multiSelections', 'dontAddToRecent'],
+      filters: [{ name: 'Google client secret', extensions: ['json'] }],
+    }
+    const result = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts)
+    if (result.canceled) return { ok: true, added: 0, cancelled: true }
+    let added = 0
+    const errors: string[] = []
+    for (const file of result.filePaths) {
+      try {
+        const text = await readFile(file, { encoding: 'utf8' })
+        if (text.length > CLIENT_SECRET_MAX_BYTES)
+          throw new Error('File is too large to be a client secret.')
+        const res = yt.addJson(text, basename(file, '.json'))
+        if (res.ok) added++
+        else errors.push(`${basename(file)}: ${res.error ?? 'not added'}`)
+      } catch (err) {
+        errors.push(`${basename(file)}: ${(err as Error).message}`)
+      }
+    }
+    return errors.length ? { ok: false, added, error: errors.join('\n') } : { ok: true, added }
+  })
+  ipcMain.handle('youtube:rename-account', (_e, id, label) => yt.rename(str(id), str(label)))
+  ipcMain.handle('youtube:connect', (_e, id) => yt.connect(str(id)))
+  ipcMain.handle('youtube:cancel-connect', () => yt.cancelConnect())
+  ipcMain.handle('youtube:disconnect', (_e, id) => yt.disconnect(str(id)))
+  ipcMain.handle('youtube:remove-account', (_e, id) => yt.remove(str(id)))
+  ipcMain.handle('youtube:playlists', (_e, id, refresh) => yt.playlists(str(id), refresh === true))
+  ipcMain.handle('youtube:create-playlist', (_e, id, title, p) =>
+    yt.createPlaylist(str(id), str(title), privacy(p)),
+  )
+
+  ipcMain.handle('upload:list', () => youtube.uploads.list())
+  ipcMain.handle('upload:start', (_e, raw) => {
+    // Rebuilt field by field: the request crosses the bridge as plain JSON.
+    const r = (raw ?? {}) as Record<string, unknown>
+    const req: UploadRequest = {
+      clipId: str(r.clipId),
+      title: str(r.title),
+      description: str(r.description),
+      tags: Array.isArray(r.tags) ? r.tags.filter((t): t is string => typeof t === 'string') : [],
+      privacy: privacy(r.privacy),
+      playlistId: str(r.playlistId),
+      madeForKids: r.madeForKids === true,
+      accountId: str(r.accountId),
+    }
+    return youtube.uploads.enqueue(req)
+  })
+  ipcMain.handle('upload:cancel', (_e, id) => youtube.uploads.cancel(str(id)))
+  ipcMain.handle('upload:dismiss', (_e, id) => youtube.uploads.dismiss(str(id)))
 
   ipcMain.handle('updates:get', () => updates.state())
   ipcMain.handle('updates:check', () => updates.check(true))

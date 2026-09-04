@@ -78,6 +78,9 @@ that owns the behaviour. Always provide one — never omit the parentheses.
 - `protocol` — `lib/protocol.ts`, the `clip://` scheme and range streaming
 - `paths` — `lib/paths.ts`, cache dirs, bundled ffmpeg resolution
 - `window` — `lib/window.ts`, BrowserWindow creation and frame
+- `youtube` — `lib/youtube/*` (OAuth, the Data API wrapper, resumable uploads, the quota ledger,
+  the upload queue) and the YouTube UI (`useYouTube`, `useUploads`, `UploadDialog.vue`,
+  `QuotaMeter.vue`, `YouTubePane.vue`)
 
 ### Bridge and shared scopes
 
