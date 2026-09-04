@@ -76,7 +76,6 @@ function onClick(e: MouseEvent): void {
         :color="clip.favourite ? 'primary' : 'neutral'"
         :variant="clip.favourite ? 'soft' : 'ghost'"
         square
-        size="lg"
         :aria-label="label"
         :aria-pressed="clip.favourite"
         @click="onClick"
@@ -143,8 +142,8 @@ function onClick(e: MouseEvent): void {
   width: 30px;
   height: 30px;
   border-radius: 50%;
-  color: #f1f5f9;
-  background: rgba(10, 10, 24, 0.82);
+  color: var(--fg-strong);
+  background: var(--chip-bg);
   backdrop-filter: blur(4px);
   cursor: pointer;
   pointer-events: auto;
@@ -169,8 +168,8 @@ function onClick(e: MouseEvent): void {
    a favourite off while the pointer was still on the star looked like nothing had
    happened at all. Hover only lifts the disc; the theme colour means "starred". */
 .card-btn:hover {
-  color: #ffffff;
-  background: rgba(10, 10, 24, 0.95);
+  color: var(--fg-strong);
+  background: color-mix(in srgb, var(--scrim) 95%, transparent);
 }
 /* Favourited is a filled disc in the theme's own colour — a different kind of
    thing from "the pointer is here", not a brighter shade of it. */

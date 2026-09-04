@@ -53,8 +53,8 @@ withDefaults(
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
+  width: 40px;
+  height: 40px;
   flex: 0 0 auto;
   border-radius: var(--r-md);
   background: var(--bg-3);

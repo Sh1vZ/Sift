@@ -48,7 +48,6 @@ const toggles: Array<{ key: ToggleKey; icon: string; title: string; description:
         <template #trailing>
           <USwitch
             :model-value="settings[t.key]"
-            size="lg"
             :aria-label="t.title"
             @update:model-value="(v: boolean) => updateSettings({ [t.key]: v })"
           />
@@ -72,7 +71,6 @@ const toggles: Array<{ key: ToggleKey; icon: string; title: string; description:
             label="Show shortcuts"
             color="neutral"
             variant="subtle"
-            size="lg"
             @click="openShortcuts()"
           />
         </template>
@@ -92,7 +90,6 @@ const toggles: Array<{ key: ToggleKey; icon: string; title: string; description:
         <template #trailing>
           <USwitch
             :model-value="settings.animations"
-            size="lg"
             aria-label="Animations"
             @update:model-value="(v: boolean) => updateSettings({ animations: v })"
           />

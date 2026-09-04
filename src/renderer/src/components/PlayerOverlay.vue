@@ -694,7 +694,6 @@ onBeforeUnmount(() => {
           color="neutral"
           variant="ghost"
           square
-          size="lg"
           aria-label="Close player"
           @click="close"
         />
@@ -710,7 +709,6 @@ onBeforeUnmount(() => {
             :color="editing ? 'primary' : 'neutral'"
             :variant="editing ? 'soft' : 'ghost'"
             square
-            size="lg"
             aria-label="Trim and export"
             :aria-pressed="editing"
             :disabled="!canEdit"
@@ -723,7 +721,6 @@ onBeforeUnmount(() => {
             :color="details ? 'primary' : 'neutral'"
             :variant="details ? 'soft' : 'ghost'"
             square
-            size="lg"
             aria-label="Toggle details pane"
             :aria-pressed="details"
             @click="toggleDetails"
@@ -740,7 +737,6 @@ onBeforeUnmount(() => {
             color="neutral"
             variant="ghost"
             square
-            size="lg"
             aria-label="More actions"
           />
         </UDropdownMenu>
@@ -819,7 +815,6 @@ onBeforeUnmount(() => {
                 label="Replay"
                 color="neutral"
                 variant="subtle"
-                size="lg"
                 @click="replay"
               />
               <UButton
@@ -827,7 +822,6 @@ onBeforeUnmount(() => {
                 icon="i-lucide-skip-forward"
                 label="Next clip"
                 color="primary"
-                size="lg"
                 @click="nextClip"
               />
             </div>
@@ -1029,7 +1023,6 @@ onBeforeUnmount(() => {
                 color="neutral"
                 variant="ghost"
                 square
-                size="lg"
                 :disabled="!hasPrev || editing"
                 aria-label="Previous clip"
                 @click="prevClip"
@@ -1052,7 +1045,6 @@ onBeforeUnmount(() => {
                 color="neutral"
                 variant="ghost"
                 square
-                size="lg"
                 :disabled="!hasNext || editing"
                 aria-label="Next clip"
                 @click="nextClip"
@@ -1066,7 +1058,6 @@ onBeforeUnmount(() => {
                 color="neutral"
                 variant="ghost"
                 square
-                size="lg"
                 :aria-label="muted ? 'Unmute' : 'Mute'"
                 @click="setMuted(!muted)"
               />
@@ -1094,7 +1085,6 @@ onBeforeUnmount(() => {
                 color="neutral"
                 variant="ghost"
                 square
-                size="lg"
                 aria-label="Previous frame"
                 @click="stepFrame(-1)"
               />
@@ -1105,7 +1095,6 @@ onBeforeUnmount(() => {
                 color="neutral"
                 variant="ghost"
                 square
-                size="lg"
                 aria-label="Next frame"
                 @click="stepFrame(1)"
               />
@@ -1133,7 +1122,6 @@ onBeforeUnmount(() => {
               :color="loop ? 'primary' : 'neutral'"
               :variant="loop ? 'soft' : 'ghost'"
               square
-              size="lg"
               aria-label="Loop"
               :aria-pressed="loop"
               @click="loop = !loop"
@@ -1145,7 +1133,6 @@ onBeforeUnmount(() => {
               color="neutral"
               variant="ghost"
               square
-              size="lg"
               aria-label="Toggle fullscreen"
               @click="toggleFullscreen"
             />

@@ -81,12 +81,20 @@ repeat radial gradient strings in feature components.
 | Token          | Value     | Use                                             |
 | -------------- | --------- | ----------------------------------------------- |
 | `--fg`         | `#e2e8f0` | Body and primary text                           |
-| `--fg-muted`   | `#94a3b8` | Secondary text, metadata, inactive control text |
-| `--fg-dim`     | `#64748b` | Tertiary text, section labels, hint text        |
+| `--fg-strong`  | `#f8fafc` | Brightest reading text: chip labels over video, Nuxt UI `text-highlighted` |
+| `--fg-toned`   | `#b4c0d3` | A step above muted; Nuxt UI `text-toned`         |
+| `--fg-muted`   | `#a3b0c4` | Secondary text, metadata, inactive control text |
+| `--fg-dim`     | `#8290a8` | Tertiary text, separators, timestamps, hint text |
 | `--fg-inverse` | `#0f172a` | Text on a light/solid fill                      |
 
-`--fg-dim` on `--bg-1` is the contrast floor. Do not go dimmer, and do not use `--fg-dim` for
-anything a user has to read to complete a task.
+`--fg-dim` is the contrast floor: in every theme it clears 4.5:1 on `--bg-4`, the lightest
+surface it can sit on, so a theme block that re-points it must be checked (WCAG relative
+luminance — the one-liner in the Verification section of the UX-overhaul plan, or any contrast
+checker). Do not go dimmer, and keep `--fg-dim` for tertiary text; anything a user must read to
+complete a task is `--fg-muted` or `--fg`.
+
+`--chip-bg` (the scrim at 86 %) is the surface for chips that sit over a thumbnail — card badges,
+search-row duration, the favourite disc — with `--fg-strong` text.
 
 ### Brand and status
 
@@ -143,11 +151,17 @@ Fonts are self-hosted through `@fontsource*` and imported once in `src/renderer/
 `.mono` also sets `font-variant-numeric: tabular-nums`. Use it for any number that updates in
 place (clip counts, timecodes, sizes) so the layout does not jitter.
 
-**Scale** — `--text-xs` 12px · `--text-sm` 13.5px · `--text-base` 14px · `--text-md` 15px ·
-`--text-lg` 18px · `--text-xl` 22px · `--text-2xl` 28px.
+**Scale** — `--text-xs` 13px · `--text-sm` 14px · `--text-base` 15px · `--text-md` 16px ·
+`--text-lg` 20px · `--text-xl` 24px · `--text-2xl` 32px.
 
-Desktop density: 14px base, not 16px. Do not use the browser-default 16px rhythm here, and do
-not go below `--text-xs` for anything.
+Desktop density with room to read: 15px base. Do not go below `--text-xs` for anything, and
+never hard-code a pixel font size in a component.
+
+**The scale names are load-bearing.** All of them except `--text-md` are also Tailwind's own
+theme variables (declared in `@layer theme`); `tokens.css` is unlayered, so the app values win
+and every Nuxt UI `text-sm` / `text-base` utility reads this scale. That is why raising the
+tokens resized every Nuxt UI component at once — and why the names must never be changed.
+`--shadow-sm/md/lg` and `--ease-out/in-out` collide the same way, on purpose.
 
 ### Radius, spacing, layout
 
@@ -156,8 +170,8 @@ not go below `--text-xs` for anything.
   surfaces therefore sit a step rounder than hand-built ones. Accepted; do not chase parity by
   overriding radius per component.
 - Spacing: `--s-1` 4 through `--s-12` 48. Use the scale — no arbitrary `13px` gaps.
-- Layout: `--titlebar-h` 40px, `--sidebar-w` 60px (icon-only rail), `--page-max` 960px. Read these rather than
-  hardcoding.
+- Layout: `--titlebar-h` 44px, `--sidebar-w` 60px (the icon-only rail), `--sidebar-w-expanded`
+  224px (the labelled sidebar), `--page-max` 960px. Read these rather than hardcoding.
 
 ### Motion variables
 
@@ -185,6 +199,7 @@ These are intentional. Keep them.
 | Style: 3D & hyperrealism, parallax, WebGL  | Restrained; WebGL (Aurora) lazy-loaded, empty state only | A clip library is a working tool. Ambient 3D fights the thumbnails and burns GPU while a game runs. |
 | Anti-pattern: "minimalist design"          | Chrome is quiet; the clips carry the colour            | The thumbnails are the content. Decorated chrome competes with them.                |
 | Page pattern: hero > feature grid > social proof > CTA | Content screens fill the width; text-led screens centre one `--page-max` column | Landing-page section order means nothing in a desktop tool. See "Page width".        |
+| No raw hex anywhere                        | `#000` behind the video stage and `#fff` on the trim handles / close-button hover stay literal | Black behind a letterboxed frame and white handles over a filmstrip are relative to the content, not to the theme. |
 
 ---
 
@@ -219,6 +234,11 @@ Stay inside the vocabulary already in use — `color`: `neutral` / `primary` / `
 - All buttons are `UButton`. The house style is set globally in the plugin config
   (`button.slots.base`): Chakra Petch, semibold, uppercase, wide tracking, `cursor-pointer`.
   Buttons look like Sift without per-instance classes — do not re-apply that styling.
+- Sizes are global too (`defaultVariants` in the same config): buttons, inputs, selects, switches
+  and field groups default to `lg`, which the config pads to **40px tall**; badges default to
+  `md` (13px). Do not write `size="lg"` on any of them. Reach for `xl` only on a primary call to
+  action or a search field, and `sm` / `xs` only on dense chrome (card kebabs, veil buttons,
+  breadcrumbs).
 - Toolbar and overlay icon buttons: `variant="ghost"`, `square`, a size, and **always** an
   `aria-label`.
 - Giving a `UButton` a hand-set `width`/`height` in scoped CSS (window controls, the player's
@@ -428,7 +448,7 @@ When creating or changing a renderer surface:
 - **Foundation:** Five-step indigo-black surface ramp (`--bg-0` … `--bg-4`)
 - **Identity:** `#7c3aed` violet; `#f43f5e` rose held in reserve
 - **Display / heading / body:** Russo One · Chakra Petch · Inter Variable
-- **Base size:** 14px (desktop density)
+- **Base size:** 15px body, 14px secondary, 13px floor; controls 40px tall by default
 - **Radius:** 10/14px app chrome, 8/12/16px Nuxt UI
 - **Spacing scale:** 4, 8, 12, 16, 20, 24, 32, 40, 48px
 - **Shadow intensity:** Deep — authored for a `#0f0f23` ground

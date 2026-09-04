@@ -37,7 +37,8 @@ const GAP = 18
 /** Height reserved under each thumbnail for the title + date line, including the
  *  padding ClipCard's `.meta` sets. Change both together. */
 const META_H = 70
-const HEADER_H = 48
+/** Section header row; ClipGrid's `.row-header` height must match. */
+const HEADER_H = 56
 const SECTION_GAP = 14
 const OVERSCAN = 420
 const MIN_CARD_W: Record<GridSize, number> = { compact: 214, comfortable: 268, large: 348 }

@@ -262,7 +262,6 @@ const initials = (label: string): string =>
         <template #trailing>
           <USwitch
             :model-value="settings.youtubeCheckStatus"
-            size="lg"
             aria-label="Check processing status"
             @update:model-value="(v: boolean) => updateSettings({ youtubeCheckStatus: v })"
           />

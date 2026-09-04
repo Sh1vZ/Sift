@@ -19,7 +19,6 @@ import { settings, updateSettings } from '@/composables/useLibrary'
         <template #trailing>
           <USwitch
             :model-value="settings.minimizeToTray"
-            size="lg"
             aria-label="Minimize to the tray instead of quitting"
             @update:model-value="(v: boolean) => updateSettings({ minimizeToTray: v })"
           />

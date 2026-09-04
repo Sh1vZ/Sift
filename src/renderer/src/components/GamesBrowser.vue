@@ -201,7 +201,6 @@ const menuOpen = ref(false)
       <USelect
         v-model="gameSort"
         :items="sortOptions"
-        size="lg"
         icon="i-lucide-arrow-up-down"
         class="w-48"
         aria-label="Sort games"

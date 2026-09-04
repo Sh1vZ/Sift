@@ -78,7 +78,6 @@ function onSearchKey(e: KeyboardEvent): void {
           ref="search"
           v-model="settingsQuery"
           icon="i-lucide-search"
-          size="lg"
           placeholder="Search settings"
           spellcheck="false"
           autocomplete="off"

@@ -183,7 +183,6 @@ onBeforeUnmount(() => offSearch?.())
           v-model="exportQuery"
           class="filter"
           icon="i-lucide-search"
-          size="lg"
           placeholder="Filter clips"
           spellcheck="false"
           autocomplete="off"
@@ -207,12 +206,11 @@ onBeforeUnmount(() => offSearch?.())
           v-model="shareFilter"
           :items="SHARE_FILTERS"
           :icon="shareIcon"
-          size="lg"
           class="w-44"
           aria-label="Filter by sharing"
         />
 
-        <UFieldGroup size="lg" aria-label="Filter by state">
+        <UFieldGroup aria-label="Filter by state">
           <UTooltip text="Favourites only">
             <UButton
               icon="i-lucide-star"
@@ -237,7 +235,7 @@ onBeforeUnmount(() => offSearch?.())
           </UTooltip>
         </UFieldGroup>
 
-        <UFieldGroup size="lg" aria-label="Card size">
+        <UFieldGroup aria-label="Card size">
           <UTooltip v-for="s in sizeOptions" :key="s.value" :text="s.label">
             <UButton
               :icon="s.icon"
@@ -256,7 +254,6 @@ onBeforeUnmount(() => offSearch?.())
             icon="i-lucide-folder-open"
             label="Open folder"
             color="primary"
-            size="lg"
             :disabled="!clipsFolder?.available"
             @click="revealClipsDir()"
           />
@@ -315,7 +312,6 @@ onBeforeUnmount(() => offSearch?.())
               label="Clear filter"
               color="neutral"
               variant="subtle"
-              size="lg"
               @click="exportQuery = ''"
             />
           </template>
@@ -334,7 +330,7 @@ onBeforeUnmount(() => offSearch?.())
           "
         >
           <template #actions>
-            <UButton label="Show all" color="primary" size="lg" @click="clearFilters()" />
+            <UButton label="Show all" color="primary" @click="clearFilters()" />
           </template>
         </UEmpty>
 
@@ -351,7 +347,6 @@ onBeforeUnmount(() => offSearch?.())
               icon="i-lucide-gamepad-2"
               label="Browse games"
               color="primary"
-              size="lg"
               @click="goGames()"
             />
           </template>

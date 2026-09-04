@@ -68,7 +68,6 @@ const pending = computed(() => allClips.value.filter((c) => c.probeState === 'pe
         <template #trailing>
           <USwitch
             :model-value="settings[t.key]"
-            size="lg"
             :aria-label="t.title"
             @update:model-value="(v: boolean) => updateSettings({ [t.key]: v })"
           />

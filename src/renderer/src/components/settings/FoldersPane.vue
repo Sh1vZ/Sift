@@ -58,7 +58,6 @@ async function remove(folder: LibraryFolder): Promise<void> {
           icon="i-lucide-folder-plus"
           label="Add folder"
           color="primary"
-          size="lg"
           @click="addFolder()"
         />
       </template>
@@ -125,7 +124,6 @@ async function remove(folder: LibraryFolder): Promise<void> {
                     color="neutral"
                     variant="ghost"
                     square
-                    size="lg"
                     aria-label="Rescan folder"
                     :disabled="!f.available"
                     @click="rescan(f.id)"
@@ -138,7 +136,6 @@ async function remove(folder: LibraryFolder): Promise<void> {
                     color="error"
                     variant="ghost"
                     square
-                    size="lg"
                     :loading="removing.includes(f.id)"
                     :disabled="removing.includes(f.id)"
                     aria-label="Remove folder"
@@ -164,7 +161,6 @@ async function remove(folder: LibraryFolder): Promise<void> {
         label="Rescan all folders"
         color="neutral"
         variant="subtle"
-        size="lg"
         :disabled="!libraryFolders.length || scan.active"
         :loading="scan.active"
         @click="rescan()"

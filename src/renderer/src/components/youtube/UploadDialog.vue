@@ -319,7 +319,6 @@ async function submit(): Promise<void> {
                 v-model="title"
                 :maxlength="YOUTUBE_LIMITS.title"
                 placeholder="What is this clip?"
-                size="lg"
                 class="w-full"
                 autofocus
               />
@@ -450,7 +449,7 @@ async function submit(): Promise<void> {
                   YouTube asks this for every upload. Game clips are almost never made for kids.
                 </p>
               </div>
-              <USwitch v-model="madeForKids" size="lg" aria-label="Made for kids" />
+              <USwitch v-model="madeForKids" aria-label="Made for kids" />
             </div>
           </section>
         </div>
@@ -464,14 +463,13 @@ async function submit(): Promise<void> {
         <template v-else>{{ summary }}</template>
       </p>
       <div class="footer-actions">
-        <UButton label="Cancel" color="neutral" variant="ghost" size="lg" @click="open = false" />
+        <UButton label="Cancel" color="neutral" variant="ghost" @click="open = false" />
         <UTooltip text="Ctrl + Enter">
           <UButton
             icon="i-lucide-upload"
             label="Upload"
             color="primary"
             variant="soft"
-            size="lg"
             :disabled="!canSubmit"
             :loading="submitting"
             @click="submit"
@@ -522,8 +520,8 @@ async function submit(): Promise<void> {
   position: absolute;
   right: 6px;
   bottom: 6px;
-  background: rgba(10, 10, 24, 0.82);
-  color: #f1f5f9;
+  background: var(--chip-bg);
+  color: var(--fg-strong);
   font-family: var(--font-heading);
   font-weight: 600;
 }

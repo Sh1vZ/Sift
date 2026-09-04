@@ -182,7 +182,7 @@ const poster = (c: Clip): string => (c.thumb ? api.thumbUrl(c.thumb) : '')
 .thumb {
   position: relative;
   flex: 0 0 auto;
-  width: 84px;
+  width: 96px;
   aspect-ratio: 16 / 9;
   display: flex;
   align-items: center;
@@ -200,13 +200,14 @@ const poster = (c: Clip): string => (c.thumb ? api.thumbUrl(c.thumb) : '')
 }
 .len {
   position: absolute;
-  right: 3px;
-  bottom: 3px;
-  padding: 0 3px;
-  border-radius: 3px;
-  font-size: 10px;
-  color: #f1f5f9;
-  background: rgba(10, 10, 24, 0.82);
+  right: 4px;
+  bottom: 4px;
+  padding: 0 4px;
+  border-radius: 4px;
+  font-size: var(--text-xs);
+  line-height: 1.4;
+  color: var(--fg-strong);
+  background: var(--chip-bg);
 }
 .text {
   display: flex;
@@ -258,7 +259,7 @@ const poster = (c: Clip): string => (c.thumb ? api.thumbUrl(c.thumb) : '')
   padding: 8px 12px;
   border-top: 1px solid var(--border);
   font-size: var(--text-sm);
-  color: var(--fg-dim);
+  color: var(--fg-muted);
 }
 .foot span {
   display: inline-flex;

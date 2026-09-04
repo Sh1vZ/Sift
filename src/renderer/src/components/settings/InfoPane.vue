@@ -164,7 +164,6 @@ onMounted(() => {
         <template #trailing>
           <USwitch
             :model-value="settings.autoCheckUpdates"
-            size="lg"
             aria-label="Check for updates automatically"
             @update:model-value="(v: boolean) => updateSettings({ autoCheckUpdates: v })"
           />

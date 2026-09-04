@@ -58,14 +58,43 @@ export default defineConfig({
             error: 'rose',
             neutral: 'slate',
           },
+          // Desktop density, one size up from Nuxt UI's defaults: `lg` buttons, inputs
+          // and selects all come out 40px tall (14–15px text plus 10px of padding), so a
+          // toolbar row lines up without a size prop at every call site. The padding
+          // overrides merge onto the theme's `py-2` and win through tw-merge.
           button: {
             slots: { base: 'font-heading font-semibold uppercase tracking-wider cursor-pointer' },
-            // Nuxt UI paints solid primary buttons with `text-inverted`, which the token
-            // bridge maps to the near-black --fg-inverse. Text on the primary colour is
-            // --on-primary; `.on-primary` in base.css applies it (app CSS is unlayered, so
-            // it beats the utility, and nothing depends on Tailwind scanning this file).
-            compoundVariants: [{ color: 'primary', variant: 'solid', class: 'on-primary' }],
+            variants: {
+              size: {
+                lg: { base: 'py-2.5 px-3.5' },
+                xl: { base: 'py-2.5 px-4' },
+              },
+            },
+            defaultVariants: { size: 'lg' },
+            compoundVariants: [
+              // Nuxt UI paints solid primary buttons with `text-inverted`, which the token
+              // bridge maps to the near-black --fg-inverse. Text on the primary colour is
+              // --on-primary; `.on-primary` in base.css applies it (app CSS is unlayered, so
+              // it beats the utility, and nothing depends on Tailwind scanning this file).
+              { color: 'primary', variant: 'solid', class: 'on-primary' },
+              // Icon-only buttons keep the height of their labelled neighbours.
+              { size: 'lg', square: true, class: 'p-2.5' },
+              { size: 'xl', square: true, class: 'p-2.5' },
+            ],
           },
+          input: {
+            variants: { size: { lg: { base: 'py-2.5' } } },
+            defaultVariants: { size: 'lg' },
+          },
+          select: {
+            variants: { size: { lg: { base: 'py-2.5' } } },
+            defaultVariants: { size: 'lg' },
+          },
+          fieldGroup: { defaultVariants: { size: 'lg' } },
+          switch: { defaultVariants: { size: 'lg' } },
+          badge: { defaultVariants: { size: 'md' } },
+          dropdownMenu: { defaultVariants: { size: 'lg' } },
+          contextMenu: { defaultVariants: { size: 'lg' } },
         },
         icon: {
           mode: 'svg',

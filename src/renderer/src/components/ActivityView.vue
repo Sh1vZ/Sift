@@ -51,7 +51,6 @@ const stats = computed(
           icon="i-lucide-trash-2"
           color="neutral"
           variant="subtle"
-          size="lg"
           @click="clearActivity()"
         />
       </div>

@@ -241,7 +241,6 @@ const rows = computed<Row[]>(() => {
             color="neutral"
             variant="ghost"
             square
-            size="lg"
             aria-label="Hide details"
             @click="$emit('close')"
           />
@@ -254,14 +253,13 @@ const rows = computed<Row[]>(() => {
         v-model="draft"
         class="name"
         variant="subtle"
-        size="lg"
         icon="i-lucide-pencil"
         spellcheck="false"
         autocomplete="off"
         placeholder="File name"
         :loading="pendingAction?.kind === 'rename'"
         :disabled="busy"
-        :ui="{ base: 'font-heading font-semibold text-[15px]', trailing: 'pe-3' }"
+        :ui="{ base: 'font-heading font-semibold text-base', trailing: 'pe-3' }"
         @focus="nameFocused = true"
         @blur="commitName"
         @keydown.enter.prevent="nameInput?.inputRef?.blur()"
@@ -441,7 +439,6 @@ const rows = computed<Row[]>(() => {
               color="neutral"
               variant="subtle"
               square
-              size="lg"
               aria-label="Copy path"
               @click="copyClipPath(clip)"
             />
@@ -456,7 +453,6 @@ const rows = computed<Row[]>(() => {
         :label="editing ? 'Leave edit mode' : 'Trim & export'"
         :color="editing ? 'neutral' : 'primary'"
         :variant="editing ? 'subtle' : 'solid'"
-        size="lg"
         block
         :disabled="!canEdit"
         @click="$emit('edit')"
@@ -468,7 +464,6 @@ const rows = computed<Row[]>(() => {
           :color="uploading ? 'error' : 'neutral'"
           :label="uploadLabel"
           variant="subtle"
-          size="lg"
           block
           :disabled="clip.probeState !== 'ok' || busy"
           @click="onUploadButton"
@@ -479,7 +474,6 @@ const rows = computed<Row[]>(() => {
             color="neutral"
             variant="subtle"
             square
-            size="lg"
             aria-label="Copy file"
             :loading="pendingAction?.kind === 'copy-file'"
             :disabled="busy"
@@ -493,7 +487,6 @@ const rows = computed<Row[]>(() => {
             color="error"
             variant="subtle"
             square
-            size="lg"
             aria-label="Delete"
             :loading="pendingAction?.kind === 'delete'"
             :disabled="busy"

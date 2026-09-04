@@ -135,7 +135,6 @@ const { dropping } = useFolderDrop(stageEl, () => !inGame.value)
             color="neutral"
             variant="ghost"
             square
-            size="lg"
             aria-label="Back to games"
             @click="goGames"
           />
@@ -209,7 +208,6 @@ const { dropping } = useFolderDrop(stageEl, () => !inGame.value)
               v-model="clipQuery"
               class="filter"
               icon="i-lucide-search"
-              size="lg"
               placeholder="Filter clips"
               spellcheck="false"
               autocomplete="off"
@@ -229,7 +227,7 @@ const { dropping } = useFolderDrop(stageEl, () => !inGame.value)
               </template>
             </UInput>
 
-            <UFieldGroup size="lg" aria-label="Group clips by">
+            <UFieldGroup aria-label="Group clips by">
               <UTooltip v-for="g in groupOptions" :key="g.value" :text="g.label">
                 <UButton
                   :icon="g.icon"
@@ -246,7 +244,6 @@ const { dropping } = useFolderDrop(stageEl, () => !inGame.value)
             <USelect
               v-model="sortModel"
               :items="sortOptions"
-              size="lg"
               icon="i-lucide-arrow-up-down"
               class="w-44"
               aria-label="Sort clips"
@@ -256,7 +253,6 @@ const { dropping } = useFolderDrop(stageEl, () => !inGame.value)
               v-model="shareFilter"
               :items="SHARE_FILTERS"
               :icon="shareIcon"
-              size="lg"
               class="w-44"
               aria-label="Filter by sharing"
             />
@@ -264,7 +260,7 @@ const { dropping } = useFolderDrop(stageEl, () => !inGame.value)
             <!-- Two toggles rather than a third select: they compose into
                  "unwatched favourites", and the in-game toolbar has no room
                  for another w-44 control at the 980px minimum. -->
-            <UFieldGroup size="lg" aria-label="Filter by state">
+            <UFieldGroup aria-label="Filter by state">
               <UTooltip text="Favourites only">
                 <UButton
                   icon="i-lucide-star"
@@ -289,7 +285,7 @@ const { dropping } = useFolderDrop(stageEl, () => !inGame.value)
               </UTooltip>
             </UFieldGroup>
 
-            <UFieldGroup size="lg" aria-label="Card size">
+            <UFieldGroup aria-label="Card size">
               <UTooltip v-for="s in sizeOptions" :key="s.value" :text="s.label">
                 <UButton
                   :icon="s.icon"
@@ -311,7 +307,6 @@ const { dropping } = useFolderDrop(stageEl, () => !inGame.value)
                 color="neutral"
                 variant="ghost"
                 square
-                size="lg"
                 :loading="scan.active"
                 aria-label="Rescan folders"
                 @click="rescan()"
@@ -321,7 +316,6 @@ const { dropping } = useFolderDrop(stageEl, () => !inGame.value)
               icon="i-lucide-folder-plus"
               label="Add folder"
               color="primary"
-              size="lg"
               @click="addFolder()"
             />
           </template>
@@ -355,7 +349,6 @@ const { dropping } = useFolderDrop(stageEl, () => !inGame.value)
               label="Clear filter"
               color="neutral"
               variant="subtle"
-              size="lg"
               @click="clipQuery = ''"
             />
           </template>
@@ -376,7 +369,7 @@ const { dropping } = useFolderDrop(stageEl, () => !inGame.value)
           "
         >
           <template #actions>
-            <UButton label="Show all" color="primary" size="lg" @click="clearFilters()" />
+            <UButton label="Show all" color="primary" @click="clearFilters()" />
           </template>
         </UEmpty>
 
@@ -428,7 +421,7 @@ const { dropping } = useFolderDrop(stageEl, () => !inGame.value)
             <StarBorder
               as="button"
               class="star-btn"
-              color="#c4b5fd"
+              :color="activeTheme.colors.secondary"
               speed="5s"
               :thickness="2"
               @click="addFolder()"
@@ -443,7 +436,6 @@ const { dropping } = useFolderDrop(stageEl, () => !inGame.value)
                 icon="i-lucide-folder"
                 color="neutral"
                 variant="subtle"
-                size="lg"
                 @click="addFolder(p)"
               />
             </UTooltip>
@@ -590,7 +582,11 @@ const { dropping } = useFolderDrop(stageEl, () => !inGame.value)
   background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 70%, white));
 }
 .p2 {
-  background: linear-gradient(135deg, #34d399, #6ee7b7);
+  background: linear-gradient(
+    135deg,
+    var(--success),
+    color-mix(in srgb, var(--success) 70%, white)
+  );
 }
 .p3 {
   background: linear-gradient(

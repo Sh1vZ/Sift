@@ -46,7 +46,6 @@ import { SHORTCUT_GROUPS, shortcutsOpen } from '@/composables/useShortcuts'
         class="ms-auto shrink-0"
         label="Got it"
         color="primary"
-        size="lg"
         @click="shortcutsOpen = false"
       />
     </template>

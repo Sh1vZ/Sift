@@ -145,8 +145,9 @@ const menuItems = (clip: Clip) =>
   display: flex;
   align-items: center;
   gap: 10px;
-  height: 48px;
-  padding-top: 10px;
+  /* Keep in step with HEADER_H in useVirtualGrid. */
+  height: 56px;
+  padding-top: 14px;
 }
 .row-header h2 {
   font-size: var(--text-lg);

@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import ShinyText from './bits/ShinyText.vue'
 import ActivityPanel from './ActivityPanel.vue'
 import { motionEnabled } from '@/composables/useMotion'
+import { activeTheme } from '@/composables/useTheme'
 import { exportedClips, games, goClips, goGames, screen, view } from '@/composables/useLibrary'
 import { activityBusy, activityCount, activityOpen } from '@/composables/useActivity'
 import { openSettings, settingsTab } from '@/composables/useSettings'
@@ -72,8 +73,8 @@ const navUi = {
       <ShinyText
         text="Sift"
         class-name="wordmark"
-        color="#c4b5fd"
-        shine-color="#ffffff"
+        :color="activeTheme.colors.secondary"
+        :shine-color="activeTheme.colors.fg"
         :speed="2.4"
         :delay="7"
         :disabled="!motionEnabled"
@@ -118,7 +119,6 @@ const navUi = {
               :color="activityCount || view === 'activity' ? 'primary' : 'neutral'"
               variant="ghost"
               square
-              size="lg"
               :ui="{ leadingIcon: activityBusy ? 'animate-spin size-6' : 'size-6' }"
               aria-label="Activity"
               :aria-expanded="activityOpen"

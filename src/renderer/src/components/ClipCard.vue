@@ -484,7 +484,7 @@ const seen = computed(() => Boolean(props.clip.seenAtMs) && !veil.value)
   gap: var(--s-2);
   padding: var(--s-4) var(--s-6);
   color: var(--secondary);
-  background: rgba(7, 7, 18, 0.72);
+  background: color-mix(in srgb, var(--scrim) 72%, transparent);
   backdrop-filter: blur(3px);
 }
 .job-veil.is-failed {
@@ -510,20 +510,20 @@ const seen = computed(() => Boolean(props.clip.seenAtMs) && !veil.value)
 .job-progress {
   width: 60%;
 }
-/* Sized here rather than left to `UBadge size="sm"`: its 10px text in a py-1 box
-   reads as a small label in a large chip. Slightly bigger type in a tighter box
-   is easier to read at a glance and keeps all four chips visually equal. */
+/* Sized here rather than left to `UBadge size="sm"`: its fixed 10px text in a
+   py-1 box reads as a small label in a large chip. The app's smallest step in a
+   tighter box is legible at a glance and keeps all four chips visually equal. */
 .badge {
   position: absolute;
   bottom: 8px;
   right: 8px;
   padding: 2px 7px;
   gap: 4px;
-  border-radius: 6px;
-  background: rgba(10, 10, 24, 0.82);
-  color: #f1f5f9;
+  border-radius: var(--r-sm);
+  background: var(--chip-bg);
+  color: var(--fg-strong);
   font-family: var(--font-heading);
-  font-size: 11px;
+  font-size: var(--text-xs);
   line-height: 1.35;
   font-weight: 600;
   letter-spacing: 0.03em;
@@ -558,7 +558,7 @@ const seen = computed(() => Boolean(props.clip.seenAtMs) && !veil.value)
    owns. Plain white on the same dark chip is what is left, and it is also the
    most legible of the four. Never the off-palette green it used to be. */
 .badge.seen {
-  color: #ffffff;
+  color: var(--fg-strong);
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.22);
 }
 /* Already on YouTube: one glyph, top right, in the reserved rose. */
@@ -581,7 +581,7 @@ const seen = computed(() => Boolean(props.clip.seenAtMs) && !veil.value)
 .seen-scrim {
   position: absolute;
   inset: 0;
-  background: rgba(7, 7, 18, 0.42);
+  background: color-mix(in srgb, var(--scrim) 42%, transparent);
   pointer-events: none;
   transition: opacity var(--dur) var(--ease-out);
 }

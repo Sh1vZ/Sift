@@ -71,7 +71,6 @@ watch(open, (v) => {
           ref="input"
           v-model="value"
           class="w-full"
-          size="lg"
           autofocus
           spellcheck="false"
           @keydown.enter.prevent="submit()"
