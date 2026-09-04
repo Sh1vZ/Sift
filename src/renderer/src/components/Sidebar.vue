@@ -5,27 +5,37 @@ import ActivityPanel from './ActivityPanel.vue'
 import { motionEnabled } from '@/composables/useMotion'
 import { activeTheme } from '@/composables/useTheme'
 import { exportedClips, games, goClips, goGames, screen, view } from '@/composables/useLibrary'
-import { activityBusy, activityCount, activityOpen } from '@/composables/useActivity'
+import { activityBusy, activityCount, activityLabel, activityOpen } from '@/composables/useActivity'
 import { openSettings, settingsTab } from '@/composables/useSettings'
+import { openShortcuts } from '@/composables/useShortcuts'
+import { isRail, railForced, toggleSidebar } from '@/composables/useSidebar'
 
 /**
- * Icon-only rail. Labels live in the tooltip Nuxt UI renders for a collapsed
- * vertical menu, so anything that cannot be said in one glyph — the game you
- * have drilled into, the scan detail — belongs in the title bar or a tooltip.
+ * The app's left column in two widths. Labelled — icon, name, count — at
+ * --sidebar-w-expanded, or the icon-only rail at --sidebar-w when the user
+ * collapses it or the window is too narrow to spare the room (see useSidebar).
+ * The rail keeps Nuxt UI's collapsed-menu tooltips, so nothing is lost with
+ * the labels; anything longer than a name — the game you are in, the scan
+ * detail — belongs in the title bar.
  */
 interface NavItem {
   label: string
   icon: string
   active?: boolean
-  tooltip?: { text: string }
+  badge?: { label: number; size: 'md'; color: 'neutral'; variant: 'subtle'; class: string }
+  tooltip?: { text: string; kbds?: string[] }
   onSelect: () => void
 }
+
+const count = (n: number): NavItem['badge'] =>
+  n ? { label: n, size: 'md', color: 'neutral', variant: 'subtle', class: 'mono' } : undefined
 
 const libraryItems = computed<NavItem[]>(() => [
   {
     label: 'Games',
     icon: 'i-lucide-gamepad-2',
     active: screen.value === 'games' || screen.value === 'game',
+    badge: count(games.value.length),
     tooltip: { text: `Games · ${games.value.length}` },
     onSelect: () => goGames(),
   },
@@ -33,6 +43,7 @@ const libraryItems = computed<NavItem[]>(() => [
     label: 'Clips',
     icon: 'i-lucide-scissors',
     active: screen.value === 'clips',
+    badge: count(exportedClips.value.length),
     tooltip: { text: `Clips · ${exportedClips.value.length}` },
     onSelect: () => goClips(),
   },
@@ -40,23 +51,40 @@ const libraryItems = computed<NavItem[]>(() => [
 
 const footerItems = computed<NavItem[]>(() => [
   {
+    label: 'Shortcuts',
+    icon: 'i-lucide-keyboard',
+    tooltip: { text: 'Keyboard shortcuts', kbds: ['?'] },
+    onSelect: () => openShortcuts(),
+  },
+  {
     label: 'Settings',
     icon: 'i-lucide-sliders-horizontal',
     active: view.value === 'settings',
+    tooltip: { text: 'Settings', kbds: ['ctrl', ','] },
     onSelect: () => openSettings(settingsTab.value),
   },
 ])
 
-/* Collapsed links are 44px squares centred in the rail; the pill background
-   and the focus ring both follow the link box. */
-const navUi = {
-  link: 'h-11 justify-center px-0 rounded-lg',
-  linkLeadingIcon: 'size-6',
-}
+/* Rail links are 44px squares centred in the column; expanded links are full
+   rows at the app's base size. The pill background and the focus ring follow
+   the link box either way. */
+const navUi = computed(() =>
+  isRail.value
+    ? { link: 'h-11 justify-center px-0 rounded-lg', linkLeadingIcon: 'size-6' }
+    : {
+        link: 'h-11 px-3 gap-3 rounded-lg text-base font-medium',
+        linkLeadingIcon: 'size-6',
+        linkTrailingBadge: 'tabular-nums',
+      },
+)
+
+const activityTitle = computed(() =>
+  activityCount.value ? `Activity · ${activityCount.value} active` : 'Activity',
+)
 </script>
 
 <template>
-  <aside class="sidebar">
+  <aside class="sidebar" :class="{ 'is-rail': isRail }">
     <div class="brand">
       <span class="mark" aria-hidden="true">
         <svg viewBox="0 0 32 32" width="28" height="28">
@@ -84,8 +112,8 @@ const navUi = {
     <nav class="nav" aria-label="Main">
       <UNavigationMenu
         orientation="vertical"
-        collapsed
-        tooltip
+        :collapsed="isRail"
+        :tooltip="isRail"
         color="primary"
         variant="pill"
         :items="libraryItems"
@@ -95,7 +123,8 @@ const navUi = {
 
     <div class="footer">
       <!-- Everything running in the background, in one list. The badge counts
-           live jobs; finished ones wait in the panel until dismissed. -->
+           live jobs; finished ones wait in the panel until dismissed. Expanded,
+           the button also carries the one-line status the title bar shows. -->
       <UPopover
         v-model:open="activityOpen"
         :content="{ side: 'right', align: 'end', sideOffset: 10 }"
@@ -104,76 +133,131 @@ const navUi = {
         <UChip
           class="activity-chip"
           :text="activityCount"
-          :show="activityCount > 0"
+          :show="isRail && activityCount > 0"
           color="primary"
           size="lg"
           inset
         >
-          <UTooltip
-            :text="activityCount ? `Activity · ${activityCount} active` : 'Activity'"
-            :content="{ side: 'right' }"
-          >
+          <UTooltip :text="activityTitle" :content="{ side: 'right' }" :disabled="!isRail">
             <UButton
               class="activity"
               :icon="activityBusy ? 'i-lucide-loader-circle' : 'i-lucide-activity'"
               :color="activityCount || view === 'activity' ? 'primary' : 'neutral'"
               variant="ghost"
-              square
-              :ui="{ leadingIcon: activityBusy ? 'animate-spin size-6' : 'size-6' }"
-              aria-label="Activity"
+              :square="isRail"
+              :ui="{
+                base: isRail
+                  ? ''
+                  : 'w-full justify-start px-3 gap-3 min-h-11 py-1.5 rounded-lg font-sans font-medium normal-case tracking-normal text-base',
+                leadingIcon: activityBusy ? 'animate-spin size-6' : 'size-6',
+              }"
+              :aria-label="activityTitle"
               :aria-expanded="activityOpen"
-            />
+            >
+              <span v-if="!isRail" class="activity-text">
+                <span>Activity</span>
+                <span v-if="activityLabel" class="activity-status truncate">{{
+                  activityLabel
+                }}</span>
+              </span>
+              <UBadge
+                v-if="!isRail && activityCount"
+                class="activity-count mono"
+                color="primary"
+                variant="subtle"
+                size="md"
+                :label="activityCount"
+              />
+            </UButton>
           </UTooltip>
         </UChip>
         <template #content>
           <ActivityPanel />
         </template>
       </UPopover>
+
       <UNavigationMenu
         orientation="vertical"
-        collapsed
-        tooltip
+        :collapsed="isRail"
+        :tooltip="isRail"
         color="primary"
         variant="pill"
         :items="footerItems"
         :ui="navUi"
       />
+
+      <!-- Hidden while the window forces the rail: the toggle would do nothing.
+           Not called "collapse": that is a Tailwind utility (visibility: collapse). -->
+      <UTooltip
+        v-if="!railForced"
+        :text="isRail ? 'Expand the sidebar' : 'Collapse the sidebar'"
+        :kbds="['ctrl', 'B']"
+        :content="{ side: 'right' }"
+      >
+        <UButton
+          class="fold"
+          :icon="isRail ? 'i-lucide-panel-left-open' : 'i-lucide-panel-left-close'"
+          color="neutral"
+          variant="ghost"
+          square
+          size="sm"
+          :aria-label="isRail ? 'Expand the sidebar' : 'Collapse the sidebar'"
+          :aria-expanded="!isRail"
+          @click="toggleSidebar()"
+        />
+      </UTooltip>
     </div>
   </aside>
 </template>
 
 <style scoped>
+/* No width transition on purpose: the grid beside it re-lays out on every
+   frame of one, and the labels are all that needs to appear. */
 .sidebar {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  width: var(--sidebar-w);
+  width: var(--sidebar-w-expanded);
   flex: 0 0 auto;
   background: var(--bg-0);
   border-right: 1px solid var(--border);
 }
+.sidebar.is-rail {
+  width: var(--sidebar-w);
+  align-items: center;
+}
 .brand {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: var(--s-1);
+  gap: var(--s-3);
   width: 100%;
-  padding: var(--s-3) 0 10px;
-  /* The rail has no room for a section label, so a hairline does the dividing. */
+  height: 56px;
+  padding: 0 var(--s-4);
+  /* No room for a section label, so a hairline does the dividing. */
   border-bottom: 1px solid var(--border);
+}
+.is-rail .brand {
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--s-1);
+  height: auto;
+  padding: var(--s-3) 0 10px;
 }
 .mark {
   display: inline-flex;
   filter: drop-shadow(0 6px 14px color-mix(in srgb, var(--primary) 55%, transparent));
 }
-/* Four characters is all the rail can hold, so the wordmark drops to --text-xs
-   and keeps just enough tracking to still read as the logotype. */
 .wordmark {
   font-family: var(--font-display);
-  font-size: var(--text-xs);
+  font-size: var(--text-lg);
   line-height: 1;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
+}
+/* Four characters is all the rail can hold, so the wordmark drops to --text-xs
+   and keeps just enough tracking to still read as the logotype. */
+.is-rail .wordmark {
+  font-size: var(--text-xs);
+  letter-spacing: 0.1em;
 }
 .nav {
   display: flex;
@@ -186,24 +270,56 @@ const navUi = {
 .footer {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: var(--s-2);
+  gap: var(--s-1);
   width: 100%;
   padding: 10px 8px;
   border-top: 1px solid var(--border);
+}
+.is-rail .footer {
+  align-items: center;
+  gap: var(--s-2);
 }
 .footer :deep(nav) {
   width: 100%;
 }
 .activity-chip {
   display: flex;
+  width: 100%;
+}
+.is-rail .activity-chip {
+  width: auto;
 }
 /* Same box as a rail link, so the column reads as one stack. */
-.activity {
+.is-rail .activity {
   width: 44px;
   height: 44px;
   justify-content: center;
   padding: 0;
   border-radius: var(--r-md);
+}
+.activity-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  flex: 1;
+  min-width: 0;
+  line-height: 1.25;
+  text-align: left;
+}
+.activity-status {
+  max-width: 100%;
+  font-size: var(--text-xs);
+  font-weight: 500;
+  color: var(--fg-muted);
+}
+.activity-count {
+  flex: 0 0 auto;
+}
+.fold {
+  align-self: flex-end;
+  margin-top: var(--s-1);
+}
+.is-rail .fold {
+  align-self: center;
 }
 </style>

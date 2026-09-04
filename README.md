@@ -71,8 +71,9 @@ Press `?` anywhere for the same list in the app.
 | Key | Action |
 | --- | --- |
 | `/` · Ctrl+F | Focus the games search, the clip filter, or the settings search |
-| Backspace · Alt+← | Back to games |
-| Esc | Clear the clip filter, then back to games |
+| Backspace · Alt+← | Back to where you came from |
+| Esc | Clear the clip filter, then back |
+| Ctrl+B | Collapse or expand the sidebar |
 | ↑ ↓ · Enter | Move through games, open one |
 | Ctrl+, | Settings |
 | ? | Keyboard shortcuts |

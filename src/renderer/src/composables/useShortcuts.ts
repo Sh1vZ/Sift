@@ -1,17 +1,19 @@
 import { ref } from 'vue'
 import { dialog } from './useDialogs'
-import { clipQuery, goGames, screen } from './useLibrary'
+import { clipQuery, goBack, screen } from './useLibrary'
 import { isOpen as playerOpen } from './usePlayer'
 import { openSearch, searchOpen } from './useSearch'
 import { openSettings, settingsTab } from './useSettings'
+import { toggleSidebar } from './useSidebar'
 import { whatsNew } from './useUpdates'
 import { uploadDialog } from './useUploads'
 
 /**
  * App-wide keys. The player owns the keyboard while it is up (its own handler
- * covers playback), so outside `?` this only acts on the library screens.
- * Installed in the capture phase from App.vue: it runs before every bubble
- * listener the views register, and stops the event only when it handled it.
+ * covers playback), so outside `?`, Ctrl+K and Ctrl+B this only acts on the
+ * library screens. Installed in the capture phase from App.vue: it runs before
+ * every bubble listener the views register, and stops the event only when it
+ * handled it.
  */
 export const shortcutsOpen = ref(false)
 
@@ -50,9 +52,10 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
     rows: [
       { chords: [['ctrl', 'K']], label: 'Search every clip' },
       { chords: [['/'], ['ctrl', 'F']], label: 'Search games, filter clips' },
-      { chords: [['backspace'], ['alt', 'arrowleft']], label: 'Back to games' },
+      { chords: [['backspace'], ['alt', 'arrowleft']], label: 'Back' },
       { chords: [['escape']], label: 'Clear the filter, then back' },
       { chords: [['arrowup'], ['arrowdown'], ['enter']], label: 'Move through games, open one' },
+      { chords: [['ctrl', 'B']], label: 'Collapse or expand the sidebar' },
       { chords: [['ctrl', ',']], label: 'Settings' },
       { chords: [['?']], label: 'This list' },
     ],
@@ -94,6 +97,14 @@ function inField(e: KeyboardEvent): boolean {
   return ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName) || el.isContentEditable
 }
 
+/** An open menu or listbox owns Esc and the arrows; Back must not fire under it. */
+function inOverlay(e: KeyboardEvent): boolean {
+  const el = e.target as HTMLElement | null
+  return Boolean(
+    el?.closest?.('[role="menu"], [role="menuitem"], [role="listbox"], [role="option"]'),
+  )
+}
+
 function modalOpen(): boolean {
   return (
     dialog.value !== null ||
@@ -106,16 +117,23 @@ function modalOpen(): boolean {
 
 function onKey(e: KeyboardEvent): void {
   if (modalOpen()) return
-  // Ctrl+K comes before the in-field bail so it works from a filter box, and
-  // before the player check so it works over an open player. Being on the
-  // capture phase, stopping it here keeps it away from the player's own `k`.
+  // Ctrl+K and Ctrl+B come before the in-field bail so they work from a filter
+  // box, and before the player check so they work over an open player. Being
+  // on the capture phase, stopping them here keeps them away from the player's
+  // own `k`.
   if (e.ctrlKey && e.key.toLowerCase() === 'k') {
     openSearch()
     e.preventDefault()
     e.stopImmediatePropagation()
     return
   }
-  if (inField(e)) return
+  if (e.ctrlKey && e.key.toLowerCase() === 'b') {
+    toggleSidebar()
+    e.preventDefault()
+    e.stopImmediatePropagation()
+    return
+  }
+  if (inField(e) || inOverlay(e)) return
   let handled = true
   if (e.key === '?') openShortcuts()
   else if (playerOpen.value) handled = false
@@ -124,11 +142,12 @@ function onKey(e: KeyboardEvent): void {
     if (focusSearch.value) focusSearch.value()
     else handled = false
   } else if (
-    screen.value === 'game' &&
+    screen.value !== 'games' &&
     (e.key === 'Backspace' || (e.altKey && e.key === 'ArrowLeft') || e.key === 'Escape')
   ) {
-    if (e.key === 'Escape' && clipQuery.value) clipQuery.value = ''
-    else goGames()
+    // Inside a game, Esc empties the filter first; the next one leaves.
+    if (e.key === 'Escape' && screen.value === 'game' && clipQuery.value) clipQuery.value = ''
+    else goBack()
   } else handled = false
   if (handled) {
     e.preventDefault()

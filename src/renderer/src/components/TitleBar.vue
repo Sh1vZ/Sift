@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { goGames, screen, selectedGame } from '@/composables/useLibrary'
-import { activityLabel } from '@/composables/useActivity'
+import { activityLabel, openActivity } from '@/composables/useActivity'
 import { activeSection, openSettings, settingsTab } from '@/composables/useSettings'
 import { installUpdate, update, updatePill } from '@/composables/useUpdates'
 import { openSearch } from '@/composables/useSearch'
@@ -23,23 +23,23 @@ interface Crumb {
   onSelect?: () => void
 }
 
+/* The trail starts at the screen, not at the app: the wordmark in the sidebar
+   already says Sift, and the first crumb is what the sidebar has selected. */
 const crumbs = computed<Crumb[]>(() => {
-  const home: Crumb = { label: 'Sift', icon: 'i-lucide-play', onSelect: goGames }
   switch (screen.value) {
     case 'settings':
       return [
-        home,
         { label: 'Settings', onSelect: () => openSettings(settingsTab.value) },
         { label: activeSection.value.label },
       ]
     case 'game':
-      return [home, { label: 'Games', onSelect: goGames }, { label: selectedGame.value ?? '' }]
+      return [{ label: 'Games', onSelect: goGames }, { label: selectedGame.value ?? '' }]
     case 'clips':
-      return [home, { label: 'Clips' }]
+      return [{ label: 'Clips' }]
     case 'activity':
-      return [home, { label: 'Activity' }]
+      return [{ label: 'Activity' }]
     default:
-      return [home, { label: 'Games' }]
+      return [{ label: 'Games' }]
   }
 })
 
@@ -121,15 +121,19 @@ const status = activityLabel
       </UTooltip>
     </Transition>
     <Transition name="fade">
-      <UBadge
+      <!-- A button, not a badge: it is the one line of background activity on
+           screen, and pressing it opens the full Activity page. -->
+      <UButton
         v-if="status"
         class="status"
         color="primary"
         variant="subtle"
-        size="md"
+        size="sm"
         icon="i-lucide-loader-circle"
         :label="status"
-        :ui="{ leadingIcon: 'animate-spin' }"
+        :ui="{ leadingIcon: 'animate-spin', base: 'normal-case tracking-normal font-sans' }"
+        aria-label="Open activity"
+        @click="openActivity()"
       />
     </Transition>
     <div class="controls">
@@ -227,17 +231,16 @@ const status = activityLabel
   padding-left: 10px;
 }
 /* Near the 980px minimum the crumbs and the scan pill close in on the centre;
-   give up the printed keys before the pill starts colliding with either. */
+   give up the printed keys before the pill starts colliding with either. The
+   field itself keeps its width, so the search stays findable at every size. */
 @media (max-width: 1180px) {
-  .search {
-    min-width: 0;
-  }
   .search-kbds {
     display: none;
   }
 }
 .status {
   margin-right: 12px;
+  max-width: 34vw;
   -webkit-app-region: no-drag;
 }
 /* Sits left of the scan badge so both can show at once during a first scan. */

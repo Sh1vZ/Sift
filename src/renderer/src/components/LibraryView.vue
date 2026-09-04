@@ -18,7 +18,7 @@ import {
   folders,
   gameClipCount,
   games,
-  goGames,
+  goBack,
   gridGroupBy,
   libraryStats,
   recordings,
@@ -129,14 +129,14 @@ const { dropping } = useFolderDrop(stageEl, () => !inGame.value)
   <section class="view">
     <header class="head">
       <div class="head-text">
-        <UTooltip v-if="inGame" text="Back to games" :kbds="['backspace']">
+        <UTooltip v-if="inGame" text="Back" :kbds="['backspace']">
           <UButton
             icon="i-lucide-arrow-left"
             color="neutral"
             variant="ghost"
             square
-            aria-label="Back to games"
-            @click="goGames"
+            aria-label="Back"
+            @click="goBack"
           />
         </UTooltip>
 

@@ -49,6 +49,7 @@ export function registerIpc(
     // Unknown theme ids would leave the renderer on no theme block at all.
     if (p.theme !== undefined && !THEME_IDS.includes(p.theme)) delete p.theme
     if (p.autoCheckUpdates !== undefined) p.autoCheckUpdates = p.autoCheckUpdates === true
+    if (p.sidebarCollapsed !== undefined) p.sidebarCollapsed = p.sidebarCollapsed === true
     if (p.youtubeCheckStatus !== undefined) p.youtubeCheckStatus = p.youtubeCheckStatus === true
     if (p.lastSeenVersion !== undefined) p.lastSeenVersion = str(p.lastSeenVersion)
     // Capped: an unbounded list of dismissals would grow with every rescan.

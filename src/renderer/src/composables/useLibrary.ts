@@ -40,7 +40,8 @@ export const initialExports = ref<ExportJob[]>([])
 /** Same arrangement for the Activity history: seeded here, owned by `useActivityHistory`. */
 export const initialActivity = ref<ActivityRecord[]>([])
 export const selectedGame = ref<string | null>(null)
-export const view = ref<'library' | 'clips' | 'settings' | 'activity'>('library')
+export type View = 'library' | 'clips' | 'settings' | 'activity'
+export const view = ref<View>('library')
 
 /** Ticks once a minute so "2 minutes ago" labels stay honest. */
 export const now = ref(Date.now())
@@ -353,6 +354,46 @@ export function newestClipOf(game: string): Clip | undefined {
 export function goClips(): void {
   exportQuery.value = ''
   view.value = 'clips'
+}
+
+// ------------------------------------------------------------------- back
+
+interface Spot {
+  view: View
+  game: string | null
+}
+
+/**
+ * One step of history: where the user stood before the last navigation, so
+ * Backspace and Esc return there — Games → a game → Clips → Back lands on the
+ * game again, and a second Back reaches Games. Recorded from the two refs every
+ * navigation path mutates, so no caller has to remember to push; the guard
+ * keeps a restore from recording itself.
+ */
+let previous: Spot | null = null
+let restoring = false
+
+watch([view, selectedGame], (_next, [prevView, prevGame]) => {
+  if (restoring) {
+    restoring = false
+    return
+  }
+  previous = { view: prevView, game: prevGame }
+})
+
+export function goBack(): void {
+  const to = previous
+  previous = null
+  if (!to || (to.view === view.value && to.game === selectedGame.value)) {
+    goGames()
+    return
+  }
+  restoring = true
+  if (to.view === 'library') {
+    selectedGame.value = to.game
+    clipQuery.value = ''
+  }
+  view.value = to.view
 }
 
 // ---------------------------------------------------------- games browser

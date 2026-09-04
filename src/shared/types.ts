@@ -209,6 +209,8 @@ export interface Settings {
   concurrency: number
   /** Closing the window hides it to the tray and leaves the library running. */
   minimizeToTray: boolean
+  /** The sidebar shows as the icon-only rail instead of the labelled column. */
+  sidebarCollapsed: boolean
   /** Look for a new version on launch and every few hours. Manual checks work either way. */
   autoCheckUpdates: boolean
   /**
@@ -419,6 +421,7 @@ export const DEFAULT_SETTINGS: Settings = {
   theme: 'sift',
   concurrency: 2,
   minimizeToTray: false,
+  sidebarCollapsed: false,
   autoCheckUpdates: true,
   youtubeCheckStatus: true,
   trayHintShown: false,
