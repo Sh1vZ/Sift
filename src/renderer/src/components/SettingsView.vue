@@ -52,17 +52,16 @@ const railGroups = computed<RailGroup[]>(() =>
   })),
 )
 
-/** Individual settings the search found; picking one opens its pane and flashes the row. */
+/**
+ * Individual settings the search found; picking one opens its pane and flashes the row.
+ * The section travels as `description` and is drawn under the label, so a long
+ * setting name is never cut short by a badge beside it.
+ */
 const rowItems = computed(() =>
   matchedRows.value.map((r) => ({
     label: r.label,
+    description: sectionLabel(r.tab),
     icon: 'i-lucide-corner-down-right',
-    badge: {
-      label: sectionLabel(r.tab),
-      size: 'sm' as const,
-      color: 'neutral' as const,
-      variant: 'subtle' as const,
-    },
     onSelect: () => revealRow(r.id),
   })),
 )
@@ -71,6 +70,13 @@ const navUi = {
   link: 'h-11 px-3 gap-3 text-base font-medium rounded-lg',
   linkLeadingIcon: 'size-5',
   linkLabel: 'truncate',
+}
+
+/** Two-line hits: the rail is narrow, so the label wraps instead of truncating. */
+const rowsUi = {
+  link: 'min-h-11 py-2 px-3 gap-3 text-base font-medium rounded-lg text-left',
+  linkLeadingIcon: 'size-5',
+  linkLabel: 'flex min-w-0 flex-col items-start leading-tight',
 }
 
 /** Enter jumps to the first match — a section, else a row — so the box alone can drive the rail. */
@@ -141,8 +147,13 @@ function onSearchKey(e: KeyboardEvent): void {
                   color="primary"
                   variant="pill"
                   :items="rowItems"
-                  :ui="navUi"
-                />
+                  :ui="rowsUi"
+                >
+                  <template #item-label="{ item }">
+                    <span class="hit-label">{{ item.label }}</span>
+                    <span class="hit-where">{{ item.description }}</span>
+                  </template>
+                </UNavigationMenu>
               </template>
             </div>
 
@@ -225,6 +236,19 @@ function onSearchKey(e: KeyboardEvent): void {
 .rail-slot {
   position: relative;
 }
+/* The theme's label slot is nowrap; the lines themselves wrap so nothing is cut. */
+.hit-label,
+.hit-where {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.hit-where {
+  font-size: var(--text-xs);
+  font-weight: 400;
+  color: var(--fg-dim);
+}
+
 .rail-empty {
   padding: var(--s-6) var(--s-2);
 }
