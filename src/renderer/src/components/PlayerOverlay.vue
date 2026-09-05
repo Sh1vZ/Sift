@@ -417,11 +417,27 @@ function onAuxLoaded(index: number, e: Event): void {
 /** Fraction of a clip that counts as having watched it. */
 const SEEN_AT = 0.9
 
+/**
+ * Whether playing on from here is watching the clip. Outside edit mode it
+ * always is. Inside, the preview loops within the selection, so position alone
+ * cannot say: a trimmed range near the end would clear SEEN_AT on every lap
+ * without the clip ever having been watched. A selection that still spans
+ * essentially the whole clip — what edit mode opens with, and what every clip
+ * stays on under the `editOnOpen` setting — is the clip.
+ */
+const watchingWholeClip = computed(
+  () => !editing.value || selectionLength.value >= duration.value * SEEN_AT,
+)
+
 let lastTime = 0
 function onTimeUpdate(): void {
   const v = video.value
   if (!v || suspended.value) return
   if (!seeking.value) time.value = v.currentTime
+  // Watched once you have seen essentially all of it. Ahead of the loop below,
+  // so the lap that reaches the end of an untrimmed preview still counts.
+  if (watchingWholeClip.value && duration.value > 0 && v.currentTime / duration.value >= SEEN_AT)
+    void markSeen(clip.value)
   // Edit mode previews the selection on a loop: crossing the out-point (or
   // having been dragged past it) wraps back to the in-point.
   if (editing.value && !v.paused && v.currentTime >= outSec.value) {
@@ -431,11 +447,6 @@ function onTimeUpdate(): void {
     }
   }
   lastTime = v.currentTime
-  // Watched once you have seen essentially all of it. Never in edit mode: the
-  // preview loops inside the trim range, so a range near the end of a clip
-  // would otherwise mark it watched on every lap.
-  if (!editing.value && duration.value > 0 && v.currentTime / duration.value >= SEEN_AT)
-    void markSeen(clip.value)
 }
 function onProgress(): void {
   const v = video.value
@@ -452,7 +463,9 @@ function onEnded(): void {
   // Nothing plays while the window is away; this can only be the teardown.
   if (suspended.value) return
   if (editing.value) {
-    // The out-point sits at the very end: keep the preview loop going.
+    // The out-point sits at the very end: keep the preview loop going. A lap
+    // of the whole clip is still a watch, even though the player never stops.
+    if (watchingWholeClip.value) void markSeen(clip.value)
     seekTo(inSec.value)
     void video.value?.play().catch(() => undefined)
     return
