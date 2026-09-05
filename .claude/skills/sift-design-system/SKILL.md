@@ -281,13 +281,37 @@ left, which is what strands content on a wide monitor:
   `margin: 0 auto` and the same 28px gutter, so it is centred on a wide monitor and full-bleed
   once the window is narrower than the cap. Long prose never exceeds a comfortable measure.
 
+### Sidebar and content headers
+
+- The sidebar (`Sidebar.vue`) has two states driven by one computed, `isRail` in
+  `composables/useSidebar.ts`: the labelled column at `--sidebar-w-expanded` (names, counts, the
+  Activity button with its live status line, Shortcuts, Settings, a collapse chevron) and the
+  icon-only rail at `--sidebar-w` with Nuxt UI's collapsed-menu tooltips. Ctrl+B and the chevron
+  flip the persisted `sidebarCollapsed` setting; below 1200px the rail is forced so the clip grid
+  keeps its columns. Never transition the width — the grid's ResizeObserver would re-lay out on
+  every frame.
+- Every content screen (Games, a game, Clips) uses one header grammar: a **title row** (title,
+  figures, primary action on the right) over a **tools row** that wraps. The tools row is
+  `LibraryToolbar.vue` on the two clip grids — name filter, labelled Favourites / Unwatched
+  chips, Sort, and one View menu for grouping, the sharing filter and card size — and the games
+  search plus sort on the home screen. Filters are per screen (`libraryFilters` /
+  `clipsFilters` in `useLibrary`); do not add a shared ref.
+- The title bar's breadcrumb starts at the screen (`Games / <game>`), the search field keeps its
+  width at every window size, and the status pill is a button that opens Activity.
+
 ### Settings panels
 
 A settings section is one `UCard` — a titled header, then hairline-separated rows:
 
 - Header via the `#header` slot: an `h2` (`--text-md`, 600 — the `h2` inherits Chakra Petch) plus
   one `--text-sm` `--fg-muted` line saying what the section governs. Do not use a floating
-  uppercase micro-label above the card; the title belongs inside it.
+  uppercase micro-label above the card; the title belongs inside it. The pane itself has one short
+  head (`h1` at `--text-xl` plus a line), not a centred hero.
+- Row actions are **labelled** text buttons (`Rescan`, `Remove`, `Open folder`, `More`), the
+  destructive one a step away from its neighbour. `SettingsRow` takes `path` (a selectable path
+  line), a `#badges` slot beside the title and an `id` from `SETTINGS_ROWS` in `useSettings.ts`,
+  which is what the rail search lands on; `SettingsPanel` takes a `#note` slot for an alert that
+  only applies sometimes. Add every new row to `SETTINGS_ROWS`.
 - Body gets `:ui="{ body: 'p-0 sm:p-0' }"` so the rows own their padding. Each row is
   `var(--s-4) var(--s-6)` — the horizontal value matches the card header's `sm:px-6`, which is
   what makes labels line up down the panel. `.row + .row` carries a `--border` hairline; the

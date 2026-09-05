@@ -43,8 +43,18 @@ plugins: [
         neutral: 'slate'
       },
       button: {
-        slots: { base: 'font-heading font-semibold uppercase tracking-wider cursor-pointer' }
-      }
+        slots: { base: 'font-heading font-semibold uppercase tracking-wider cursor-pointer' },
+        variants: { size: { lg: { base: 'py-2.5 px-3.5' }, xl: { base: 'py-2.5 px-4' } } },
+        defaultVariants: { size: 'lg' },
+        compoundVariants: [/* on-primary, and p-2.5 for lg/xl square */]
+      },
+      input: { variants: { size: { lg: { base: 'py-2.5' } } }, defaultVariants: { size: 'lg' } },
+      select: { variants: { size: { lg: { base: 'py-2.5' } } }, defaultVariants: { size: 'lg' } },
+      fieldGroup: { defaultVariants: { size: 'lg' } },
+      switch: { defaultVariants: { size: 'lg' } },
+      badge: { defaultVariants: { size: 'md' } },
+      dropdownMenu: { defaultVariants: { size: 'lg' } },
+      contextMenu: { defaultVariants: { size: 'lg' } }
     },
     icon: { mode: 'svg', clientBundle: { scan: true, sizeLimitKb: 512 } }
   })
@@ -62,6 +72,14 @@ Why each option is what it is:
 - **`ui.button.slots.base`** carries the house button style globally: Chakra Petch, semibold,
   uppercase, wide tracking, `cursor-pointer`. This is why buttons look like Sift without
   per-instance classes. **New global style rules go here, not into 30 call sites.**
+- **`defaultVariants` and `variants`** set the house sizes the same way: buttons, inputs,
+  selects, switches and field groups default to `lg`, padded to 40px tall, badges to `md`. The
+  app config is `extend`ed onto the theme and tw-merged, so a `py-2.5` here beats the theme's
+  `py-2`. Never write `size="lg"` on those components; use `xl` for a primary call to action or
+  a search field and `sm` / `xs` for dense chrome only.
+- **Text sizes come from the app tokens, not from here.** Tailwind's `--text-xs … --text-2xl`
+  are also the names in `tokens.css`, and unlayered wins, so every `text-sm` utility on a Nuxt UI
+  component already reads Sift's scale.
 - **`icon.clientBundle.scan: true`** bundles only the `i-lucide-*` names actually referenced,
   at build time. Nothing is fetched at runtime.
 - **No `root` option.** The generated theme templates land in
@@ -202,8 +220,9 @@ Keep the app coherent by staying inside the vocabulary already in use:
 | `UAlert`         | Inline warnings (unavailable folder)                                   |
 | `UPopover`       | The sidebar Activity panel                                             |
 | `UChip`          | Live-job count on the Activity button                                  |
-| `UDropdownMenu`  | Player ⋯ menu, playback speed, YouTube project rows                    |
+| `UDropdownMenu`  | Player ⋯ menu, playback speed, YouTube project rows, the grid's View menu (`type: 'checkbox'` items with `onSelect(e) { e.preventDefault() }` so it stays open) |
 | `UTabs`          | Activity page: Active / History, `variant="link" :content="false"`     |
+| `UChip`          | Live-job count on the Activity button, non-default count on the View button |
 
 **Not adopted, and not to be adopted without a strong case:** `UTable` (the grid is windowed by
 `useVirtualGrid` — this is load-bearing), `UCarousel`, `UForm`, the Tiptap editor family, and
@@ -363,4 +382,6 @@ For a component not yet in the map:
 - ❌ Do not use Tailwind utilities for app chrome layout — scoped CSS and tokens
 - ❌ Do not use `i-lucide-*` outside a Nuxt UI icon prop
 - ❌ Do not introduce `variant="solid"` or a new colour alias without a stated reason
+- ❌ Do not write `size="lg"` on a button, input, select, switch or field group — it is the default
+- ❌ Do not put `color: inherit` on buttons in unlayered CSS — it silences every `text-*` utility Nuxt UI paints
 - ❌ Do not add a second `UApp`, or nest it inside app chrome
