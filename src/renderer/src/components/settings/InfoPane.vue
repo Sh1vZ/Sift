@@ -9,6 +9,7 @@ import {
   checkForUpdates,
   checking,
   installUpdate,
+  openChangelog,
   releaseUrl,
   update,
   updateReady,
@@ -95,14 +96,6 @@ onMounted(() => {
     <SettingsPanel title="Updates" description="Sift keeps itself current in the background." flush>
       <template #actions>
         <UButton
-          v-if="updateReady"
-          icon="i-lucide-circle-arrow-up"
-          label="Restart now"
-          color="primary"
-          variant="solid"
-          @click="installUpdate()"
-        />
-        <UButton
           icon="i-lucide-refresh-cw"
           label="Check now"
           color="neutral"
@@ -114,18 +107,22 @@ onMounted(() => {
       </template>
 
       <SettingsRow
+        id="updates"
         :icon="updateIcon"
         :tone="update.status === 'error' ? 'warning' : 'default'"
         :title="updateTitle"
         :description="updateDescription"
       >
         <template #trailing>
-          <UBadge
+          <!-- The one action that restarts the app sits with the row that
+               announces it, away from the harmless Check now above. -->
+          <UButton
             v-if="updateReady"
+            icon="i-lucide-circle-arrow-up"
+            label="Restart now"
             color="primary"
-            variant="subtle"
-            size="sm"
-            :label="update.version"
+            variant="solid"
+            @click="installUpdate()"
           />
           <UBadge
             v-else-if="update.status === 'up-to-date'"
@@ -148,15 +145,24 @@ onMounted(() => {
                  there is never markup here to render. -->
             <pre class="notes-body">{{ update.notes }}</pre>
           </div>
+        </template>
+        <div class="notes-links">
+          <UButton
+            label="Full changelog"
+            icon="i-lucide-history"
+            color="neutral"
+            variant="link"
+            size="sm"
+            @click="openChangelog()"
+          />
           <!-- target=_blank so setWindowOpenHandler sends it to the browser; a
                plain link would navigate the app window. -->
-          <a class="notes-link" :href="releaseUrl" target="_blank" rel="noreferrer"
-            >View full changelog</a
-          >
-        </template>
+          <a class="notes-link" :href="releaseUrl" target="_blank" rel="noreferrer">Release page</a>
+        </div>
       </SettingsRow>
 
       <SettingsRow
+        id="auto-updates"
         icon="download"
         title="Check for updates automatically"
         description="Looks for a new version shortly after launch and every few hours. Check now always works."
@@ -215,6 +221,7 @@ onMounted(() => {
           </div>
           <div v-else key="rows">
             <SettingsRow
+              id="app-runtime"
               icon="package"
               :title="`Sift ${appStats.runtime.appVersion}`"
               :description="`Electron ${appStats.runtime.electron} · Chromium ${appStats.runtime.chrome} · Node ${appStats.runtime.node}`"
@@ -274,6 +281,7 @@ onMounted(() => {
       flush
     >
       <SettingsRow
+        id="local-first"
         icon="hard-drive"
         title="Files stay put"
         description="Clips are read where they live. Sift never copies, moves, renames or re-encodes a recording unless you ask it to."
@@ -322,17 +330,21 @@ onMounted(() => {
 .notes-body {
   margin: 0;
   font-family: inherit;
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   line-height: 1.5;
-  color: var(--fg-muted);
+  color: var(--fg);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
-.notes-link {
-  display: inline-block;
+.notes-links {
+  display: flex;
+  align-items: center;
+  gap: var(--s-4);
   margin-top: var(--s-2);
+}
+.notes-link {
   font-size: var(--text-sm);
-  color: var(--primary);
+  color: var(--secondary);
 }
 .notes-link:hover {
   text-decoration: underline;

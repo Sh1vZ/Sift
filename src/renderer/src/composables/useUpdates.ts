@@ -29,6 +29,13 @@ export const whatsNew = ref<WhatsNew | null>(null)
  */
 export const changelog = ref<ChangelogRelease[] | null>(null)
 export const changelogLoading = ref(false)
+/** The changelog dialog opened on purpose from Settings, not by an update. */
+export const changelogOpen = ref(false)
+
+export function openChangelog(): void {
+  changelogOpen.value = true
+  void loadChangelog()
+}
 
 export const checking = computed(() => update.value.status === 'checking')
 export const updateReady = computed(() => update.value.status === 'downloaded')

@@ -2,6 +2,7 @@ import { computed, ref } from 'vue'
 import {
   GOOGLE_CONSOLE_QUOTAS_URL,
   IDLE_YOUTUBE_STATE,
+  formatUntil,
   isExhausted as exhaustedAt,
   type YouTubeAccount,
   type YouTubePlaylist,
@@ -33,6 +34,10 @@ export const connectingAccount = computed(
 
 /** YouTube answered quotaExceeded for this project today; clears at midnight Pacific. */
 export const isExhausted = (a: YouTubeAccount): boolean => exhaustedAt(a, now.value)
+
+/** One wording for a parked project, wherever it shows: the row badge, the status line, the upload form. */
+export const quotaResumesIn = (a: YouTubeAccount): string =>
+  `Daily quota spent · resumes in ${formatUntil(a.quotaExhaustedUntilMs, now.value)}`
 
 /** Connected projects that can still upload today. */
 export const availableAccounts = computed(() =>

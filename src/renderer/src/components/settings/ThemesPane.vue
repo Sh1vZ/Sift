@@ -6,10 +6,41 @@ import { activeTheme, setTheme, THEMES, type ThemeDef } from '@/composables/useT
 const DEFAULT_ID = THEMES[0].id
 const isDefault = computed(() => activeTheme.value.id === DEFAULT_ID)
 
-const standard = THEMES.filter((t) => !t.oled)
-const oled = THEMES.filter((t) => t.oled)
+/** One radio group in two rows: the standard palettes, then the true-black ones. */
+const groups: Array<{ key: string; title: string; description: string; items: ThemeDef[] }> = [
+  {
+    key: 'standard',
+    title: '',
+    description: '',
+    items: THEMES.filter((t) => !t.oled),
+  },
+  {
+    key: 'oled',
+    title: 'OLED',
+    description:
+      'Pure black surfaces, so an OLED panel switches those pixels off. The brand glow stays, tinted to match.',
+    items: THEMES.filter((t) => t.oled),
+  },
+]
 
 const isActive = (t: ThemeDef): boolean => t.id === activeTheme.value.id
+
+/** Arrow keys walk the whole set, standard then OLED, the way a radio group does. */
+function onKey(e: KeyboardEvent): void {
+  const i = THEMES.findIndex(isActive)
+  let next = -1
+  if (e.key === 'ArrowRight' || e.key === 'ArrowDown') next = (i + 1) % THEMES.length
+  else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp')
+    next = (i - 1 + THEMES.length) % THEMES.length
+  else if (e.key === 'Home') next = 0
+  else if (e.key === 'End') next = THEMES.length - 1
+  if (next < 0) return
+  e.preventDefault()
+  void setTheme(THEMES[next].id)
+  ;(e.currentTarget as HTMLElement)
+    .querySelector<HTMLElement>(`[data-theme-id="${THEMES[next].id}"]`)
+    ?.focus()
+}
 </script>
 
 <template>
@@ -20,121 +51,99 @@ const isActive = (t: ThemeDef): boolean => t.id === activeTheme.value.id
     >
       <template #actions>
         <UButton
-          v-if="!isDefault"
           color="neutral"
           variant="subtle"
           size="sm"
           icon="i-lucide-rotate-ccw"
           label="Reset"
+          :disabled="isDefault"
           @click="setTheme(DEFAULT_ID)"
         />
       </template>
 
-      <div class="themes" role="group" aria-label="Theme">
-        <button
-          v-for="t in standard"
-          :key="t.id"
-          type="button"
-          class="theme"
-          :class="{ 'is-active': isActive(t) }"
-          :aria-pressed="isActive(t)"
-          :aria-label="`${t.name} theme`"
-          @click="setTheme(t.id)"
-        >
-          <!-- A miniature of the shell: rail, two cards, a primary pill and an
-               accent dot. Colours are the theme's own hexes, not the live tokens,
-               so every preview shows itself rather than the current theme. -->
-          <span class="preview" :style="{ background: t.colors.bg1 }" aria-hidden="true">
-            <span class="pv-rail" :style="{ background: t.colors.bg0 }">
-              <span class="pv-mark" :style="{ background: t.colors.primary }" />
-            </span>
-            <span class="pv-body">
-              <span class="pv-bar">
-                <span class="pv-pill" :style="{ background: t.colors.primary }" />
-                <span class="pv-dot" :style="{ background: t.colors.accent }" />
-              </span>
-              <span class="pv-cards">
-                <span class="pv-card" :style="{ background: t.colors.bg3 }">
-                  <span class="pv-thumb" :style="{ background: t.colors.bg0 }" />
-                  <span class="pv-line" :style="{ background: t.colors.fg }" />
+      <div class="groups" role="radiogroup" aria-label="Theme" @keydown="onKey">
+        <section v-for="g in groups" :key="g.key" class="group">
+          <template v-if="g.title">
+            <h3 class="subhead">{{ g.title }}</h3>
+            <p class="subhead-sub">{{ g.description }}</p>
+          </template>
+          <div class="themes">
+            <button
+              v-for="t in g.items"
+              :key="t.id"
+              type="button"
+              class="theme"
+              :class="{ 'is-active': isActive(t) }"
+              role="radio"
+              :aria-checked="isActive(t)"
+              :tabindex="isActive(t) ? 0 : -1"
+              :data-theme-id="t.id"
+              :aria-label="`${t.name} theme`"
+              @click="setTheme(t.id)"
+            >
+              <!-- A miniature of the shell: rail, two cards, a primary pill and an
+                   accent dot. Colours are the theme's own hexes, not the live tokens,
+                   so every preview shows itself rather than the current theme. -->
+              <span class="preview" :style="{ background: t.colors.bg1 }" aria-hidden="true">
+                <span class="pv-rail" :style="{ background: t.colors.bg0 }">
+                  <span class="pv-mark" :style="{ background: t.colors.primary }" />
                 </span>
-                <span class="pv-card" :style="{ background: t.colors.bg3 }">
-                  <span class="pv-thumb" :style="{ background: t.colors.bg0 }" />
-                  <span class="pv-line" :style="{ background: t.colors.secondary }" />
+                <span class="pv-body">
+                  <span class="pv-bar">
+                    <span class="pv-pill" :style="{ background: t.colors.primary }" />
+                    <span class="pv-dot" :style="{ background: t.colors.accent }" />
+                  </span>
+                  <span class="pv-cards">
+                    <span class="pv-card" :style="{ background: t.colors.bg3 }">
+                      <span class="pv-thumb" :style="{ background: t.colors.bg0 }" />
+                      <span class="pv-line" :style="{ background: t.colors.fg }" />
+                    </span>
+                    <span class="pv-card" :style="{ background: t.colors.bg3 }">
+                      <span class="pv-thumb" :style="{ background: t.colors.bg0 }" />
+                      <span class="pv-line" :style="{ background: t.colors.secondary }" />
+                    </span>
+                  </span>
                 </span>
               </span>
-            </span>
-          </span>
 
-          <span class="meta">
-            <span class="name-row">
-              <span class="name">{{ t.name }}</span>
-              <UBadge
-                v-if="t.id === DEFAULT_ID"
-                color="neutral"
-                variant="subtle"
-                size="xs"
-                label="Default"
-              />
-              <UIcon v-if="isActive(t)" name="i-lucide-check" class="check" />
-            </span>
-            <span class="desc">{{ t.description }}</span>
-          </span>
-        </button>
-      </div>
-    </SettingsPanel>
-
-    <SettingsPanel
-      title="OLED themes"
-      description="Pure black surfaces, so an OLED panel switches those pixels off. The brand glow stays, tinted to match."
-    >
-      <div class="themes" role="group" aria-label="OLED theme">
-        <button
-          v-for="t in oled"
-          :key="t.id"
-          type="button"
-          class="theme"
-          :class="{ 'is-active': isActive(t) }"
-          :aria-pressed="isActive(t)"
-          :aria-label="`${t.name} theme`"
-          @click="setTheme(t.id)"
-        >
-          <span class="preview" :style="{ background: t.colors.bg1 }" aria-hidden="true">
-            <span class="pv-rail" :style="{ background: t.colors.bg0 }">
-              <span class="pv-mark" :style="{ background: t.colors.primary }" />
-            </span>
-            <span class="pv-body">
-              <span class="pv-bar">
-                <span class="pv-pill" :style="{ background: t.colors.primary }" />
-                <span class="pv-dot" :style="{ background: t.colors.accent }" />
-              </span>
-              <span class="pv-cards">
-                <span class="pv-card" :style="{ background: t.colors.bg3 }">
-                  <span class="pv-thumb" :style="{ background: t.colors.bg0 }" />
-                  <span class="pv-line" :style="{ background: t.colors.fg }" />
+              <span class="meta">
+                <span class="name-row">
+                  <span class="name">{{ t.name }}</span>
+                  <UBadge
+                    v-if="t.id === DEFAULT_ID"
+                    color="neutral"
+                    variant="subtle"
+                    size="xs"
+                    label="Default"
+                  />
+                  <UIcon v-if="isActive(t)" name="i-lucide-check" class="check" />
                 </span>
-                <span class="pv-card" :style="{ background: t.colors.bg3 }">
-                  <span class="pv-thumb" :style="{ background: t.colors.bg0 }" />
-                  <span class="pv-line" :style="{ background: t.colors.secondary }" />
-                </span>
+                <span class="desc">{{ t.description }}</span>
               </span>
-            </span>
-          </span>
-
-          <span class="meta">
-            <span class="name-row">
-              <span class="name">{{ t.name }}</span>
-              <UIcon v-if="isActive(t)" name="i-lucide-check" class="check" />
-            </span>
-            <span class="desc">{{ t.description }}</span>
-          </span>
-        </button>
+            </button>
+          </div>
+        </section>
       </div>
     </SettingsPanel>
   </div>
 </template>
 
 <style scoped>
+.groups {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-6);
+}
+.subhead {
+  font-size: var(--text-base);
+  font-weight: 600;
+}
+.subhead-sub {
+  margin: var(--s-1) 0 var(--s-4);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+  color: var(--fg-muted);
+}
 .themes {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr));

@@ -3,6 +3,7 @@ import { computed, nextTick, ref, watch } from 'vue'
 import {
   changelog,
   changelogLoading,
+  changelogOpen,
   dismissWhatsNew,
   loadChangelog,
   whatsNew,
@@ -16,14 +17,20 @@ import ChangelogBlocks from './changelog/ChangelogBlocks.vue'
  * arrive as parsed blocks, so nothing here renders markup.
  *
  * Dismissing is what records the version as seen, so notes the user never got to
- * are offered again next launch instead of being silently consumed.
+ * are offered again next launch instead of being silently consumed. Settings can
+ * also open the same dialog straight onto the full changelog.
  */
 const open = computed({
-  get: () => whatsNew.value !== null,
+  get: () => whatsNew.value !== null || changelogOpen.value,
   set: (v: boolean) => {
-    if (!v) dismissWhatsNew()
+    if (!v) close()
   },
 })
+
+function close(): void {
+  changelogOpen.value = false
+  dismissWhatsNew()
+}
 
 type View = 'version' | 'all'
 
@@ -33,6 +40,17 @@ const VIEWS: { value: View; label: string; icon: string }[] = [
 ]
 
 const view = ref<View>('version')
+
+// Opened from Settings there may be no "this version" to show: land on the history.
+watch(changelogOpen, (v) => {
+  if (v) show('all')
+})
+watch(whatsNew, (w) => {
+  if (w) view.value = 'version'
+})
+
+/** The version tab only exists while there are notes for a just-installed build. */
+const views = computed(() => VIEWS.filter((v) => v.value !== 'version' || whatsNew.value))
 
 /** The whole file is only read when someone actually asks for the history. */
 function show(next: View): void {
@@ -99,7 +117,7 @@ watch([scroller, view, changelog, changelogLoading], () => void nextTick(sync))
       <div class="tabs">
         <UFieldGroup size="xs" aria-label="Changelog view">
           <UButton
-            v-for="v in VIEWS"
+            v-for="v in views"
             :key="v.value"
             :icon="v.icon"
             :label="v.label"
@@ -151,7 +169,12 @@ watch([scroller, view, changelog, changelogLoading], () => void nextTick(sync))
       </div>
     </template>
     <template #footer>
-      <UButton class="ms-auto shrink-0" label="Got it" color="primary" @click="dismissWhatsNew()" />
+      <UButton
+        class="ms-auto shrink-0"
+        :label="whatsNew ? 'Got it' : 'Close'"
+        color="primary"
+        @click="close()"
+      />
     </template>
   </UModal>
 </template>

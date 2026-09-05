@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { now, settings, updateSettings } from '@/composables/useLibrary'
+import { settings, updateSettings } from '@/composables/useLibrary'
 import { processingUploads, stageText } from '@/composables/useUploads'
 import {
   accounts,
@@ -15,6 +15,7 @@ import {
   isExhausted,
   openExternalUrl,
   openQuotaPage,
+  quotaResumesIn,
   removeAccount,
   renameAccount,
   youtube,
@@ -27,7 +28,6 @@ import {
   QUOTA_COST,
   QUOTA_UNITS_PER_DAY,
   YOUTUBE_AUDIT_FORM_URL,
-  formatUntil,
   type YouTubeAccount,
 } from '@shared/youtube'
 import { computed, ref } from 'vue'
@@ -37,8 +37,8 @@ import SettingsRow from './SettingsRow.vue'
 const units = new Intl.NumberFormat()
 const CLIENT_SECRET_MAX_BYTES = 64 * 1024
 
+/** Off by default even with no projects: a five-step wall is not the first thing to meet. */
 const showGuide = ref(false)
-const guideOpen = computed(() => accounts.value.length === 0 || showGuide.value)
 
 /**
  * Names the cost outright. The user asked for no quota counting anywhere in
@@ -46,8 +46,8 @@ const guideOpen = computed(() => accounts.value.length === 0 || showGuide.value)
  */
 const checkDescription = computed(() =>
   [
-    `Ask YouTube how an uploaded video is doing until it is ready — one unit a check against the ${QUOTA_UNITS_PER_DAY.toLocaleString()} a day, batched across videos, against ${QUOTA_COST.videosInsert.toLocaleString()} for the upload itself.`,
-    'Sift asks more often at first, then every few minutes, and stops after two hours; Check now asks again after that.',
+    `Ask YouTube how an uploaded video is doing until it is ready. Each check costs 1 of the ${QUOTA_UNITS_PER_DAY.toLocaleString()} daily units (an upload costs ${QUOTA_COST.videosInsert.toLocaleString()}), batched across videos.`,
+    'Sift asks often at first, then every few minutes, and stops after two hours; Check now asks again.',
   ].join(' '),
 )
 
@@ -61,7 +61,7 @@ const summary = computed(() => {
   if (!n) return 'Add a Google Cloud project to start uploading.'
   const parked = c - availableAccounts.value.length
   const parts = [`${c} of ${n} connected`]
-  if (parked) parts.push(`${parked} out of quota until midnight Pacific`)
+  if (parked) parts.push(`${parked} waiting for tomorrow's quota`)
   return parts.join(' · ') + '.'
 })
 
@@ -107,9 +107,7 @@ function statusLine(a: YouTubeAccount): string {
   if (a.error) return a.error
   if (a.connection === 'connected') {
     const who = a.channel?.title ?? 'Connected'
-    return isExhausted(a)
-      ? `${who} · YouTube reported the daily quota spent; uploads resume in ${formatUntil(a.quotaExhaustedUntilMs, now.value)}`
-      : who
+    return isExhausted(a) ? `${who} · ${quotaResumesIn(a)}` : who
   }
   if (a.connection === 'connecting') return 'Finish signing in in your browser…'
   if (!a.hasSecret) return 'Client secret missing — re-import the JSON.'
@@ -191,7 +189,7 @@ const initials = (label: string): string =>
               color="error"
               variant="subtle"
               size="sm"
-              :label="`Out of quota · resets in ${formatUntil(a.quotaExhaustedUntilMs, now)}`"
+              :label="quotaResumesIn(a)"
             />
           </div>
         </template>
@@ -231,14 +229,14 @@ const initials = (label: string): string =>
           />
           <UDropdownMenu :items="menuItems(a)" :ui="{ content: 'min-w-56' }">
             <UButton
-              icon="i-lucide-ellipsis"
+              label="More"
+              trailing-icon="i-lucide-chevron-down"
               color="neutral"
               variant="ghost"
               size="sm"
-              square
               :loading="isBusy(a.id) && a.connection !== 'connected'"
               :disabled="isBusy(a.id)"
-              aria-label="More actions"
+              aria-label="More actions for this project"
             />
           </UDropdownMenu>
         </template>
@@ -249,7 +247,16 @@ const initials = (label: string): string =>
         class="empty"
         icon="i-lucide-youtube"
         title="No projects yet"
-        description="Each Google Cloud project you add is its own daily upload budget."
+        description="Each Google Cloud project you add is its own daily upload budget. Drop its client secret below, or follow the guide to make one."
+        :actions="[
+          {
+            label: 'Show the setup guide',
+            icon: 'i-lucide-list-ordered',
+            color: 'neutral',
+            variant: 'subtle',
+            onClick: () => (showGuide = true),
+          },
+        ]"
       />
     </SettingsPanel>
 
@@ -258,7 +265,12 @@ const initials = (label: string): string =>
       description="Sending the file is only half of it — YouTube still has to process the video, and it can still refuse it."
       flush
     >
-      <SettingsRow icon="radar" title="Check processing status" :description="checkDescription">
+      <SettingsRow
+        id="youtube-check"
+        icon="radar"
+        title="Check processing status"
+        :description="checkDescription"
+      >
         <template #trailing>
           <USwitch
             :model-value="settings.youtubeCheckStatus"
@@ -348,7 +360,6 @@ const initials = (label: string): string =>
     >
       <template #actions>
         <UButton
-          v-if="accounts.length"
           :label="showGuide ? 'Hide the guide' : 'Show the guide'"
           color="neutral"
           variant="subtle"
@@ -356,7 +367,7 @@ const initials = (label: string): string =>
           @click="showGuide = !showGuide"
         />
       </template>
-      <ol v-if="guideOpen" class="guide">
+      <ol v-if="showGuide" class="guide">
         <li>
           Open the
           <a :href="GOOGLE_CONSOLE_URL" target="_blank" rel="noreferrer">Google Cloud Console</a>
@@ -392,7 +403,8 @@ const initials = (label: string): string =>
         </li>
       </ol>
       <p v-else class="guide-hint">
-        Hidden while you have projects. Open it again when adding another.
+        Five steps in the Google Cloud Console, then one Connect click here. Open it when you add a
+        project.
       </p>
     </SettingsPanel>
 
@@ -402,6 +414,7 @@ const initials = (label: string): string =>
       flush
     >
       <SettingsRow
+        id="youtube-audit"
         icon="shield-check"
         title="Unverified projects upload as private"
         description="Until Google audits a project, every video it uploads is locked to private no matter what you choose. Sift tells you when that happens."

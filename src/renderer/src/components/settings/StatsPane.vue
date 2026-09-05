@@ -32,15 +32,23 @@ const tiles = computed<Tile[]>(() => {
   const t = libraryTotals.value
   return [
     { icon: 'film', label: 'Clips indexed', value: n.format(t.clips), count: t.clips },
-    { icon: 'hard-drive', label: 'Library on disk', value: formatBytes(t.bytes) },
-    { icon: 'clock', label: 'Total playtime', value: formatSpan(t.duration) },
     { icon: 'gamepad', label: 'Games', value: n.format(t.games), count: t.games },
+    { icon: 'clock', label: 'Total playtime', value: formatSpan(t.duration) },
+    { icon: 'image', label: 'With previews', value: `${previewPct.value}%` },
   ]
 })
 
 const previewPct = computed(() => {
   const t = libraryTotals.value
   return t.clips ? Math.round((t.withPreviews / t.clips) * 100) : 0
+})
+
+/** The chart's caption names the busiest month, so the tallest bar has a number without hovering. */
+const activityDescription = computed(() => {
+  const peak = monthlyActivity.value.reduce((m, b) => (b.count > m.count ? b : m))
+  return peak.count
+    ? `Clips recorded per month over the last year. Busiest: ${peak.title}, ${peak.count} clip${peak.count === 1 ? '' : 's'}.`
+    : 'Clips recorded per month over the last year.'
 })
 
 const bar = (share: number): Record<string, string> => ({ '--share': String(share) })
@@ -95,6 +103,7 @@ const tierColor = (key: string): QualityTierDef['color'] =>
             flush
           >
             <SettingsRow
+              id="stats-previews"
               icon="image"
               title="Previews built"
               :description="`${n.format(libraryTotals.withPreviews)} of ${n.format(libraryTotals.clips)} clips have a poster frame.`"
@@ -145,29 +154,40 @@ const tierColor = (key: string): QualityTierDef['color'] =>
               v-if="libraryTotals.largest"
               icon="trending"
               title="Biggest clip"
+              :description="libraryTotals.largest.title"
+              :path="libraryTotals.largest.path"
               :value="formatBytes(libraryTotals.largest.size)"
-            >
-              <p class="row-detail truncate" :title="libraryTotals.largest.path">
-                {{ libraryTotals.largest.title }}
-              </p>
-            </SettingsRow>
+            />
 
             <SettingsRow
               v-if="libraryTotals.longest"
               icon="timer"
               title="Longest clip"
+              :description="libraryTotals.longest.title"
+              :path="libraryTotals.longest.path"
               :value="formatSpan(libraryTotals.longest.duration)"
+            />
+
+            <!-- Bytes live on the Storage pane, with the cache and the index beside them. -->
+            <SettingsRow
+              icon="hard-drive"
+              title="Disk usage"
+              description="How much the recordings, the previews and the index take on disk."
             >
-              <p class="row-detail truncate" :title="libraryTotals.longest.path">
-                {{ libraryTotals.longest.title }}
-              </p>
+              <template #trailing>
+                <UButton
+                  label="Open Storage"
+                  trailing-icon="i-lucide-arrow-right"
+                  color="neutral"
+                  variant="subtle"
+                  size="sm"
+                  @click="openSettings('storage')"
+                />
+              </template>
             </SettingsRow>
           </SettingsPanel>
 
-          <SettingsPanel
-            title="Recording activity"
-            description="Clips recorded per month over the last year."
-          >
+          <SettingsPanel title="Recording activity" :description="activityDescription">
             <ul class="months" aria-label="Clips recorded per month">
               <li
                 v-for="m in monthlyActivity"
@@ -199,7 +219,7 @@ const tierColor = (key: string): QualityTierDef['color'] =>
                   <span class="bar-fill" :style="bar(g.share)" />
                 </span>
                 <span class="bar-value mono">{{ formatBytes(g.bytes) }}</span>
-                <span class="bar-sub mono">{{ g.count }}</span>
+                <span class="bar-sub mono" :title="`${g.count} clips`">{{ g.count }} clips</span>
               </li>
             </ul>
           </SettingsPanel>
@@ -333,11 +353,6 @@ const tierColor = (key: string): QualityTierDef['color'] =>
   margin-top: var(--s-2);
   max-width: 320px;
 }
-.row-detail {
-  margin-top: 2px;
-  font-size: var(--text-sm);
-  color: var(--fg-muted);
-}
 .empty {
   padding: var(--s-8) var(--s-6);
 }
@@ -388,7 +403,7 @@ const tierColor = (key: string): QualityTierDef['color'] =>
 }
 .month-label {
   font-size: var(--text-xs);
-  color: var(--fg-dim);
+  color: var(--fg-muted);
 }
 
 /* Horizontal ranking bars. */
@@ -399,7 +414,7 @@ const tierColor = (key: string): QualityTierDef['color'] =>
 }
 .bar-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 2.2fr auto 44px;
+  grid-template-columns: minmax(0, 1fr) 2.2fr auto 72px;
   align-items: center;
   gap: var(--s-3);
 }
@@ -432,8 +447,9 @@ const tierColor = (key: string): QualityTierDef['color'] =>
 }
 .bar-sub {
   font-size: var(--text-sm);
-  color: var(--fg-dim);
+  color: var(--fg-muted);
   text-align: right;
+  white-space: nowrap;
 }
 
 .chips {
@@ -449,7 +465,7 @@ const tierColor = (key: string): QualityTierDef['color'] =>
   font-weight: 600;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--fg-dim);
+  color: var(--fg-muted);
 }
 .chip-list {
   display: flex;

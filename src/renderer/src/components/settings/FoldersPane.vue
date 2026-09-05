@@ -80,68 +80,64 @@ async function remove(folder: LibraryFolder): Promise<void> {
           <ul v-else key="rows" class="rows">
             <SettingsRow
               v-for="f in libraryFolders"
+              :id="f === libraryFolders[0] ? 'folders' : ''"
               :key="f.id"
               tag="li"
               :icon="f.available ? 'hard-drive' : 'alert'"
               :tone="f.available ? 'default' : 'warning'"
               :title="f.name"
+              :description="
+                f.available
+                  ? ''
+                  : 'Not reachable right now. Its clips stay in the library and play again once the drive is back.'
+              "
+              :path="f.path"
             >
-              <template #title>
-                <div class="folder-name">
-                  <span class="truncate">{{ f.name }}</span>
-                  <UBadge
-                    v-if="!f.available"
-                    color="warning"
-                    variant="subtle"
-                    size="md"
-                    label="Not reachable"
-                  />
-                  <UBadge
-                    v-else-if="scan.active && scan.folder === f.name"
-                    color="primary"
-                    variant="subtle"
-                    size="md"
-                    icon="i-lucide-loader-circle"
-                    label="Scanning"
-                    :ui="{ leadingIcon: 'animate-spin' }"
-                  />
-                </div>
+              <template #badges>
+                <UBadge
+                  v-if="!f.available"
+                  color="warning"
+                  variant="subtle"
+                  label="Not reachable"
+                />
+                <UBadge
+                  v-else-if="scan.active && scan.folder === f.name"
+                  color="primary"
+                  variant="subtle"
+                  icon="i-lucide-loader-circle"
+                  label="Scanning"
+                  :ui="{ leadingIcon: 'animate-spin' }"
+                />
               </template>
-
-              <p class="folder-path truncate" :title="f.path">{{ f.path }}</p>
 
               <template #trailing>
                 <UBadge
                   color="neutral"
                   variant="soft"
-                  size="md"
                   :label="`${f.clipCount} clips`"
                   class="mono count"
                 />
-                <UTooltip text="Rescan this folder">
-                  <UButton
-                    icon="i-lucide-refresh-cw"
-                    color="neutral"
-                    variant="ghost"
-                    square
-                    aria-label="Rescan folder"
-                    :disabled="!f.available"
-                    @click="rescan(f.id)"
-                  />
-                </UTooltip>
-                <UTooltip text="Remove from library">
-                  <UButton
-                    class="danger"
-                    icon="i-lucide-trash-2"
-                    color="error"
-                    variant="ghost"
-                    square
-                    :loading="removing.includes(f.id)"
-                    :disabled="removing.includes(f.id)"
-                    aria-label="Remove folder"
-                    @click="remove(f)"
-                  />
-                </UTooltip>
+                <UButton
+                  icon="i-lucide-refresh-cw"
+                  label="Rescan"
+                  color="neutral"
+                  variant="subtle"
+                  size="sm"
+                  :disabled="!f.available || scan.active"
+                  @click="rescan(f.id)"
+                />
+                <!-- Held off the button beside it, so it is never a mis-click. -->
+                <UButton
+                  class="danger"
+                  icon="i-lucide-trash-2"
+                  label="Remove"
+                  color="error"
+                  variant="subtle"
+                  size="sm"
+                  :loading="removing.includes(f.id)"
+                  :disabled="removing.includes(f.id)"
+                  @click="remove(f)"
+                />
               </template>
             </SettingsRow>
           </ul>
@@ -154,17 +150,27 @@ async function remove(folder: LibraryFolder): Promise<void> {
 
     <SettingsPanel
       title="Rescan"
-      description="Walks every reachable folder again and picks up anything the watcher missed."
+      description="For when something was missed: a full walk of every reachable folder."
+      flush
     >
-      <UButton
-        icon="i-lucide-refresh-cw"
-        label="Rescan all folders"
-        color="neutral"
-        variant="subtle"
-        :disabled="!libraryFolders.length || scan.active"
-        :loading="scan.active"
-        @click="rescan()"
-      />
+      <SettingsRow
+        id="rescan"
+        icon="radar"
+        title="Rescan all folders"
+        description="Walks every reachable folder again and picks up anything the watcher missed."
+      >
+        <template #trailing>
+          <UButton
+            icon="i-lucide-refresh-cw"
+            label="Rescan"
+            color="neutral"
+            variant="subtle"
+            :disabled="!libraryFolders.length || scan.active"
+            :loading="scan.active"
+            @click="rescan()"
+          />
+        </template>
+      </SettingsRow>
     </SettingsPanel>
   </div>
 </template>
@@ -183,24 +189,10 @@ async function remove(folder: LibraryFolder): Promise<void> {
 .panel-empty {
   padding: var(--s-6);
 }
-.folder-name {
-  display: flex;
-  align-items: center;
-  gap: var(--s-2);
-  font-weight: 600;
-  font-size: var(--text-md);
-}
-.folder-path {
-  margin-top: 2px;
-  font-size: var(--text-sm);
-  color: var(--fg-muted);
-  user-select: text;
-}
 .count {
-  margin-right: var(--s-2);
+  margin-right: var(--s-1);
 }
-/* Hold the destructive action off the one beside it so it is never a mis-click. */
 .danger {
-  margin-left: var(--s-1);
+  margin-left: var(--s-2);
 }
 </style>

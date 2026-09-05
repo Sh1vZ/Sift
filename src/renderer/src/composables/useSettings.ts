@@ -3,7 +3,7 @@ import { view } from './useLibrary'
 
 /**
  * The settings screen is one shell with a sub-menu rail. Every pane is a tab
- * id; the rail, the pane hero and the title-bar breadcrumb all read the same
+ * id; the rail, the pane head and the title-bar breadcrumb all read the same
  * section table so a new pane only has to be described once.
  */
 export type SettingsTab =
@@ -57,8 +57,8 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
         id: 'indexing',
         label: 'Indexing & previews',
         icon: 'i-lucide-radar',
-        description: 'How new recordings are picked up, and how their poster frames get built.',
-        keywords: 'watch thumbnails ffmpeg workers concurrency scan cache',
+        description: 'How new recordings are picked up, and how their previews get built.',
+        keywords: 'watch thumbnails previews ffmpeg workers concurrency scan cache',
       },
       {
         id: 'playback',
@@ -147,6 +147,9 @@ export const activeSection = computed<SettingsSection>(
   () => ALL_SECTIONS.find((s) => s.id === settingsTab.value) ?? ALL_SECTIONS[0],
 )
 
+export const sectionLabel = (tab: SettingsTab): string =>
+  ALL_SECTIONS.find((s) => s.id === tab)?.label ?? ''
+
 /** Rail groups narrowed by the search box; a group with no hits drops out. */
 export const matchedGroups = computed<SettingsGroup[]>(() => {
   const q = settingsQuery.value.trim().toLowerCase()
@@ -161,6 +164,154 @@ export const matchedGroups = computed<SettingsGroup[]>(() => {
     ),
   })).filter((g) => g.sections.length > 0)
 })
+
+// ------------------------------------------------------------------ rows
+
+/**
+ * Every setting the panes render, so the search can find the row and not only
+ * its section. Kept by hand beside the section table; a `SettingsRow` with the
+ * same `id` scrolls into view and flashes when `revealRow` lands on it, and an
+ * id with no row (a card grid, a chart) simply opens its pane.
+ */
+export interface SettingsRowIndex {
+  id: string
+  tab: SettingsTab
+  label: string
+  keywords: string
+}
+
+export const SETTINGS_ROWS: SettingsRowIndex[] = [
+  { id: 'folders', tab: 'folders', label: 'Watched folders', keywords: 'add remove path drive' },
+  { id: 'rescan', tab: 'folders', label: 'Rescan all folders', keywords: 'refresh walk missed' },
+  {
+    id: 'clips-folder',
+    tab: 'clips',
+    label: 'Clips folder',
+    keywords: 'export output where trimmed change reset',
+  },
+  {
+    id: 'watch-folders',
+    tab: 'indexing',
+    label: 'Watch folders',
+    keywords: 'new recordings automatically watcher live',
+  },
+  {
+    id: 'generate-previews',
+    tab: 'indexing',
+    label: 'Generate previews',
+    keywords: 'thumbnails posters scrub strips ffmpeg',
+  },
+  {
+    id: 'preview-workers',
+    tab: 'indexing',
+    label: 'Preview workers',
+    keywords: 'concurrency cpu parallel jobs',
+  },
+  { id: 'queue', tab: 'indexing', label: 'Queue', keywords: 'pending probe indexed waiting' },
+  { id: 'hover-scrub', tab: 'playback', label: 'Hover to scrub', keywords: 'preview card mouse' },
+  {
+    id: 'edit-on-open',
+    tab: 'playback',
+    label: 'Open clips in edit mode',
+    keywords: 'trim timeline player default',
+  },
+  { id: 'autoplay-next', tab: 'playback', label: 'Autoplay next clip', keywords: 'continue end' },
+  { id: 'shortcuts', tab: 'playback', label: 'Keyboard shortcuts', keywords: 'keys hotkeys' },
+  { id: 'animations', tab: 'playback', label: 'Animations', keywords: 'motion transitions' },
+  { id: 'theme', tab: 'themes', label: 'Theme', keywords: 'colour color oled dark palette' },
+  {
+    id: 'minimize-to-tray',
+    tab: 'os',
+    label: 'Minimize to the tray instead of quitting',
+    keywords: 'close window background quit exit',
+  },
+  {
+    id: 'youtube-projects',
+    tab: 'youtube',
+    label: 'YouTube projects',
+    keywords: 'connect google account sign in disconnect',
+  },
+  {
+    id: 'youtube-check',
+    tab: 'youtube',
+    label: 'Check processing status',
+    keywords: 'processing poll quota',
+  },
+  {
+    id: 'youtube-add',
+    tab: 'youtube',
+    label: 'Add a YouTube project',
+    keywords: 'client secret json paste google cloud',
+  },
+  {
+    id: 'youtube-guide',
+    tab: 'youtube',
+    label: 'Set up a Google project',
+    keywords: 'guide oauth consent credentials steps',
+  },
+  {
+    id: 'youtube-audit',
+    tab: 'youtube',
+    label: 'Unverified projects upload as private',
+    keywords: 'audit private verification limits',
+  },
+  { id: 'stats-previews', tab: 'stats', label: 'Previews built', keywords: 'poster coverage' },
+  { id: 'stats-activity', tab: 'stats', label: 'Recording activity', keywords: 'months chart' },
+  { id: 'stats-games', tab: 'stats', label: 'Biggest games', keywords: 'disk space ranking' },
+  { id: 'stats-formats', tab: 'stats', label: 'Formats', keywords: 'resolution codec bitrate' },
+  {
+    id: 'storage-recordings',
+    tab: 'storage',
+    label: 'Recordings on disk',
+    keywords: 'library size bytes total',
+  },
+  { id: 'storage-bitrate', tab: 'storage', label: 'Average bitrate', keywords: 'mbps capture' },
+  { id: 'storage-previews', tab: 'storage', label: 'Preview cache', keywords: 'thumbnails clear' },
+  { id: 'storage-database', tab: 'storage', label: 'Index database', keywords: 'sqlite db' },
+  { id: 'storage-appdata', tab: 'storage', label: 'App data', keywords: 'folder open reveal' },
+  { id: 'storage-free', tab: 'storage', label: 'Free on this drive', keywords: 'space used' },
+  {
+    id: 'updates',
+    tab: 'info',
+    label: 'Updates',
+    keywords: 'version check now restart install release notes changelog',
+  },
+  {
+    id: 'auto-updates',
+    tab: 'info',
+    label: 'Check for updates automatically',
+    keywords: 'background launch',
+  },
+  {
+    id: 'app-runtime',
+    tab: 'info',
+    label: 'App',
+    keywords: 'electron chromium node platform memory uptime ffmpeg',
+  },
+  { id: 'local-first', tab: 'info', label: 'Local-first', keywords: 'privacy network files stay' },
+]
+
+export const matchedRows = computed<SettingsRowIndex[]>(() => {
+  const q = settingsQuery.value.trim().toLowerCase()
+  if (!q) return []
+  return SETTINGS_ROWS.filter((r) => r.label.toLowerCase().includes(q) || r.keywords.includes(q))
+})
+
+/** The row `revealRow` just landed on; its SettingsRow scrolls into view and flashes. */
+export const highlightRow = ref<string | null>(null)
+let highlightTimer = 0
+
+export function revealRow(id: string): void {
+  const row = SETTINGS_ROWS.find((r) => r.id === id)
+  if (!row) return
+  settingsTab.value = row.tab
+  settingsQuery.value = ''
+  highlightRow.value = id
+  window.clearTimeout(highlightTimer)
+  highlightTimer = window.setTimeout(() => {
+    if (highlightRow.value === id) highlightRow.value = null
+  }, 2400)
+}
 
 export function openSettings(tab: SettingsTab = 'folders'): void {
   settingsTab.value = tab

@@ -18,6 +18,7 @@ import {
   createPlaylist,
   isExhausted,
   loadPlaylists,
+  quotaResumesIn,
 } from '@/composables/useYouTube'
 import { closePlayer } from '@/composables/usePlayer'
 import { openSettings } from '@/composables/useSettings'
@@ -98,7 +99,7 @@ const accountItems = computed<AccountItem[]>(() => {
     items.push({
       id: a.id,
       label: isExhausted(a)
-        ? `${a.label} · out of quota until midnight Pacific`
+        ? `${a.label} · ${quotaResumesIn(a)}`
         : a.channel?.title
           ? `${a.label} · ${a.channel.title}`
           : a.label,

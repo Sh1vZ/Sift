@@ -12,6 +12,7 @@ import { settings, updateSettings } from '@/composables/useLibrary'
       flush
     >
       <SettingsRow
+        id="minimize-to-tray"
         icon="tray"
         title="Minimize to the tray instead of quitting"
         description="Sift keeps watching your folders and finishing exports while the window is away. Open it again from the tray icon."
@@ -24,7 +25,7 @@ import { settings, updateSettings } from '@/composables/useLibrary'
           />
         </template>
       </SettingsRow>
-      <div v-if="settings.minimizeToTray" class="note">
+      <template v-if="settings.minimizeToTray" #note>
         <UAlert
           color="neutral"
           variant="subtle"
@@ -32,14 +33,7 @@ import { settings, updateSettings } from '@/composables/useLibrary'
           title="Quitting is now a tray job"
           description="Right-click Sift in the notification area and choose Quit Sift. Windows may keep the icon hidden behind the ‹ chevron until you drag it out."
         />
-      </div>
+      </template>
     </SettingsPanel>
   </div>
 </template>
-
-<style scoped>
-.note {
-  padding: var(--s-4) var(--s-6);
-  border-top: 1px solid var(--border);
-}
-</style>

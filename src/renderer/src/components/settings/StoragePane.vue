@@ -87,14 +87,16 @@ onMounted(() => {
           </div>
           <div v-else key="rows">
             <SettingsRow
+              id="storage-recordings"
               icon="film"
-              title="Clips on disk"
+              title="Recordings on disk"
               :description="`Across ${libraryTotals.folders} watched folder${libraryTotals.folders === 1 ? '' : 's'}. Indexed in place — never copied, moved or re-encoded.`"
               :value="formatBytes(libraryTotals.bytes)"
             />
 
             <SettingsRow
               v-if="libraryTotals.avgBitrate"
+              id="storage-bitrate"
               icon="activity"
               title="Average bitrate"
               description="Size against duration across every probed clip. A high figure means a generous capture setting — it is what makes the library big, not what makes a clip look good."
@@ -102,6 +104,7 @@ onMounted(() => {
             />
 
             <SettingsRow
+              id="storage-previews"
               icon="image"
               title="Preview cache"
               :description="`${n.format(appStats.storage.cacheFiles)} poster frames and hover-scrub strips, generated once and reused.`"
@@ -109,32 +112,36 @@ onMounted(() => {
             />
 
             <SettingsRow
+              id="storage-database"
               icon="database"
               title="Index database"
               :description="`SQLite record of ${n.format(libraryTotals.clips)} clip${libraryTotals.clips === 1 ? '' : 's'}, including the write-ahead log.`"
               :value="formatBytes(appStats.storage.databaseBytes)"
             />
 
-            <SettingsRow icon="box" title="App data" :value="formatBytes(appDataBytes)">
-              <p class="path truncate" :title="appStats.storage.userDataPath">
-                {{ appStats.storage.userDataPath }}
-              </p>
+            <SettingsRow
+              id="storage-appdata"
+              icon="box"
+              title="App data"
+              :path="appStats.storage.userDataPath"
+              :value="formatBytes(appDataBytes)"
+            >
               <template #trailing>
-                <UTooltip text="Open in File Explorer">
-                  <UButton
-                    icon="i-lucide-folder-open"
-                    color="neutral"
-                    variant="ghost"
-                    square
-                    aria-label="Open app data folder"
-                    @click="revealAppData()"
-                  />
-                </UTooltip>
+                <UButton
+                  icon="i-lucide-folder-open"
+                  label="Open folder"
+                  color="neutral"
+                  variant="subtle"
+                  size="sm"
+                  aria-label="Open the app data folder"
+                  @click="revealAppData()"
+                />
               </template>
             </SettingsRow>
 
             <SettingsRow
               v-if="appStats.storage.diskTotalBytes"
+              id="storage-free"
               icon="gauge"
               title="Free on this drive"
               :description="`${formatBytes(appStats.storage.diskFreeBytes)} free of ${formatBytes(appStats.storage.diskTotalBytes)} · ${diskUsedPct}% used`"
@@ -176,12 +183,6 @@ onMounted(() => {
 .skeleton-text {
   flex: 1;
   min-width: 0;
-}
-.path {
-  margin-top: 2px;
-  font-size: var(--text-sm);
-  color: var(--fg-muted);
-  user-select: text;
 }
 .row-progress {
   margin-top: var(--s-2);

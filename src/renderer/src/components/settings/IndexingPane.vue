@@ -7,9 +7,16 @@ import { allClips, folders, scan, settings, updateSettings } from '@/composables
 
 type ToggleKey = keyof Pick<Settings, 'watchFolders' | 'generateThumbnails'>
 
-const toggles: Array<{ key: ToggleKey; icon: string; title: string; description: string }> = [
+const toggles: Array<{
+  key: ToggleKey
+  id: string
+  icon: string
+  title: string
+  description: string
+}> = [
   {
     key: 'watchFolders',
+    id: 'watch-folders',
     icon: 'radar',
     title: 'Watch folders',
     description:
@@ -17,10 +24,11 @@ const toggles: Array<{ key: ToggleKey; icon: string; title: string; description:
   },
   {
     key: 'generateThumbnails',
+    id: 'generate-previews',
     icon: 'image',
-    title: 'Generate thumbnails',
+    title: 'Generate previews',
     description:
-      'Poster frames and hover-scrub strips are rendered once by ffmpeg at low CPU priority and cached.',
+      'Poster frames and hover-scrub strips, rendered once by ffmpeg at low CPU priority and kept in the preview cache.',
   },
 ]
 
@@ -60,6 +68,7 @@ const pending = computed(() => allClips.value.filter((c) => c.probeState === 'pe
     >
       <SettingsRow
         v-for="t in toggles"
+        :id="t.id"
         :key="t.key"
         :icon="t.icon"
         :title="t.title"
@@ -75,6 +84,7 @@ const pending = computed(() => allClips.value.filter((c) => c.probeState === 'pe
       </SettingsRow>
 
       <SettingsRow
+        id="preview-workers"
         icon="cpu"
         title="Preview workers"
         description="How many clips are processed at once. Keep it low while gaming; raise it to chew through a big backlog faster."
@@ -84,7 +94,7 @@ const pending = computed(() => allClips.value.filter((c) => c.probeState === 'pe
             :model-value="settings.concurrency"
             :items="workerOptions"
             icon="i-lucide-cpu"
-            class="w-36"
+            class="w-40"
             aria-label="Preview workers"
             @update:model-value="(v: number) => updateSettings({ concurrency: v })"
           />
@@ -98,6 +108,7 @@ const pending = computed(() => allClips.value.filter((c) => c.probeState === 'pe
       flush
     >
       <SettingsRow
+        id="queue"
         icon="timer"
         title="Waiting to be probed"
         :description="

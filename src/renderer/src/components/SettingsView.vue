@@ -13,6 +13,9 @@ import InfoPane from './settings/InfoPane.vue'
 import {
   activeSection,
   matchedGroups,
+  matchedRows,
+  revealRow,
+  sectionLabel,
   settingsQuery,
   settingsTab,
   type SettingsGroup,
@@ -49,13 +52,28 @@ const railGroups = computed<RailGroup[]>(() =>
   })),
 )
 
+/** Individual settings the search found; picking one opens its pane and flashes the row. */
+const rowItems = computed(() =>
+  matchedRows.value.map((r) => ({
+    label: r.label,
+    icon: 'i-lucide-corner-down-right',
+    badge: {
+      label: sectionLabel(r.tab),
+      size: 'sm' as const,
+      color: 'neutral' as const,
+      variant: 'subtle' as const,
+    },
+    onSelect: () => revealRow(r.id),
+  })),
+)
+
 const navUi = {
-  link: 'h-10 px-3 gap-2.5 text-base font-medium rounded-lg',
-  linkLeadingIcon: 'size-[18px]',
+  link: 'h-11 px-3 gap-3 text-base font-medium rounded-lg',
+  linkLeadingIcon: 'size-5',
   linkLabel: 'truncate',
 }
 
-/** Enter jumps to the first match so the search box alone can drive the rail. */
+/** Enter jumps to the first match — a section, else a row — so the box alone can drive the rail. */
 function onSearchKey(e: KeyboardEvent): void {
   if (e.key === 'Escape' && settingsQuery.value) {
     settingsQuery.value = ''
@@ -65,6 +83,7 @@ function onSearchKey(e: KeyboardEvent): void {
   if (e.key !== 'Enter') return
   const first = matchedGroups.value[0]?.sections[0]
   if (first) select(first.id)
+  else if (matchedRows.value[0]) revealRow(matchedRows.value[0].id)
 }
 </script>
 
@@ -101,7 +120,7 @@ function onSearchKey(e: KeyboardEvent): void {
       <div class="rail-scroll">
         <div class="rail-slot">
           <Transition name="dissolve">
-            <div v-if="railGroups.length" key="groups">
+            <div v-if="railGroups.length || rowItems.length" key="groups">
               <template v-for="g in railGroups" :key="g.label">
                 <div class="group-title">{{ g.label }}</div>
                 <UNavigationMenu
@@ -111,6 +130,17 @@ function onSearchKey(e: KeyboardEvent): void {
                   highlight
                   highlight-color="primary"
                   :items="g.items"
+                  :ui="navUi"
+                />
+              </template>
+              <!-- Settings the words matched, not only the sections that mention them. -->
+              <template v-if="settingsQuery && rowItems.length">
+                <div class="group-title">Settings</div>
+                <UNavigationMenu
+                  orientation="vertical"
+                  color="primary"
+                  variant="pill"
+                  :items="rowItems"
                   :ui="navUi"
                 />
               </template>
@@ -134,10 +164,11 @@ function onSearchKey(e: KeyboardEvent): void {
     <!-- Text-led pane: one centred reading column, like every settings screen. -->
     <div class="pane">
       <div class="page">
-        <header class="hero">
-          <UIcon :name="activeSection.icon" class="hero-icon" />
+        <!-- One short head, not a hero: the rail and the breadcrumb already say
+             where you are, so the first control sits within reach of the title. -->
+        <header class="pane-head">
           <h1>{{ activeSection.label }}</h1>
-          <p class="hero-sub">{{ activeSection.description }}</p>
+          <p class="pane-sub">{{ activeSection.description }}</p>
         </header>
 
         <Transition name="fade" mode="out-in">
@@ -208,34 +239,22 @@ function onSearchKey(e: KeyboardEvent): void {
   /* 28px matches the gutter the clip grid uses, so the column keeps the same
      edge spacing once the window is too narrow to centre it. */
   margin: 0 auto;
-  padding: var(--s-8) 28px var(--s-10);
+  padding: var(--s-6) 28px var(--s-10);
 }
 
-/* Centred hero: the pane says what it governs before the first control. */
-.hero {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  margin-bottom: var(--s-8);
+.pane-head {
+  margin-bottom: var(--s-6);
 }
-.hero-icon {
-  width: 34px;
-  height: 34px;
-  margin-bottom: var(--s-3);
-  color: var(--secondary);
-  filter: drop-shadow(0 6px 16px color-mix(in srgb, var(--primary) 45%, transparent));
-}
-.hero h1 {
+.pane-head h1 {
   font-size: var(--text-xl);
   font-weight: 700;
 }
-.hero-sub {
-  max-width: 56ch;
-  margin-top: var(--s-2);
-  font-size: var(--text-sm);
-  color: var(--fg-muted);
+.pane-sub {
+  max-width: 64ch;
+  margin-top: var(--s-1);
+  font-size: var(--text-base);
   line-height: 1.5;
+  color: var(--fg-muted);
 }
 
 /* Every pane stacks panels with the same rhythm. */

@@ -1,8 +1,10 @@
 <script setup lang="ts">
 /**
  * One titled settings section: a header with an optional right-hand action,
- * then whatever the pane puts in the body. `flush` hands the body's padding to
- * the rows inside it, which is what lines their labels up with the header.
+ * then whatever the pane puts in the body, then an optional note under a
+ * hairline (an alert that only applies sometimes). `flush` hands the body's
+ * padding to the rows inside it, which is what lines their labels up with
+ * the header.
  */
 withDefaults(defineProps<{ title: string; description?: string; flush?: boolean }>(), {
   description: '',
@@ -22,6 +24,7 @@ withDefaults(defineProps<{ title: string; description?: string; flush?: boolean 
       </div>
     </template>
     <slot />
+    <div v-if="$slots.note" class="note"><slot name="note" /></div>
   </UCard>
 </template>
 
@@ -42,6 +45,7 @@ withDefaults(defineProps<{ title: string; description?: string; flush?: boolean 
 .sub {
   margin-top: var(--s-1);
   font-size: var(--text-sm);
+  line-height: 1.45;
   color: var(--fg-muted);
 }
 .actions {
@@ -49,5 +53,10 @@ withDefaults(defineProps<{ title: string; description?: string; flush?: boolean 
   align-items: center;
   gap: var(--s-2);
   flex: 0 0 auto;
+}
+/* Under the rows, with the same inset they use. */
+.note {
+  padding: var(--s-4) var(--s-6);
+  border-top: 1px solid var(--border);
 }
 </style>
