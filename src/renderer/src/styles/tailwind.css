@@ -7,6 +7,15 @@
 @import 'tailwindcss';
 @import '@nuxt/ui';
 
+/*
+ * Tailwind only scans the renderer sources and the Nuxt UI theme. The size
+ * overrides in electron.vite.config.ts name utilities that appear nowhere else
+ * (the theme's own sizes use py-2 / px-3), so without this safelist they resolve
+ * to nothing and every default-size button, input and select loses its padding.
+ * Keep it in step with the `ui` block there.
+ */
+@source inline('py-2.5 px-3.5 px-4 p-2.5');
+
 @theme {
   --font-sans: 'Inter Variable', 'Segoe UI', system-ui, -apple-system, sans-serif;
   --font-heading: 'Chakra Petch', 'Inter Variable', system-ui, sans-serif;

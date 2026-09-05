@@ -61,7 +61,9 @@ export default defineConfig({
           // Desktop density, one size up from Nuxt UI's defaults: `lg` buttons, inputs
           // and selects all come out 40px tall (14–15px text plus 10px of padding), so a
           // toolbar row lines up without a size prop at every call site. The padding
-          // overrides merge onto the theme's `py-2` and win through tw-merge.
+          // overrides merge onto the theme's `py-2` and win through tw-merge. Tailwind
+          // never scans this file, so every utility named here is safelisted in
+          // styles/tailwind.css — add to that list when adding one here.
           button: {
             slots: { base: 'font-heading font-semibold uppercase tracking-wider cursor-pointer' },
             variants: {
@@ -82,12 +84,14 @@ export default defineConfig({
               { size: 'xl', square: true, class: 'p-2.5' },
             ],
           },
+          // `xl` fields sit beside `lg` buttons in the toolbars, so they get the same
+          // vertical padding and come out the same height.
           input: {
-            variants: { size: { lg: { base: 'py-2.5' } } },
+            variants: { size: { lg: { base: 'py-2.5' }, xl: { base: 'py-2.5' } } },
             defaultVariants: { size: 'lg' },
           },
           select: {
-            variants: { size: { lg: { base: 'py-2.5' } } },
+            variants: { size: { lg: { base: 'py-2.5' }, xl: { base: 'py-2.5' } } },
             defaultVariants: { size: 'lg' },
           },
           fieldGroup: { defaultVariants: { size: 'lg' } },

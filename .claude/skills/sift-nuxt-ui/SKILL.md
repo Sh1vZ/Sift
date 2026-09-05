@@ -75,8 +75,11 @@ Why each option is what it is:
 - **`defaultVariants` and `variants`** set the house sizes the same way: buttons, inputs,
   selects, switches and field groups default to `lg`, padded to 40px tall, badges to `md`. The
   app config is `extend`ed onto the theme and tw-merged, so a `py-2.5` here beats the theme's
-  `py-2`. Never write `size="lg"` on those components; use `xl` for a primary call to action or
-  a search field and `sm` / `xs` for dense chrome only.
+  `py-2`. **Tailwind never scans the config file**, so every utility named there is safelisted
+  with `@source inline(...)` in `styles/tailwind.css`; a class missing from that list resolves
+  to nothing and the control silently loses its padding. Never write `size="lg"` on those
+  components; use `xl` for a primary call to action or a search field and `sm` / `xs` for dense
+  chrome only.
 - **Text sizes come from the app tokens, not from here.** Tailwind's `--text-xs … --text-2xl`
   are also the names in `tokens.css`, and unlayered wins, so every `text-sm` utility on a Nuxt UI
   component already reads Sift's scale.
