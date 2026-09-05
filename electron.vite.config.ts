@@ -97,6 +97,11 @@ export default defineConfig({
           fieldGroup: { defaultVariants: { size: 'lg' } },
           switch: { defaultVariants: { size: 'lg' } },
           badge: { defaultVariants: { size: 'md' } },
+          // Two actions ("Copy YouTube link" and "Open on YouTube") are wider
+          // together than the 384px toast, and the theme lays them out in a
+          // nowrap row, so the second one ran off the edge and was clipped.
+          // Wrapping puts it on a second line instead.
+          toast: { slots: { actions: 'flex-wrap' } },
           dropdownMenu: { defaultVariants: { size: 'lg' } },
           contextMenu: { defaultVariants: { size: 'lg' } },
         },

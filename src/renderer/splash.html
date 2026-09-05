@@ -3,16 +3,19 @@
   <head>
     <meta charset="UTF-8" />
     <title>Sift</title>
-    <!-- Same lockdown as index.html, minus the routes the splash has no use for:
-         no clip: scheme, no media. connect-src keeps the dev server's HMR socket. -->
+    <!-- Same lockdown as index.html, minus the routes the splash has no use for.
+         media-src clip: is for the warm-up frames (see main/lib/splash.ts);
+         connect-src keeps the dev server's HMR socket. -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' ws://localhost:* http://localhost:*"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src clip:; font-src 'self' data:; connect-src 'self' ws://localhost:* http://localhost:*"
     />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="dark" />
   </head>
   <body>
+    <!-- Behind the card: the warm-up frames main asks for (see main/lib/splash.ts). -->
+    <div id="warm" aria-hidden="true"></div>
     <div class="splash">
       <span class="mark" aria-hidden="true">
         <!-- The app icon (build/icon.png) redrawn in theme colours: the "slats"

@@ -18,6 +18,7 @@ import type {
   LibrarySnapshot,
   ScanState,
   Settings,
+  WarmupClip,
   WhatsNew,
 } from '@shared/types'
 import { ActivityLog } from './activity'
@@ -55,6 +56,8 @@ export type Emit = <K extends EventName>(name: K, payload: EventMap[K]) => void
 
 const FLUSH_MS = 150
 const ADD_BATCH = 40
+/** Decoders are not free, and each 10-bit frame costs the splash ~300 ms of compile: enough for a ShadowPlay library's HDR classes and one more. */
+const WARMUP_CLIPS = 3
 /** An export that prints nothing for this long is wedged, not slow. */
 const EXPORT_STALL_MS = 30_000
 const EXPORT_MAX_MS = 15 * 60_000
@@ -161,6 +164,34 @@ export class Library {
 
   clip(id: string): Clip | undefined {
     return this.store.data.clips[id]
+  }
+
+  /**
+   * The newest probed clip of each shader class, for the splash to draw one
+   * frame of (see lib/splash.ts). The shader follows the frame, not the file:
+   * the codec sets the pixel format and colour pipeline (ShadowPlay's HEVC is
+   * 10-bit HDR, its H.264 8-bit SDR), and the decoder pads its textures to an
+   * alignment, so a frame whose width or height is not a multiple of it is
+   * sampled with a clamp on that axis — each combination is a variant of its
+   * own. The alignments are what NVIDIA's D3D11 decoder was measured to use;
+   * a wrong guess elsewhere only means a variant goes unwarmed. The 10-bit
+   * codecs come first because theirs are the compiles that take 300 ms.
+   */
+  warmupClips(): WarmupClip[] {
+    const reachable = new Set(this.store.data.folders.filter((f) => f.available).map((f) => f.id))
+    const byClass = new Map<string, Clip>()
+    for (const c of Object.values(this.store.data.clips)) {
+      if (c.probeState !== 'ok' || !c.width || !c.height || !reachable.has(c.folderId)) continue
+      const align = c.vcodec === 'hevc' ? 32 : 16
+      const key = `${c.vcodec}:${c.width % align ? 'x' : ''}${c.height % align ? 'y' : ''}`
+      const best = byClass.get(key)
+      if (!best || c.recordedAtMs > best.recordedAtMs) byClass.set(key, c)
+    }
+    const hdrCapable = (c: Clip): number => (c.vcodec === 'hevc' || c.vcodec === 'av1' ? 0 : 1)
+    return [...byClass.values()]
+      .sort((a, b) => hdrCapable(a) - hdrCapable(b) || b.recordedAtMs - a.recordedAtMs)
+      .slice(0, WARMUP_CLIPS)
+      .map((c) => ({ id: c.id, width: c.width, height: c.height }))
   }
 
   /** For modules outside the library (the YouTube uploader) that learn something about a clip. */

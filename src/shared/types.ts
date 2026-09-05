@@ -82,6 +82,13 @@ export interface LibraryFolder {
   kind: FolderKind
 }
 
+/** A clip the launch splash draws one frame of, to compile the player's video shader early (see main/lib/splash.ts). */
+export interface WarmupClip {
+  id: string
+  width: number
+  height: number
+}
+
 // ---------------------------------------------------------------- exports
 
 export type ExportState = 'queued' | 'running' | 'done' | 'failed' | 'cancelled'

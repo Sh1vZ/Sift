@@ -151,6 +151,9 @@ if (!app.requestSingleInstanceLock()) {
     youtube.resume()
 
     installProtocol((id) => library?.clipPath(id))
+    // The player's video shaders, compiled behind the splash card rather than
+    // on the first clip opened (see lib/splash.ts). Needs the protocol above.
+    splash.warm(library.warmupClips())
     registerIpc(
       library,
       () => mainWindow,

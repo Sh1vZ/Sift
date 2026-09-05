@@ -12,6 +12,7 @@ import {
   now,
   openYouTube,
   pendingByClip,
+  removeFromYouTube,
   renameClip,
   revealClip,
 } from '@/composables/useLibrary'
@@ -408,6 +409,20 @@ const rows = computed<Row[]>(() => {
             />
           </span>
         </div>
+        <!-- Under the row, quiet and unfilled, like Delete in the footer: the
+             video is gone from the channel for good, so it is reachable
+             without ever sitting under a pointer aimed at Open. -->
+        <UButton
+          class="yt-remove"
+          icon="i-lucide-cloud-off"
+          label="Remove from YouTube"
+          color="error"
+          variant="ghost"
+          size="sm"
+          :loading="pendingAction?.kind === 'remove-youtube'"
+          :disabled="busy || uploading"
+          @click="removeFromYouTube(clip)"
+        />
       </section>
 
       <section>
@@ -730,6 +745,9 @@ h4 {
 }
 /* Under the row rather than beside it: the path needs the width more than the button does. */
 .path-copy {
+  margin-top: var(--s-2);
+}
+.yt-remove {
   margin-top: var(--s-2);
 }
 

@@ -468,6 +468,20 @@ function close(): void {
   if (closing.value) return
   closing.value = true
   video.value?.pause()
+  // The stage goes back to the poster before anything moves, as on the way in
+  // (see `flipping`). Scaling or fading the live frame has Chromium draw the
+  // video through shader variants it compiles on first use — a 250 ms freeze
+  // on the first close after every launch — while the poster's have long been
+  // built by the grid.
+  flipping.value = true
+  frameReady.value = false
+  void leave()
+}
+
+async function leave(): Promise<void> {
+  await nextTick() // Vue has dropped the src attribute and put the poster up...
+  video.value?.load() // ...and this releases the frame, so only the poster is left to draw.
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
   const card = document.querySelector(`[data-clip-id="${clip.value.id}"] .thumb`)
   const rect = card?.getBoundingClientRect() ?? null
   const visible = rect && rect.bottom > 48 && rect.top < window.innerHeight && rect.width > 0
@@ -828,8 +842,17 @@ onBeforeUnmount(() => {
           <!-- Stands in for the video until it has a frame: through the open
                flip, and across a clip change, so neither shows black. -->
           <Transition name="fade">
-            <img v-if="showPoster" class="poster" :src="poster" alt="" draggable="false" />
+            <img
+              v-if="showPoster && !closing"
+              class="poster"
+              :src="poster"
+              alt=""
+              draggable="false"
+            />
           </Transition>
+          <!-- The close flip carries the poster too, but this one is up on the
+               spot: fading it in would leave the live frame showing through. -->
+          <img v-if="closing && poster" class="poster" :src="poster" alt="" draggable="false" />
 
           <Transition name="fade">
             <UploadBanner v-if="upload" :key="upload.id" :job="upload" :clip="clip" />

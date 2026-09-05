@@ -14,7 +14,7 @@
  * to nothing and every default-size button, input and select loses its padding.
  * Keep it in step with the `ui` block there.
  */
-@source inline('py-2.5 px-3.5 px-4 p-2.5');
+@source inline('py-2.5 px-3.5 px-4 p-2.5 flex-wrap');
 
 @theme {
   --font-sans: 'Inter Variable', 'Segoe UI', system-ui, -apple-system, sans-serif;
