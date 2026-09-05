@@ -7,6 +7,20 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 uses [semantic versioning](https://semver.org/spec/v2.0.0.html) — beta builds carry a
 `-beta.N` suffix and update from the beta channel.
 
+## [1.0.0-beta.7] - 2026-09-05
+
+### Changed
+
+- **Sitting in the tray costs almost nothing.** A window sent to the tray is now
+  closed outright a moment after it hides, taking the memory that draws your library
+  with it, so Sift can sit through a session of a game without being felt. The folder
+  watchers, the export queue and any upload in flight carry on regardless — nothing
+  is paused, and nothing is rescanned when you come back. Reopening straight away
+  brings the window back untouched; later, it rebuilds behind a short splash, in the
+  place and at the size you left it, and on a monitor that is still connected. The
+  one thing it cannot bring back is where you were: you return to the home screen,
+  without your scroll position or an open search.
+
 ## [1.0.0-beta.6] - 2026-09-05
 
 ### Added
