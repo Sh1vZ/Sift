@@ -87,6 +87,8 @@ const ICONS: Record<string, string> = {
   star: 'i-lucide-star',
   'search-x': 'i-lucide-search-x',
   'eye-off': 'i-lucide-eye-off',
+  history: 'i-lucide-history',
+  copy: 'i-lucide-copy',
 }
 
 const icon = computed(() => ICONS[props.name] ?? `i-lucide-${props.name}`)

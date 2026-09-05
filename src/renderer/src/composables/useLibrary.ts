@@ -94,6 +94,15 @@ export const exportedClips = computed<Clip[]>(() => {
   return ids.size ? allClips.value.filter((c) => ids.has(c.folderId)) : []
 })
 
+/**
+ * Which grid a clip belongs to, so something opening a clip from outside a
+ * grid — the Storage screen, a search hit — can tell the player which list
+ * prev/next should walk.
+ */
+export function scopeOf(clip: Clip): 'library' | 'clips' {
+  return exportFolderIds.value.has(clip.folderId) ? 'clips' : 'library'
+}
+
 export interface GameSummary {
   name: string
   count: number

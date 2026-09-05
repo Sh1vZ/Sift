@@ -1,7 +1,7 @@
 import { app } from 'electron'
 import { opendir, stat, statfs } from 'node:fs/promises'
-import { join } from 'node:path'
-import type { AppStats, RuntimeStats, StorageStats } from '@shared/types'
+import { join, parse } from 'node:path'
+import type { AppStats, RuntimeStats, StorageStats, VolumeStats } from '@shared/types'
 import { ffmpegAvailable } from './media'
 import { cacheDir, libraryDb, userDataDir } from './paths'
 
@@ -58,7 +58,38 @@ async function fileSize(path: string): Promise<number> {
   }
 }
 
-async function collectStorage(): Promise<StorageStats> {
+/** The volume a path sits on: `D:\` on Windows, `/` elsewhere; '' when relative. */
+function volumeRoot(path: string): string {
+  return parse(path).root
+}
+
+async function volumeUsage(root: string): Promise<VolumeStats | null> {
+  try {
+    const fs = await statfs(root)
+    return { root, freeBytes: fs.bsize * fs.bavail, totalBytes: fs.bsize * fs.blocks }
+  } catch {
+    // An unplugged drive or a platform that will not report: leave it out.
+    return null
+  }
+}
+
+/**
+ * Free space for every volume the library touches. Keyed case-insensitively so
+ * `d:\clips` and `D:\Videos` are measured once, not twice.
+ */
+async function collectVolumes(paths: string[]): Promise<VolumeStats[]> {
+  const roots = new Map<string, string>()
+  for (const path of paths) {
+    const root = volumeRoot(path)
+    if (root) roots.set(root.toUpperCase(), root)
+  }
+  const measured = await Promise.all([...roots.values()].map(volumeUsage))
+  return measured
+    .filter((v): v is VolumeStats => v !== null)
+    .sort((a, b) => a.root.localeCompare(b.root))
+}
+
+async function collectStorage(folderPaths: string[]): Promise<StorageStats> {
   const db = libraryDb()
   // WAL mode keeps recent commits in the sidecars, so they are part of the index.
   const [dbBytes, walBytes, shmBytes, cache, total] = await Promise.all([
@@ -70,15 +101,8 @@ async function collectStorage(): Promise<StorageStats> {
   ])
   const databaseBytes = dbBytes + walBytes + shmBytes
 
-  let diskFreeBytes = 0
-  let diskTotalBytes = 0
-  try {
-    const fs = await statfs(userDataDir())
-    diskFreeBytes = fs.bsize * fs.bavail
-    diskTotalBytes = fs.bsize * fs.blocks
-  } catch {
-    // Not fatal: the free-space row simply hides.
-  }
+  const appDataRoot = volumeRoot(userDataDir())
+  const volumes = await collectVolumes([userDataDir(), ...folderPaths])
 
   return {
     userDataPath: userDataDir(),
@@ -86,8 +110,13 @@ async function collectStorage(): Promise<StorageStats> {
     cacheBytes: cache.bytes,
     cacheFiles: cache.files,
     otherBytes: Math.max(0, total.bytes - databaseBytes - cache.bytes),
-    diskFreeBytes,
-    diskTotalBytes,
+    volumes,
+    // Only claim the drive when it was actually measured; an unreadable volume
+    // is not in `volumes`, and the renderer would have nothing to point at. The
+    // match is case-insensitive because the casing kept is whichever path named
+    // the volume last, which need not be the app-data one.
+    appDataRoot:
+      volumes.find((v) => v.root.toUpperCase() === appDataRoot.toUpperCase())?.root ?? '',
   }
 }
 
@@ -107,10 +136,13 @@ function collectRuntime(): RuntimeStats {
   }
 }
 
-/** Measured on demand — nothing here is polled or cached. */
-export async function collectStats(): Promise<AppStats> {
+/**
+ * Measured on demand — nothing here is polled or cached. `folderPaths` are the
+ * watched roots, so free space is reported for every drive the library uses.
+ */
+export async function collectStats(folderPaths: string[] = []): Promise<AppStats> {
   return {
-    storage: await collectStorage(),
+    storage: await collectStorage(folderPaths),
     runtime: collectRuntime(),
     generatedAtMs: Date.now(),
   }

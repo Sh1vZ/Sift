@@ -120,6 +120,19 @@ export function basename(path: string): string {
   return path.split(/[\\/]/).filter(Boolean).pop() ?? path
 }
 
+/**
+ * The volume a path sits on, matching what `path.parse().root` gives the main
+ * process: `D:\` for a Windows path, `\\server\share\` for a UNC share, `/` on
+ * POSIX. Empty for a relative path.
+ */
+export function volumeRoot(path: string): string {
+  const drive = /^([a-zA-Z]:)[\\/]/.exec(path)
+  if (drive) return `${drive[1]}\\`
+  const unc = /^[\\/]{2}([^\\/]+)[\\/]([^\\/]+)/.exec(path)
+  if (unc) return `\\\\${unc[1]}\\${unc[2]}\\`
+  return path.startsWith('/') ? '/' : ''
+}
+
 /** Everything before the last segment; the path itself when it has no separator. */
 export function dirname(path: string): string {
   const i = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'))

@@ -119,7 +119,8 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
         label: 'Storage',
         icon: 'i-lucide-hard-drive',
         description: 'What sits on your disk, and how much of it actually belongs to Sift.',
-        keywords: 'disk space cache database app data free drive size',
+        keywords:
+          'disk space cache database app data free drive size volume biggest oldest clean up',
       },
     ],
   },
@@ -269,7 +270,24 @@ export const SETTINGS_ROWS: SettingsRowIndex[] = [
   { id: 'storage-previews', tab: 'storage', label: 'Preview cache', keywords: 'thumbnails clear' },
   { id: 'storage-database', tab: 'storage', label: 'Index database', keywords: 'sqlite db' },
   { id: 'storage-appdata', tab: 'storage', label: 'App data', keywords: 'folder open reveal' },
-  { id: 'storage-free', tab: 'storage', label: 'Free on this drive', keywords: 'space used' },
+  {
+    id: 'storage-drives',
+    tab: 'storage',
+    label: 'Drives',
+    keywords: 'free space used volume c d partition per drive',
+  },
+  {
+    id: 'storage-biggest',
+    tab: 'storage',
+    label: 'Biggest and oldest clips',
+    keywords: 'largest heaviest first earliest file',
+  },
+  {
+    id: 'storage-cleanup',
+    tab: 'storage',
+    label: 'Worth clearing out',
+    keywords: 'clean cleanup free reclaim suggestions old duplicate unplayed',
+  },
   {
     id: 'updates',
     tab: 'info',

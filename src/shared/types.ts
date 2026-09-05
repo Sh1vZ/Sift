@@ -262,6 +262,18 @@ export interface ActionResult {
   error?: string
 }
 
+/**
+ * One volume a watched folder (or the app data) sits on. Reported per drive so
+ * the Storage screen can say what Sift costs on D: rather than only on C:.
+ */
+export interface VolumeStats {
+  /** Root as the OS names it: `D:\` on Windows, `/` elsewhere. */
+  root: string
+  /** Zero when the platform will not report the volume. */
+  freeBytes: number
+  totalBytes: number
+}
+
 /** Disk used by the storage Sift owns, i.e. everything under `userData`. */
 export interface StorageStats {
   /** %APPDATA%/sift (or the SIFT_USER_DATA override). */
@@ -273,9 +285,10 @@ export interface StorageStats {
   cacheFiles: number
   /** Everything else Electron keeps there: GPU cache, logs, local storage. */
   otherBytes: number
-  /** Volume holding the app data. Zero when the platform will not report it. */
-  diskFreeBytes: number
-  diskTotalBytes: number
+  /** Every volume holding a watched folder, plus the one holding the app data. */
+  volumes: VolumeStats[]
+  /** Which of `volumes` the app data is on; '' when the platform would not say. */
+  appDataRoot: string
 }
 
 export interface RuntimeStats {

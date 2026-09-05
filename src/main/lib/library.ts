@@ -272,7 +272,7 @@ export class Library {
    */
   async stats(): Promise<AppStats> {
     await this.store.flush()
-    return collectStats()
+    return collectStats(this.store.data.folders.map((f) => f.path))
   }
 
   async revealData(): Promise<ActionResult> {
