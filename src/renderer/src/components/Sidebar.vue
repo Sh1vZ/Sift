@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import ShinyText from './bits/ShinyText.vue'
 import ActivityPanel from './ActivityPanel.vue'
 import { motionEnabled } from '@/composables/useMotion'
@@ -17,6 +17,8 @@ import { isRail, railForced, toggleSidebar } from '@/composables/useSidebar'
  * The rail keeps Nuxt UI's collapsed-menu tooltips, so nothing is lost with
  * the labels; anything longer than a name — the game you are in, the scan
  * detail — belongs in the title bar.
+ * The two widths ease into each other; railContent below is what keeps the
+ * labels from popping while that runs.
  */
 interface NavItem {
   label: string
@@ -65,11 +67,31 @@ const footerItems = computed<NavItem[]>(() => [
   },
 ])
 
+/* The column takes --dur to change width, so the labelled content has to
+   outlive the collapse: it stays mounted while the width animates and the
+   column clips it, and the rail arrangement lands only once the width has.
+   Expanding is the mirror — the labels are there from the first frame and the
+   widening column reveals them. So this is the wider of the two states for as
+   long as the transition runs; driving the content off isRail alone is the
+   pop this avoids. */
+const railContent = ref(isRail.value)
+
+watch(isRail, (rail) => {
+  // Expanding leads with the labels, and with motion off there is no width
+  // transition to wait for either way.
+  if (!rail || !motionEnabled.value) railContent.value = rail
+})
+
+/** The column's own width transition — never a child's colour or ring. */
+function onWidthSettled(e: TransitionEvent): void {
+  if (e.target === e.currentTarget && e.propertyName === 'width') railContent.value = isRail.value
+}
+
 /* Rail links are 44px squares centred in the column; expanded links are full
    rows at the app's base size. The pill background and the focus ring follow
    the link box either way. */
 const navUi = computed(() =>
-  isRail.value
+  railContent.value
     ? { link: 'h-11 justify-center px-0 rounded-lg', linkLeadingIcon: 'size-6' }
     : {
         link: 'h-11 px-3 gap-3 rounded-lg text-base font-medium',
@@ -84,7 +106,11 @@ const activityTitle = computed(() =>
 </script>
 
 <template>
-  <aside class="sidebar" :class="{ 'is-rail': isRail }">
+  <aside
+    class="sidebar"
+    :class="{ 'is-narrow': isRail, 'is-rail': railContent }"
+    @transitionend="onWidthSettled"
+  >
     <div class="brand">
       <span class="mark" aria-hidden="true">
         <!-- The "slats" mark: a play triangle sliced into bars like a sieve,
@@ -128,8 +154,8 @@ const activityTitle = computed(() =>
     <nav class="nav" aria-label="Main">
       <UNavigationMenu
         orientation="vertical"
-        :collapsed="isRail"
-        :tooltip="isRail"
+        :collapsed="railContent"
+        :tooltip="railContent"
         color="primary"
         variant="pill"
         :items="libraryItems"
@@ -149,20 +175,20 @@ const activityTitle = computed(() =>
         <UChip
           class="activity-chip"
           :text="activityCount"
-          :show="isRail && activityCount > 0"
+          :show="railContent && activityCount > 0"
           color="primary"
           size="lg"
           inset
         >
-          <UTooltip :text="activityTitle" :content="{ side: 'right' }" :disabled="!isRail">
+          <UTooltip :text="activityTitle" :content="{ side: 'right' }" :disabled="!railContent">
             <UButton
               class="activity"
               :icon="activityBusy ? 'i-lucide-loader-circle' : 'i-lucide-activity'"
               :color="activityCount || view === 'activity' ? 'primary' : 'neutral'"
               variant="ghost"
-              :square="isRail"
+              :square="railContent"
               :ui="{
-                base: isRail
+                base: railContent
                   ? ''
                   : 'w-full justify-start px-3 gap-3 min-h-11 py-1.5 rounded-lg font-sans font-medium normal-case tracking-normal text-base',
                 leadingIcon: activityBusy ? 'animate-spin size-6' : 'size-6',
@@ -170,14 +196,14 @@ const activityTitle = computed(() =>
               :aria-label="activityTitle"
               :aria-expanded="activityOpen"
             >
-              <span v-if="!isRail" class="activity-text">
+              <span v-if="!railContent" class="activity-text">
                 <span>Activity</span>
                 <span v-if="activityLabel" class="activity-status truncate">{{
                   activityLabel
                 }}</span>
               </span>
               <UBadge
-                v-if="!isRail && activityCount"
+                v-if="!railContent && activityCount"
                 class="activity-count mono"
                 color="primary"
                 variant="subtle"
@@ -194,8 +220,8 @@ const activityTitle = computed(() =>
 
       <UNavigationMenu
         orientation="vertical"
-        :collapsed="isRail"
-        :tooltip="isRail"
+        :collapsed="railContent"
+        :tooltip="railContent"
         color="primary"
         variant="pill"
         :items="footerItems"
@@ -227,19 +253,42 @@ const activityTitle = computed(() =>
 </template>
 
 <style scoped>
-/* No width transition on purpose: the grid beside it re-lays out on every
-   frame of one, and the labels are all that needs to appear. */
+/* Two classes, because the width and the arrangement no longer change at the
+   same moment: `is-narrow` eases the column between its widths, `is-rail`
+   restacks the content once that lands. `clip` rather than `hidden` so no
+   scroll container is created — and it also drops the flex item's automatic
+   minimum size, without which the expanded content would hold the column open
+   mid-collapse. The grid beside it re-lays out through the transition; that
+   is the same work a window resize already asks of it. */
 .sidebar {
   display: flex;
   flex-direction: column;
   width: var(--sidebar-w-expanded);
   flex: 0 0 auto;
+  overflow: clip;
   background: var(--bg-0);
   border-right: 1px solid var(--border);
+  transition: width var(--dur) var(--ease-out);
+}
+.sidebar.is-narrow {
+  width: var(--sidebar-w);
 }
 .sidebar.is-rail {
-  width: var(--sidebar-w);
   align-items: center;
+}
+/* While the labels are still on screen the rows keep their full width, so text
+   rides out of the column and back rather than reflowing on every frame of the
+   transition. The fold button is left out: it tracks the right edge in, which
+   is where it ends up anyway. */
+.sidebar:not(.is-rail) .brand,
+.sidebar:not(.is-rail) .nav {
+  min-width: var(--sidebar-w-expanded);
+}
+/* The footer rows sit inside its 8px gutters, so they hold the width the open
+   column gives them, not the column's own. */
+.sidebar:not(.is-rail) .activity-chip,
+.sidebar:not(.is-rail) .footer :deep(nav) {
+  min-width: calc(var(--sidebar-w-expanded) - 16px);
 }
 .brand {
   display: flex;
@@ -250,12 +299,17 @@ const activityTitle = computed(() =>
   padding: 0 var(--s-4);
   /* No room for a section label, so a hairline does the dividing. */
   border-bottom: 1px solid var(--border);
+  transition: height var(--dur-fast) var(--ease-out);
 }
 .is-rail .brand {
   flex-direction: column;
   justify-content: center;
   gap: var(--s-1);
-  height: auto;
+  /* 12 + 28 (mark) + 4 + 13 (wordmark) + 10 + 1 (border): the height `auto`
+     would resolve to, pinned so the header can ease between the two
+     arrangements instead of stepping 12px when the rail lands. Centred, so a
+     pixel of font drift costs nothing. */
+  height: 68px;
   padding: var(--s-3) 0 10px;
 }
 .mark {
@@ -274,6 +328,14 @@ const activityTitle = computed(() =>
 .is-rail .wordmark {
   font-size: var(--text-xs);
   letter-spacing: 0.1em;
+  /* The stacked wordmark belongs to the rail, and the rail lands after the
+     width has — so it arrives instead of appearing under the mark. */
+  animation: wordmark-in var(--dur) var(--ease-out);
+}
+@keyframes wordmark-in {
+  from {
+    opacity: 0;
+  }
 }
 .nav {
   display: flex;
