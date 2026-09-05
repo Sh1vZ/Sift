@@ -87,15 +87,31 @@ const activityTitle = computed(() =>
   <aside class="sidebar" :class="{ 'is-rail': isRail }">
     <div class="brand">
       <span class="mark" aria-hidden="true">
-        <svg viewBox="0 0 32 32" width="28" height="28">
+        <!-- The "slats" mark: a play triangle sliced into bars like a sieve,
+             the last bar fallen through in the accent colour. Same geometry
+             as build/icon.png, but bare so it follows the active theme. -->
+        <svg viewBox="0 0 64 64" width="28" height="28">
           <defs>
             <linearGradient id="mark-g" x1="0" y1="0" x2="1" y2="1">
               <stop offset="0" style="stop-color: var(--secondary)" />
               <stop offset="1" style="stop-color: var(--primary)" />
             </linearGradient>
+            <clipPath id="mark-slats">
+              <rect x="0" y="12" width="64" height="8" />
+              <rect x="0" y="22.5" width="64" height="8" />
+              <rect x="0" y="33" width="64" height="8" />
+            </clipPath>
+            <clipPath id="mark-slat-last">
+              <rect x="0" y="43.5" width="64" height="9" />
+            </clipPath>
           </defs>
-          <rect x="2" y="2" width="28" height="28" rx="8" fill="url(#mark-g)" />
-          <path d="M12.5 10.5v11l9-5.5z" style="fill: var(--on-primary)" />
+          <path d="M17 12 L51 32 L17 52 Z" clip-path="url(#mark-slats)" fill="url(#mark-g)" />
+          <path
+            d="M17 12 L51 32 L17 52 Z"
+            clip-path="url(#mark-slat-last)"
+            transform="translate(5 1)"
+            style="fill: var(--accent)"
+          />
         </svg>
       </span>
       <ShinyText

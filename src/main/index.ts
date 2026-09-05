@@ -1,7 +1,10 @@
-import { app, BrowserWindow, dialog } from 'electron'
+import { app, BrowserWindow, dialog, nativeImage, type NativeImage } from 'electron'
 import { electronApp, optimizer } from '@electron-toolkit/utils'
+import { THEME_BRAND } from '@shared/themes'
+import type { ThemeId } from '@shared/types'
 import { registerIpc } from './ipc'
 import { perfLog, userDataOverride } from './lib/env'
+import { ICON_SIZE, renderAppIcon } from './lib/icon'
 import { Library } from './lib/library'
 import { ensureDirs } from './lib/paths'
 import { installProtocol, registerScheme } from './lib/protocol'
@@ -65,6 +68,30 @@ if (!app.requestSingleInstanceLock()) {
     mainWindow.focus()
   })
 
+  /**
+   * The taskbar and tray icon follow the theme. It is drawn here from the
+   * theme's brand colours (lib/icon.ts) rather than read from build/icon.png,
+   * which stays the neutral icon for the installer, the shortcuts and the
+   * window's first paint. One render per theme, cached until the theme changes.
+   * Windows draws a *pinned* app from its shortcut, so a pinned Sift keeps the
+   * neutral icon while running; unpinned, Alt+Tab and the tray all switch.
+   */
+  let iconTheme: ThemeId | null = null
+  let appIcon: NativeImage | null = null
+  function currentIcon(): NativeImage {
+    const theme = library?.settings.theme ?? 'sift'
+    if (!appIcon || theme !== iconTheme) {
+      iconTheme = theme
+      appIcon = nativeImage.createFromBuffer(renderAppIcon(THEME_BRAND[theme], ICON_SIZE))
+    }
+    return appIcon
+  }
+  function syncIcon(): void {
+    const icon = currentIcon()
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.setIcon(icon)
+    tray?.setIcon(icon)
+  }
+
   /** The tray exists only while closing means 'hide', so nothing hides with no way back. */
   function syncTray(enabled: boolean): void {
     if (!enabled) {
@@ -74,6 +101,7 @@ if (!app.requestSingleInstanceLock()) {
     }
     if (tray) return
     tray = createTray({
+      icon: currentIcon(),
       getWindow: () => mainWindow,
       onSettings: () => mainWindow?.webContents.send('app:open-settings', null),
     })
@@ -128,6 +156,7 @@ if (!app.requestSingleInstanceLock()) {
       () => mainWindow,
       () => splash?.finish(),
       (s) => {
+        syncIcon()
         syncTray(s.minimizeToTray)
         updater?.setAutoCheck(s.autoCheckUpdates)
       },
@@ -140,6 +169,9 @@ if (!app.requestSingleInstanceLock()) {
 
     mainWindow = createMainWindow({ autoShow: false })
     mainWindow.on('closed', () => (mainWindow = null))
+    // Still hidden behind the splash, so the themed icon is in place before the
+    // taskbar button ever shows.
+    syncIcon()
 
     // With 'minimize on close' on, closing hides the window instead of ending the
     // process: the folder watchers and the export queue keep running, and the

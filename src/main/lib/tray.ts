@@ -1,32 +1,28 @@
-import { Menu, Tray, app, nativeImage, type BrowserWindow } from 'electron'
-import { appIconPath } from './paths'
+import { Menu, Tray, app, type BrowserWindow, type NativeImage } from 'electron'
 
 export interface AppTray {
   /** The "Sift is still running" balloon shown the first time the window hides. */
   hint(): void
+  /** Swap the icon, e.g. when the theme changes; the balloon picks it up too. */
+  setIcon(icon: NativeImage): void
   destroy(): void
 }
+
+// The icon arrives at ICON_SIZE; Windows draws the notification area at 16pt logical.
+const small = (icon: NativeImage): NativeImage => icon.resize({ width: 16, height: 16 })
 
 /**
  * Sift's presence in the notification area. It exists only while
  * `minimizeToTray` is on — see `syncTray` in main/index.ts — because that is the
  * only state where the window can vanish and the user needs a way back.
- *
- * Returns null when the icon cannot be resolved on disk (see `appIconPath`): a
- * Tray built from an empty image draws nothing, which would strand a hidden
- * window with no way to reopen or quit the app.
  */
 export function createTray(opts: {
+  /** The themed app icon (see `syncIcon` in main/index.ts). */
+  icon: NativeImage
   getWindow: () => BrowserWindow | null
   onSettings: () => void
-}): AppTray | null {
-  const file = appIconPath()
-  if (!file) return null
-
-  const full = nativeImage.createFromPath(file)
-  if (full.isEmpty()) return null
-  // The source is 512px; Windows draws the notification area at 16pt logical.
-  const icon = full.resize({ width: 16, height: 16 })
+}): AppTray {
+  let full = opts.icon
 
   const show = (): void => {
     const win = opts.getWindow()
@@ -36,7 +32,7 @@ export function createTray(opts: {
     win.focus()
   }
 
-  const tray = new Tray(icon)
+  const tray = new Tray(small(full))
   tray.setToolTip('Sift')
   tray.setContextMenu(
     Menu.buildFromTemplate([
@@ -69,6 +65,10 @@ export function createTray(opts: {
         content:
           'The window closed to the tray, so new recordings keep being indexed. Right-click the tray icon to quit.',
       })
+    },
+    setIcon: (icon) => {
+      full = icon
+      tray.setImage(small(icon))
     },
     destroy: () => tray.destroy(),
   }

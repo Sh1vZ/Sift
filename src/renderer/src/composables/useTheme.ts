@@ -1,3 +1,4 @@
+import { THEME_BRAND } from '@shared/themes'
 import { LAST_THEME_KEY, THEME_IDS, type ThemeId } from '@shared/types'
 import { computed, watchEffect } from 'vue'
 import { settings, updateSettings } from './useLibrary'
@@ -7,7 +8,8 @@ import { settings, updateSettings } from './useLibrary'
  * and this module just keeps the attribute in step with the setting. The hex
  * values here mirror those blocks for the two places CSS variables cannot
  * reach — the theme picker's previews, and the Vue Bits props that take a
- * colour string (WebGL aurora, folder, sliders, list fades).
+ * colour string (WebGL aurora, folder, sliders, list fades). The brand trio
+ * comes from `@shared/themes`, which main also reads to draw the app icon.
  */
 export interface ThemeDef {
   id: ThemeId
@@ -41,9 +43,7 @@ export const THEMES: ThemeDef[] = [
       bg1: '#0f0f23',
       bg3: '#1e1c35',
       fg: '#e2e8f0',
-      primary: '#7c3aed',
-      secondary: '#a78bfa',
-      accent: '#f43f5e',
+      ...THEME_BRAND.sift,
     },
     spotlight: 'rgba(167, 139, 250, 0.28)',
   },
@@ -57,9 +57,7 @@ export const THEMES: ThemeDef[] = [
       bg1: '#110e0c',
       bg3: '#221c19',
       fg: '#f2ebe6',
-      primary: '#f97316',
-      secondary: '#fdba74',
-      accent: '#facc15',
+      ...THEME_BRAND.ember,
     },
     spotlight: 'rgba(253, 186, 116, 0.26)',
   },
@@ -73,9 +71,7 @@ export const THEMES: ThemeDef[] = [
       bg1: '#10081d',
       bg3: '#22123a',
       fg: '#f3e8ff',
-      primary: '#ec4899',
-      secondary: '#f9a8d4',
-      accent: '#22d3ee',
+      ...THEME_BRAND.synthwave,
     },
     spotlight: 'rgba(249, 168, 212, 0.26)',
   },
@@ -89,9 +85,7 @@ export const THEMES: ThemeDef[] = [
       bg1: '#150a0c',
       bg3: '#271418',
       fg: '#f5e9eb',
-      primary: '#dc2626',
-      secondary: '#fca5a5',
-      accent: '#fbbf24',
+      ...THEME_BRAND.crimson,
     },
     spotlight: 'rgba(252, 165, 165, 0.24)',
   },
@@ -105,9 +99,7 @@ export const THEMES: ThemeDef[] = [
       bg1: '#10100d',
       bg3: '#21211b',
       fg: '#f0efe8',
-      primary: '#eab308',
-      secondary: '#fde047',
-      accent: '#38bdf8',
+      ...THEME_BRAND.solar,
     },
     spotlight: 'rgba(253, 224, 71, 0.22)',
   },
@@ -121,9 +113,7 @@ export const THEMES: ThemeDef[] = [
       bg1: '#150811',
       bg3: '#26081c',
       fg: '#f6ecf3',
-      primary: '#b01ea4',
-      secondary: '#ee9ae7',
-      accent: '#fbbf24',
+      ...THEME_BRAND.nox,
     },
     spotlight: 'rgba(238, 154, 231, 0.24)',
   },
@@ -137,9 +127,7 @@ export const THEMES: ThemeDef[] = [
       bg1: '#000a01',
       bg3: '#01200f',
       fg: '#e8f2ea',
-      primary: '#9ec5ab',
-      secondary: '#c6dfd1',
-      accent: '#e0705c',
+      ...THEME_BRAND.grim,
     },
     spotlight: 'rgba(158, 197, 171, 0.24)',
   },
@@ -154,9 +142,7 @@ export const THEMES: ThemeDef[] = [
       bg1: '#0a1128',
       bg3: '#16224a',
       fg: '#e8ecfb',
-      primary: '#4361ee',
-      secondary: '#9db1ff',
-      accent: '#ffc94a',
+      ...THEME_BRAND.space,
     },
     spotlight: 'rgba(157, 177, 255, 0.26)',
   },
@@ -169,9 +155,7 @@ export const THEMES: ThemeDef[] = [
     colors: {
       ...OLED_SURFACES,
       fg: '#e2e8f0',
-      primary: '#7c3aed',
-      secondary: '#a78bfa',
-      accent: '#f43f5e',
+      ...THEME_BRAND.oled,
     },
     spotlight: 'rgba(167, 139, 250, 0.28)',
   },
@@ -183,9 +167,7 @@ export const THEMES: ThemeDef[] = [
     colors: {
       ...OLED_SURFACES,
       fg: '#e6f0ea',
-      primary: '#10b981',
-      secondary: '#6ee7b7',
-      accent: '#f472b6',
+      ...THEME_BRAND['oled-mint'],
     },
     spotlight: 'rgba(110, 231, 183, 0.24)',
   },
@@ -197,9 +179,7 @@ export const THEMES: ThemeDef[] = [
     colors: {
       ...OLED_SURFACES,
       fg: '#e4f0f4',
-      primary: '#06b6d4',
-      secondary: '#67e8f9',
-      accent: '#a78bfa',
+      ...THEME_BRAND['oled-frost'],
     },
     spotlight: 'rgba(103, 232, 249, 0.24)',
   },
@@ -211,9 +191,7 @@ export const THEMES: ThemeDef[] = [
     colors: {
       ...OLED_SURFACES,
       fg: '#f5e9eb',
-      primary: '#dc2626',
-      secondary: '#fca5a5',
-      accent: '#fbbf24',
+      ...THEME_BRAND['oled-crimson'],
     },
     spotlight: 'rgba(252, 165, 165, 0.24)',
   },

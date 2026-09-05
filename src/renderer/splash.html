@@ -15,15 +15,38 @@
   <body>
     <div class="splash">
       <span class="mark" aria-hidden="true">
-        <svg viewBox="0 0 32 32" width="60" height="60">
+        <!-- The app icon (build/icon.png) redrawn in theme colours: the "slats"
+             play triangle on its gradient tile, the last bar fallen through in
+             the accent. Same 512 geometry as the PNG so the two match. -->
+        <svg viewBox="0 0 512 512" width="60" height="60">
           <defs>
             <linearGradient id="splash-mark" x1="0" y1="0" x2="1" y2="1">
               <stop offset="0" style="stop-color: var(--secondary)" />
               <stop offset="1" style="stop-color: var(--primary)" />
             </linearGradient>
+            <clipPath id="splash-slats">
+              <rect x="0" y="12" width="64" height="8" />
+              <rect x="0" y="22.5" width="64" height="8" />
+              <rect x="0" y="33" width="64" height="8" />
+            </clipPath>
+            <clipPath id="splash-slat-last">
+              <rect x="0" y="43.5" width="64" height="9" />
+            </clipPath>
           </defs>
-          <rect x="2" y="2" width="28" height="28" rx="8" fill="url(#splash-mark)" />
-          <path d="M12.5 10.5v11l9-5.5z" style="fill: var(--on-primary)" />
+          <rect x="24" y="24" width="464" height="464" rx="104" fill="url(#splash-mark)" />
+          <svg x="82" y="82" width="348" height="348" viewBox="0 0 64 64">
+            <path
+              d="M17 12 L51 32 L17 52 Z"
+              clip-path="url(#splash-slats)"
+              style="fill: var(--on-primary)"
+            />
+            <path
+              d="M17 12 L51 32 L17 52 Z"
+              clip-path="url(#splash-slat-last)"
+              transform="translate(5 1)"
+              style="fill: var(--accent)"
+            />
+          </svg>
         </svg>
       </span>
 

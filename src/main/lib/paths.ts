@@ -44,10 +44,11 @@ export function ensureDirs(): void {
 }
 
 /**
- * The app icon on disk, for the window and the tray. A packaged build gets it
- * from extraResources (electron-builder.yml) because the asar ships only out/**;
- * dev and unpacked builds read it straight out of build/. Undefined when neither
- * is there — the window falls back to the exe icon, the tray is simply skipped.
+ * The neutral app icon on disk, for the window's first paint; main swaps in the
+ * themed render (lib/icon.ts) straight after, and the tray only ever sees that.
+ * A packaged build gets it from extraResources (electron-builder.yml) because
+ * the asar ships only out/**; dev and unpacked builds read it straight out of
+ * build/. Undefined when neither is there — the window falls back to the exe icon.
  */
 export function appIconPath(): string | undefined {
   for (const p of [
