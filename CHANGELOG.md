@@ -7,6 +7,69 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 uses [semantic versioning](https://semver.org/spec/v2.0.0.html) — beta builds carry a
 `-beta.N` suffix and update from the beta channel.
 
+## [1.0.0-beta.5] - 2026-09-05
+
+### Added
+
+- **Upload to YouTube.** Connect a Google Cloud project of your own under
+  Settings → YouTube, then send any clip up from the player or its card menu. Sift
+  follows the upload through Google's processing and tells you where it got to, and
+  the clip keeps a link back to the video afterwards. The client ID and secret are
+  stored encrypted on this PC and your sign-in is never saved. A project Google has
+  not verified can only upload as private, and the pane says so before you start.
+- **Copy file.** Copy a clip to the clipboard from a card or the details pane and
+  paste it straight into Discord, Explorer, or anywhere else that takes a file.
+- **An Activity panel.** The sidebar's Activity button lists every export, upload
+  and scan in flight with its progress and a Cancel, and keeps a history of what has
+  already finished so you can see what happened while you were away.
+- **Ctrl+K searches every clip** from anywhere in the app, not just the one you are
+  looking at. `/` still focuses whichever box is on screen.
+- **Favourites and unwatched.** Star a clip from its card or the player, and Sift
+  marks one seen once you have watched it through. Both are filters in the toolbar.
+- **Renaming and merging games.** Give a game the name you actually call it, and
+  fold two folders into one when a recorder has written the same game twice. Sift
+  points out pairs that look like duplicates and offers to merge them or keep them
+  separate; a merge can be undone later.
+- **Drag a folder onto the window** to add it, on the Games screen or in
+  Settings → Folders.
+- **A Clear previews action** in Settings → Storage. It removes every cached poster
+  and scrub strip, says how many files went, and rebuilds them in the background.
+- **A shortcuts dialog** on `?`, and Backspace, Alt+← or Esc now go back from every
+  screen rather than only inside a game.
+
+### Changed
+
+- **The sidebar is labelled by default**, with names and counts. Ctrl+B or the
+  chevron at the bottom collapses it to the old icon rail, and it collapses on its
+  own on a narrow window so the grid keeps its columns.
+- **Every screen shares one header and one toolbar** — a title row with the figures
+  and the main action, over a row that filters by name, favourites and unwatched,
+  sorts, and tucks grouping and card size into a View menu. Filters are remembered
+  per screen, so narrowing one game no longer narrows the Clips view.
+- **Cards carry their own actions.** The favourite star and a menu sit on every clip
+  and game card at rest, so nothing needs the details pane or a right-click.
+- **The player shows an export on the stage** from queued to done, with Cancel while
+  it runs and View clip when it lands. The trim row now says in words why Export is
+  off — "Give the clip a name", "Selection is too short" — instead of just dimming.
+- **Settings panes start at the first control** instead of a centred hero, row
+  actions are labelled buttons with the destructive one held apart, and the search
+  matches individual settings and scrolls to the row it found. Info opens the
+  bundled changelog in the app.
+- **Storage reports the whole volume**, not just Sift's own folders, and suggests
+  what is worth clearing — recordings you have already trimmed, and the preview cache.
+- **Text and controls are bigger.** The base size goes to 15px and buttons, inputs
+  and selects settle at a consistent 40px, so the app reads at a glance.
+- **The app icon follows your theme**, in the taskbar and the tray.
+
+### Fixed
+
+- Card posters are cut from the clip's first frame, so the thumbnail, the hover flip
+  and the first frame of playback are finally the same picture.
+- Opening the first clip of a session no longer freezes the window for a moment. The
+  video shaders are compiled behind the splash screen while Sift starts instead.
+- Sift stops scanning, drawing and decoding while its window is hidden or minimised,
+  so it costs nothing in the background.
+
 ## [1.0.0-beta.4] - 2026-09-03
 
 ### Added
