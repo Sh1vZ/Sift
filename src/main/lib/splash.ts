@@ -24,6 +24,12 @@ import type { ThemeId, WarmupClip } from '@shared/types'
  * in it before the reveal reaches the GPU. This one is on screen, so `warm`
  * has it draw one frame of a clip per codec behind the card, and the freeze
  * lands where the only thing moving is a progress sweep.
+ *
+ * It is used a second time to cover a restore from the tray, which destroys and
+ * rebuilds the window (see `showMainWindow` in main/index.ts). That one skips
+ * `warm` — the GPU process outlives the window, so the shaders it compiled at
+ * launch are still there — and passes a shorter `minVisibleMs`, because a
+ * restore has no library to open and should not be held back to look like one.
  */
 
 /** Kept on screen at least this long once painted, so a fast boot reads as a launch and not a flicker. */
@@ -46,7 +52,11 @@ export interface Splash {
   finish(): void
 }
 
-export function createSplash(getMainWindow: () => BrowserWindow | null): Splash {
+export function createSplash(
+  getMainWindow: () => BrowserWindow | null,
+  opts: { minVisibleMs?: number } = {},
+): Splash {
+  const minVisible = opts.minVisibleMs ?? MIN_VISIBLE_MS
   const win = new BrowserWindow({
     width: 460,
     height: 300,
@@ -139,7 +149,7 @@ export function createSplash(getMainWindow: () => BrowserWindow | null): Splash 
       // A boot that beat the splash to the screen still gets its moment; one
       // that never painted at all hands over immediately. A frame that has not
       // been drawn compiles nothing, so the warm-up gets its moment too.
-      const visible = paintedAt ? Math.max(0, MIN_VISIBLE_MS - (Date.now() - paintedAt)) : 0
+      const visible = paintedAt ? Math.max(0, minVisible - (Date.now() - paintedAt)) : 0
       const warm = warmedAt ? Math.max(0, WARM_MS - (Date.now() - warmedAt)) : 0
       const wait = Math.max(visible, warm)
       setTimeout(() => {

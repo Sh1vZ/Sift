@@ -15,7 +15,7 @@ import { settings, updateSettings } from '@/composables/useLibrary'
         id="minimize-to-tray"
         icon="tray"
         title="Minimize to the tray instead of quitting"
-        description="Sift keeps watching your folders and finishing exports while the window is away. Open it again from the tray icon."
+        description="Sift keeps watching your folders and finishing exports while the window is away, and hands the window's memory back a few seconds after it hides. Open it again from the tray icon."
       >
         <template #trailing>
           <USwitch

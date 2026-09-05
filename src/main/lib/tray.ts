@@ -1,4 +1,4 @@
-import { Menu, Tray, app, type BrowserWindow, type NativeImage } from 'electron'
+import { Menu, Tray, app, type NativeImage } from 'electron'
 
 export interface AppTray {
   /** The "Sift is still running" balloon shown the first time the window hides. */
@@ -15,36 +15,28 @@ const small = (icon: NativeImage): NativeImage => icon.resize({ width: 16, heigh
  * Sift's presence in the notification area. It exists only while
  * `minimizeToTray` is on — see `syncTray` in main/index.ts — because that is the
  * only state where the window can vanish and the user needs a way back.
+ *
+ * It never touches the window itself: hiding to the tray destroys it (see
+ * `scheduleRelease` in main/index.ts), so "bring Sift back" can mean building a
+ * new one. `show` is main's single entry point for that.
  */
 export function createTray(opts: {
   /** The themed app icon (see `syncIcon` in main/index.ts). */
   icon: NativeImage
-  getWindow: () => BrowserWindow | null
+  /** Restore the window, building it again if the tray release already took it. */
+  show: () => void
+  /** Restore the window and put it on the OS pane of the settings screen. */
   onSettings: () => void
 }): AppTray {
   let full = opts.icon
-
-  const show = (): void => {
-    const win = opts.getWindow()
-    if (!win || win.isDestroyed()) return
-    if (win.isMinimized()) win.restore()
-    win.show()
-    win.focus()
-  }
 
   const tray = new Tray(small(full))
   tray.setToolTip('Sift')
   tray.setContextMenu(
     Menu.buildFromTemplate([
-      { label: 'Open Sift', click: show },
+      { label: 'Open Sift', click: () => opts.show() },
       { type: 'separator' },
-      {
-        label: 'Settings…',
-        click: () => {
-          show()
-          opts.onSettings()
-        },
-      },
+      { label: 'Settings…', click: () => opts.onSettings() },
       { type: 'separator' },
       // Goes through `before-quit`, which flushes the library and stops the
       // watchers before the process actually exits.
@@ -52,8 +44,8 @@ export function createTray(opts: {
     ]),
   )
   // Windows convention: a plain left click on the icon brings the app back.
-  tray.on('click', show)
-  tray.on('double-click', show)
+  tray.on('click', () => opts.show())
+  tray.on('double-click', () => opts.show())
 
   return {
     hint: () => {

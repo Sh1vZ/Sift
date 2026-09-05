@@ -1,4 +1,4 @@
-import { BrowserWindow, shell } from 'electron'
+import { BrowserWindow, screen, shell } from 'electron'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { is } from '@electron-toolkit/utils'
@@ -15,15 +15,58 @@ function preloadPath(): string {
 }
 
 /**
+ * Where the window was and what shape it was in. Carried across a tray release
+ * (see `scheduleRelease` in main/index.ts), which destroys the window outright,
+ * so the one that replaces it comes back exactly where the user left it instead
+ * of at the default size in the middle of the screen.
+ */
+export interface WindowPlacement {
+  bounds: Electron.Rectangle
+  maximized: boolean
+}
+
+/**
+ * The window's geometry, or null once it is gone. `getNormalBounds` and not
+ * `getBounds`: a maximized window reports the whole work area, and storing that
+ * as the restored size would lose the size the user actually chose.
+ */
+export function placementOf(win: BrowserWindow): WindowPlacement | null {
+  if (win.isDestroyed()) return null
+  return { bounds: win.getNormalBounds(), maximized: win.isMaximized() }
+}
+
+/**
+ * Whether a remembered rectangle still lands on a connected display. A laptop
+ * undocked while Sift sat in the tray would otherwise restore the window onto a
+ * monitor that is no longer there, with no way to drag it back.
+ */
+function onScreen(r: Electron.Rectangle): boolean {
+  return screen.getAllDisplays().some(({ workArea: a }) => {
+    return (
+      r.x < a.x + a.width && r.x + r.width > a.x && r.y < a.y + a.height && r.y + r.height > a.y
+    )
+  })
+}
+
+/**
  * `autoShow: false` leaves the window hidden once it has painted, so the splash
  * can hold the screen until the renderer says the library is up and then reveal
  * it (see lib/splash.ts). Everything else about the window is unchanged.
+ *
+ * `placement` restores the geometry of a window that was destroyed on its way to
+ * the tray; omitted (or off-screen) it falls back to the default size, centred.
  */
-export function createMainWindow({ autoShow = true }: { autoShow?: boolean } = {}): BrowserWindow {
+export function createMainWindow({
+  autoShow = true,
+  placement = null,
+}: { autoShow?: boolean; placement?: WindowPlacement | null } = {}): BrowserWindow {
+  const saved = placement && onScreen(placement.bounds) ? placement.bounds : null
   const win = new BrowserWindow({
     icon: appIconPath(),
-    width: 1440,
-    height: 900,
+    // Position only when it was remembered; without x/y Electron centres the window.
+    ...(saved ? { x: saved.x, y: saved.y } : {}),
+    width: saved?.width ?? 1440,
+    height: saved?.height ?? 900,
     minWidth: 980,
     minHeight: 620,
     show: false,
@@ -39,6 +82,12 @@ export function createMainWindow({ autoShow = true }: { autoShow?: boolean } = {
       spellcheck: false,
     },
   })
+
+  // Before the first show, so a window restored from the tray never appears at
+  // its normal size and then snaps out. The renderer asks for the state itself
+  // on mount (`window:is-maximized`), so the event this fires going nowhere yet
+  // costs nothing.
+  if (placement?.maximized) win.maximize()
 
   win.on('ready-to-show', () => {
     if (autoShow) win.show()
