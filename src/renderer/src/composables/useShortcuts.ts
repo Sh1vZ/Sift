@@ -70,6 +70,7 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
       { chords: [['0'], ['9']], label: 'Jump to 0–90 %' },
       { chords: [['arrowup'], ['arrowdown']], label: 'Volume' },
       { chords: [['M']], label: 'Mute' },
+      { chords: [['A']], label: 'Next audio track (multi-track clips)' },
       { chords: [['N'], ['P']], label: 'Next / previous clip' },
       { chords: [['S']], label: 'Favourite' },
       { chords: [['R']], label: 'Loop' },

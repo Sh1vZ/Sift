@@ -3,7 +3,7 @@ import { createReadStream } from 'node:fs'
 import { stat } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
 import { Readable } from 'node:stream'
-import { cacheDir } from './paths'
+import { audioDir, cacheDir } from './paths'
 
 export const SCHEME = 'clip'
 
@@ -18,6 +18,7 @@ const MIME: Record<string, string> = {
   '.flv': 'video/x-flv',
   '.ts': 'video/mp2t',
   '.jpg': 'image/jpeg',
+  '.m4a': 'audio/mp4',
 }
 
 const CHUNK = 1 << 20
@@ -41,8 +42,12 @@ export function registerScheme(): void {
 /**
  * `clip://media/<clipId>` streams a library video with HTTP range support so
  * the <video> element can seek instantly. `clip://thumb/<file>` serves cached
- * posters/sprites. The renderer never gets to name an arbitrary path: media is
- * looked up by id and thumbnails are confined to the cache directory.
+ * posters/sprites and `clip://audio/<file>` the audio tracks pulled out of
+ * multi-track clips. The renderer never gets to name an arbitrary path: media
+ * is looked up by id, and the other two are confined to one directory each
+ * with a fixed extension. Cutting a track is `clip:audio-track`'s job, not
+ * this one's — Chromium opens a media URL with two overlapping range requests,
+ * and both would start their own ffmpeg over the same output file.
  */
 export function installProtocol(resolveClipPath: (id: string) => string | undefined): void {
   protocol.handle(SCHEME, async (request) => {
@@ -52,6 +57,13 @@ export function installProtocol(resolveClipPath: (id: string) => string | undefi
     if (url.hostname === 'thumb') {
       if (!key || key !== basename(key) || !key.endsWith('.jpg')) return bad(400)
       return serveFile(join(cacheDir(), key), request, {
+        'Cache-Control': 'private, max-age=31536000, immutable',
+      })
+    }
+    if (url.hostname === 'audio') {
+      if (!key || key !== basename(key) || !key.endsWith('.m4a')) return bad(400)
+      // Named with the source's mtime, so a cached track is never the wrong one.
+      return serveFile(join(audioDir(), key), request, {
         'Cache-Control': 'private, max-age=31536000, immutable',
       })
     }

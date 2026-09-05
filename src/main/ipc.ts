@@ -13,6 +13,22 @@ const privacy = (v: unknown): YouTubePrivacy =>
   YOUTUBE_PRIVACIES.includes(v as YouTubePrivacy) ? (v as YouTubePrivacy) : 'private'
 /** A client secret file is a few hundred bytes; anything larger is not one. */
 const CLIENT_SECRET_MAX_BYTES = 64 * 1024
+/** No real file has this many audio streams; the cap is against a hostile list. */
+const MAX_AUDIO_TRACKS = 64
+
+/**
+ * Audio track indices for an export, or `undefined` for "keep them all".
+ * Deduped because a repeated `-map 0:a:1` writes the stream twice, and sorted
+ * so the output's stream order does not depend on click order.
+ */
+function trackList(raw: unknown): number[] | undefined {
+  if (!Array.isArray(raw)) return undefined
+  const seen = raw.filter(
+    (v): v is number =>
+      typeof v === 'number' && Number.isInteger(v) && v >= 0 && v < MAX_AUDIO_TRACKS,
+  )
+  return [...new Set(seen)].sort((a, b) => a - b)
+}
 
 async function pickFolder(win: BrowserWindow | null, title: string): Promise<string | null> {
   const opts: Electron.OpenDialogOptions = {
@@ -53,6 +69,16 @@ export function registerIpc(
     if (p.sidebarCollapsed !== undefined) p.sidebarCollapsed = p.sidebarCollapsed === true
     if (p.youtubeCheckStatus !== undefined) p.youtubeCheckStatus = p.youtubeCheckStatus === true
     if (p.lastSeenVersion !== undefined) p.lastSeenVersion = str(p.lastSeenVersion)
+    // -1 is "leave every track audible"; anything below that is not a track.
+    // Capped both ways: these are labels for a handful of streams, not storage.
+    if (p.audioTrackNames !== undefined)
+      p.audioTrackNames = Array.isArray(p.audioTrackNames)
+        ? p.audioTrackNames.map((n) => str(n).trim().slice(0, 40)).slice(0, MAX_AUDIO_TRACKS)
+        : []
+    if (p.defaultAudioTrack !== undefined) {
+      const track = Math.trunc(num(p.defaultAudioTrack))
+      p.defaultAudioTrack = Number.isFinite(track) ? Math.max(-1, track) : -1
+    }
     // Capped: an unbounded list of dismissals would grow with every rescan.
     if (p.dismissedGameMerges !== undefined)
       p.dismissedGameMerges = Array.isArray(p.dismissedGameMerges)
@@ -100,9 +126,14 @@ export function registerIpc(
       start: num(r.start),
       end: num(r.end),
       muted: r.muted === true,
+      tracks: trackList(r.tracks),
     }
     return library.exportClip(req)
   })
+
+  ipcMain.handle('clip:audio-track', (_e, id, index) =>
+    library.audioTrack(str(id), Math.trunc(num(index))),
+  )
 
   ipcMain.handle('clip:open-youtube', (_e, id) => youtube.openVideo(str(id)))
   ipcMain.handle('clip:copy-youtube-link', (_e, id) => youtube.copyLink(str(id)))

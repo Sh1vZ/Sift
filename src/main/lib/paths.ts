@@ -37,10 +37,17 @@ export const FFPROBE = ffprobePath ? unpacked(ffprobePath) : ''
 
 export const userDataDir = (): string => app.getPath('userData')
 export const cacheDir = (): string => join(userDataDir(), 'thumbs')
+/**
+ * Audio tracks pulled out of multi-track clips so the player can mix them.
+ * Kept apart from the poster cache: these are megabytes rather than kilobytes,
+ * and the `clip://thumb` route stays a jpg-only door that way.
+ */
+export const audioDir = (): string => join(userDataDir(), 'audio')
 export const libraryDb = (): string => join(userDataDir(), 'library.db')
 
 export function ensureDirs(): void {
   mkdirSync(cacheDir(), { recursive: true })
+  mkdirSync(audioDir(), { recursive: true })
 }
 
 /**

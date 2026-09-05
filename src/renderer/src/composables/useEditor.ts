@@ -15,6 +15,12 @@ export const editing = ref(false)
 export const inSec = ref(0)
 export const outSec = ref(0)
 export const exportMuted = ref(false)
+/**
+ * Audio tracks the export keeps, or `null` for all of them. Seeded from the
+ * mixer when edit mode opens, so an export carries whatever you were listening
+ * to rather than silently reinstating a mic you had muted.
+ */
+export const exportTracks = ref<number[] | null>(null)
 export const exportName = ref('')
 export const submitting = ref(false)
 
@@ -38,11 +44,15 @@ export const exportProblem = computed(() => {
   return ''
 })
 
-export function enterEdit(clip: Clip): void {
+export function enterEdit(clip: Clip, tracks: number[] | null = null): void {
   duration = clip.duration
   inSec.value = 0
   outSec.value = duration
   exportMuted.value = false
+  // Only a real subset is worth recording: "all of them" is what absent means,
+  // and it keeps the request identical to what it was before the mixer existed.
+  exportTracks.value =
+    tracks && tracks.length < (clip.audioTracks?.length ?? 0) ? [...tracks] : null
   exportName.value = `${clip.title} - Clip`
   editing.value = true
 }
@@ -74,6 +84,7 @@ export async function submit(clip: Clip): Promise<ExportJob | null> {
       start: inSec.value,
       end: outSec.value,
       muted: exportMuted.value,
+      tracks: exportTracks.value ?? undefined,
     })
     if (job) {
       toast('info', 'Exporting clip', `${job.name}${job.ext} · ${job.game}`)

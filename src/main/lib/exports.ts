@@ -69,6 +69,11 @@ export interface ExportPlan {
   start: number
   end: number
   muted: boolean
+  /**
+   * Audio tracks to keep, by type-relative index. `null` keeps every track,
+   * `[]` keeps none — the same thing `muted` asks for.
+   */
+  tracks: number[] | null
   vcodec: string
 }
 
@@ -77,9 +82,10 @@ export interface ExportPlan {
  * seeks to the keyframe at or before `start` without decoding, and stops
  * reading at `end` on the source timeline (exact, unaffected by the keyframe
  * shift). `make_zero` rebases the timestamps the seek leaves negative, which
- * mp4 would otherwise reject. Every audio track is kept (ShadowPlay writes
- * game and mic separately); subtitle/data streams are dropped because mp4
- * cannot carry most of them.
+ * mp4 would otherwise reject. Audio defaults to every track (ShadowPlay writes
+ * game and mic separately) and narrows to `tracks` when the mixer picked a
+ * subset; subtitle/data streams are dropped because mp4 cannot carry most of
+ * them.
  */
 export function buildExportArgs(p: ExportPlan): string[] {
   const args = [
@@ -98,8 +104,12 @@ export function buildExportArgs(p: ExportPlan): string[] {
     '-map',
     '0:v:0',
   ]
-  if (p.muted) args.push('-an')
-  else args.push('-map', '0:a?')
+  // Each map keeps the trailing `?` for the same reason the catch-all does: a
+  // selection made against a file that has since been re-recorded with fewer
+  // tracks would otherwise abort the whole export rather than skip the stream.
+  if (p.muted || p.tracks?.length === 0) args.push('-an')
+  else if (!p.tracks) args.push('-map', '0:a?')
+  else for (const k of p.tracks) args.push('-map', `0:a:${k}?`)
   args.push('-sn', '-dn', '-c', 'copy', '-avoid_negative_ts', 'make_zero')
   // Apple-style tag so the mp4 also plays in players that only know hvc1.
   if (p.vcodec === 'hevc' && p.out.toLowerCase().endsWith('.mp4')) args.push('-tag:v', 'hvc1')

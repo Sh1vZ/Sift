@@ -1,9 +1,9 @@
 import { spawn, type ChildProcess } from 'node:child_process'
-import { access, unlink } from 'node:fs/promises'
+import { access, readdir, rename as fsRename, unlink } from 'node:fs/promises'
 import { cpus, constants as osConstants, setPriority } from 'node:os'
-import { join } from 'node:path'
-import type { Clip, ClipPatch } from '@shared/types'
-import { FFMPEG, FFPROBE, cacheDir } from './paths'
+import { extname, join } from 'node:path'
+import type { AudioTrack, Clip, ClipPatch } from '@shared/types'
+import { FFMPEG, FFPROBE, audioDir, cacheDir } from './paths'
 
 export const SPRITE_FRAMES = 10
 const THUMB_WIDTH = 480
@@ -28,6 +28,10 @@ const POSTER_TIME = 0
  * once on launch rather than keeping posters this build would not have made.
  */
 const ARTIFACT_VERSION = 2
+/** Past this, a stream start difference is a misread file rather than a real offset. */
+const MAX_TRACK_OFFSET_S = 1
+/** Containers whose AAC needs its ASC rebuilt on the way into mp4. */
+const ADTS_CONTAINERS = new Set(['.mkv', '.ts', '.flv', '.avi', '.webm'])
 
 export interface ProbeResult {
   duration: number
@@ -36,6 +40,7 @@ export interface ProbeResult {
   fps: number
   vcodec: string
   hasAudio: boolean
+  audioTracks: AudioTrack[]
 }
 
 export interface Artifacts {
@@ -158,17 +163,80 @@ function parseFps(rate: string | undefined): number {
   return d ? Math.round((n / d) * 100) / 100 : n
 }
 
+interface FfprobeStream {
+  index?: number
+  codec_type?: string
+  codec_name?: string
+  width?: number
+  height?: number
+  avg_frame_rate?: string
+  r_frame_rate?: string
+  duration?: string
+  start_time?: string
+  channels?: number
+  disposition?: { default?: number }
+  tags?: { language?: string; title?: string }
+}
+
 interface FfprobeJson {
   format?: { duration?: string }
-  streams?: Array<{
-    codec_type?: string
-    codec_name?: string
-    width?: number
-    height?: number
-    avg_frame_rate?: string
-    r_frame_rate?: string
-    duration?: string
-  }>
+  streams?: FfprobeStream[]
+}
+
+/** Seconds, or 0 for the ffprobe spellings of "no idea" (absent, 'N/A', NaN). */
+function seconds(raw: string | undefined): number {
+  const n = Number(raw)
+  return Number.isFinite(n) ? n : 0
+}
+
+/**
+ * Audio streams in file order. `index` is the ordinal *among audio streams* —
+ * the n in `-map 0:a:n` — while `streamIndex` is the absolute one ffprobe
+ * reports; mixing the two up silently selects the wrong track, so the
+ * type-relative one is what the rest of the app passes around.
+ */
+function audioTracks(streams: FfprobeStream[], videoStart: number): AudioTrack[] {
+  const audio = streams.filter((s) => s.codec_type === 'audio')
+  const marked = audio.findIndex((s) => s.disposition?.default === 1)
+  // Nothing marked default means Chromium takes the first audio stream.
+  const fallback = marked < 0 ? 0 : marked
+  return audio.map((s, i) => ({
+    index: i,
+    streamIndex: s.index ?? -1,
+    codec: s.codec_name ?? '',
+    channels: s.channels ?? 0,
+    title: s.tags?.title ?? '',
+    language: language(s.tags?.language),
+    isDefault: i === fallback,
+    offset: trackOffset(videoStart, seconds(s.start_time)),
+  }))
+}
+
+/**
+ * A real language tag, or ''. ffmpeg stamps every untagged stream 'und'
+ * ("undetermined"), and 'zxx' means there is no speech in it — neither is a
+ * name, and both would otherwise be shown as one.
+ */
+function language(raw: string | undefined): string {
+  const tag = (raw ?? '').trim().toLowerCase()
+  return tag === 'und' || tag === 'zxx' ? '' : (raw ?? '')
+}
+
+/**
+ * How far an extracted track has to be nudged to line up with the video.
+ *
+ * Streams in one file can start at different presentation times, and the two
+ * media elements each zero their own timeline, so that difference survives as a
+ * constant lip-sync error the drift corrector would faithfully preserve.
+ * Extraction keeps source timestamps (`-copyts`), which makes the gap
+ * measurable here rather than guessable later. Anything past a second is not a
+ * stream offset, it is a file we have misread — take 0 and let the corrector
+ * work rather than shifting audio by a wrong constant.
+ */
+function trackOffset(videoStart: number, audioStart: number): number {
+  const delta = videoStart - audioStart
+  if (!Number.isFinite(delta) || Math.abs(delta) > MAX_TRACK_OFFSET_S) return 0
+  return Math.round(delta * 1000) / 1000
 }
 
 export async function probe(filePath: string): Promise<ProbeResult> {
@@ -177,16 +245,18 @@ export async function probe(filePath: string): Promise<ProbeResult> {
     'error',
     '-print_format',
     'json',
-    // Only the fields we read: keeps the JSON small and skips the per-stream
-    // disposition/tag dumps ffprobe would otherwise serialise.
+    // Only the fields we read. The per-stream tag and disposition dumps are
+    // narrowed the same way: audio track names and which one plays by default
+    // are worth the bytes, the rest of what ffprobe would emit is not.
     '-show_entries',
-    'format=duration:stream=codec_type,codec_name,width,height,avg_frame_rate,r_frame_rate,duration',
+    'format=duration:stream=index,codec_type,codec_name,width,height,avg_frame_rate,r_frame_rate,duration,start_time,channels:stream_tags=language,title:stream_disposition=default',
     filePath,
   ])
   if (code !== 0) throw new Error(`ffprobe exited with ${code}`)
   const json = JSON.parse(stdout) as FfprobeJson
-  const video = json.streams?.find((s) => s.codec_type === 'video')
-  const audio = json.streams?.find((s) => s.codec_type === 'audio')
+  const streams = json.streams ?? []
+  const video = streams.find((s) => s.codec_type === 'video')
+  const tracks = audioTracks(streams, seconds(video?.start_time))
   const duration = Number(json.format?.duration ?? video?.duration ?? 0)
   return {
     duration: Number.isFinite(duration) ? duration : 0,
@@ -194,7 +264,8 @@ export async function probe(filePath: string): Promise<ProbeResult> {
     height: video?.height ?? 0,
     fps: parseFps(video?.avg_frame_rate) || parseFps(video?.r_frame_rate),
     vcodec: video?.codec_name ?? '',
-    hasAudio: Boolean(audio),
+    hasAudio: tracks.length > 0,
+    audioTracks: tracks,
   }
 }
 
@@ -320,6 +391,79 @@ export async function makeArtifacts(clip: Clip, duration: number): Promise<Artif
     throw new Error(`ffmpeg artifacts exited with ${code}`)
   }
   return { thumb, sprite, spriteFrames: frames }
+}
+
+/**
+ * Name of the cached extraction for one audio track. Carries the mtime for the
+ * same reason the poster does: a re-recorded file must never hit a stale cache.
+ */
+export function audioTrackName(clip: Pick<Clip, 'id' | 'mtimeMs'>, index: number): string {
+  return `${clip.id}-${Math.round(clip.mtimeMs)}.a${index}.m4a`
+}
+
+/**
+ * Pull one audio track out into its own file so the player can play it beside
+ * the video, which is the only way to hear a track Chromium is not rendering.
+ *
+ * AAC is copied; anything else is transcoded, because the point is a file
+ * Chromium will decode, not a faithful archive. Timestamps are deliberately
+ * left alone — the export path's `-avoid_negative_ts make_zero` would shift the
+ * first sample to zero and destroy the very offset `trackOffset` measured.
+ */
+export async function extractAudioTrack(clip: Clip, index: number): Promise<string> {
+  const file = audioTrackName(clip, index)
+  const out = join(audioDir(), file)
+  if (await exists(out)) return file
+
+  const track = clip.audioTracks[index]
+  const copy = track?.codec === 'aac'
+  // A half-written file under the real name is indistinguishable from a cache
+  // hit forever, so it only takes that name once ffmpeg has exited cleanly.
+  const temp = join(audioDir(), `~${file}`)
+  const args = ['-y', '-nostdin', '-v', 'error', '-threads', '1', '-i', clip.path]
+  args.push('-map', `0:a:${index}`, '-vn', '-sn', '-dn')
+  if (copy) {
+    args.push('-c:a', 'copy')
+    // Matroska keeps the AudioSpecificConfig aside and MPEG-TS is ADTS-framed;
+    // without this the mp4 muxer writes an esds Chromium cannot build a decoder
+    // from. A no-op when the extradata is already in mp4 shape.
+    if (ADTS_CONTAINERS.has(extname(clip.path).toLowerCase())) args.push('-bsf:a', 'aac_adtstoasc')
+  } else {
+    args.push('-c:a', 'aac', '-b:a', '192k', '-ac', '2')
+  }
+  args.push('-copyts', '-avoid_negative_ts', 'disabled', '-muxdelay', '0', '-muxpreload', '0')
+  args.push('-f', 'mp4', temp)
+
+  // A copy is over in milliseconds; a transcode of a long clip is not, and
+  // runLong only resets its stall timer on stdout, hence -progress there.
+  const code = copy
+    ? (await run(FFMPEG, args)).code
+    : (
+        await runLong(FFMPEG, [...args, '-progress', 'pipe:1', '-stats_period', '0.5'], {
+          stallMs: 30_000,
+          maxMs: 10 * 60_000,
+        })
+      ).code
+  if (code !== 0) {
+    await unlink(temp).catch(() => undefined)
+    throw new Error(`ffmpeg audio track exited with ${code}`)
+  }
+  await fsRename(temp, out)
+  return file
+}
+
+/**
+ * Every extraction belonging to a clip, whatever mtime it was cut at. Names are
+ * derived rather than stored, so this sweeps the stale and the orphaned too.
+ */
+export async function removeAudioTracks(clipId: string): Promise<void> {
+  if (!clipId) return
+  const dir = audioDir()
+  const names = await readdir(dir).catch(() => [] as string[])
+  for (const name of names) {
+    if (name.startsWith(`${clipId}-`) || name.startsWith(`~${clipId}-`))
+      await unlink(join(dir, name)).catch(() => undefined)
+  }
 }
 
 export async function removeArtifacts(clip: Pick<Clip, 'thumb' | 'sprite'>): Promise<void> {

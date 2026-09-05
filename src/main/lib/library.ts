@@ -38,10 +38,12 @@ import {
 import {
   MediaQueue,
   artifactsStale,
+  extractAudioTrack,
   ffmpegAvailable,
   makeArtifacts,
   probe,
   removeArtifacts,
+  removeAudioTracks,
   runLong,
   spriteName,
   thumbName,
@@ -114,6 +116,12 @@ export class Library {
   private readonly exports = new Map<string, ExportJob>()
   private readonly exportTargets = new Map<string, string>()
   private exportChain: Promise<void> = Promise.resolve()
+  /**
+   * Extractions in flight, keyed `<clipId>:<track>`. The player asks for every
+   * extra track the moment a clip opens and again on each clip change, so
+   * without this two ffmpegs would race onto one output path.
+   */
+  private audioJobs = new Map<string, Promise<ActionResult & { file?: string }>>()
   private exportAbort: AbortController | null = null
   private exportsTimer: NodeJS.Timeout | null = null
 
@@ -164,6 +172,33 @@ export class Library {
 
   clip(id: string): Clip | undefined {
     return this.store.data.clips[id]
+  }
+
+  /**
+   * Cut one audio track out to its own file so the player can play it beside
+   * the video. Cached on disk, so this is a no-op for a track already pulled.
+   *
+   * The index is checked against the probed track list rather than trusted:
+   * it ends up in an ffmpeg `-map`, and the default track is refused outright
+   * because the <video> element is already playing it.
+   */
+  async audioTrack(id: string, index: number): Promise<ActionResult & { file?: string }> {
+    const clip = this.store.data.clips[id]
+    if (!clip) return { ok: false, error: 'Clip not found.' }
+    if (!ffmpegAvailable()) return { ok: false, error: 'ffmpeg is not available.' }
+    const track = clip.audioTracks[index]
+    if (track?.index !== index) return { ok: false, error: 'No such audio track.' }
+    if (track.isDefault) return { ok: false, error: 'That track plays with the video.' }
+
+    const key = `${id}:${index}`
+    const running = this.audioJobs.get(key)
+    if (running) return running
+    const job: Promise<ActionResult & { file?: string }> = extractAudioTrack(clip, index)
+      .then((file) => ({ ok: true, file }))
+      .catch((err: Error) => ({ ok: false, error: err.message }))
+      .finally(() => this.audioJobs.delete(key))
+    this.audioJobs.set(key, job)
+    return job
   }
 
   /**
@@ -626,6 +661,10 @@ export class Library {
         () => (next.sprite = ''),
       )
     }
+    // Posters are moved above because regenerating them costs an ffmpeg run per
+    // clip; extractions are named off the id too, but re-cutting one is cheap
+    // and lazy, so they go rather than earning a third rename loop.
+    void removeAudioTracks(clip.id)
     delete this.store.data.clips[clip.id]
     this.store.data.clips[next.id] = next
     this.store.deleteClip(clip.id)
@@ -766,6 +805,7 @@ export class Library {
       start: Math.max(0, req.start),
       end: Math.min(req.end, source.duration),
       muted: req.muted && source.hasAudio,
+      tracks: req.tracks,
       state: 'queued',
       progress: 0,
       createdAtMs: Date.now(),
@@ -818,6 +858,7 @@ export class Library {
         start: job.start,
         end: job.end,
         muted: job.muted,
+        tracks: job.tracks ?? null,
         vcodec: source.vcodec,
       })
       const { code, stderrTail } = await runLong(FFMPEG, args, {
@@ -860,7 +901,10 @@ export class Library {
         height: source.height,
         fps: source.fps,
         vcodec: source.vcodec,
-        hasAudio: source.hasAudio && !job.muted,
+        hasAudio: source.hasAudio && !job.muted && job.tracks?.length !== 0,
+        // Left for the probe: the export may have dropped tracks, so the
+        // source's list is not this file's list.
+        audioTracks: [],
         thumb: '',
         sprite: '',
         spriteFrames: 0,
@@ -1031,7 +1075,12 @@ export class Library {
   }
 
   private upsertClip(folder: LibraryFolder, file: string, st: Stats, previous?: Clip): Clip {
-    if (previous) void removeArtifacts(previous)
+    if (previous) {
+      void removeArtifacts(previous)
+      // The file changed under us, so extractions cut from the old bytes are
+      // wrong even where the name would still match.
+      void removeAudioTracks(previous.id)
+    }
     const ext = extname(file)
     const name = basename(file, ext)
     const sourceGame = deriveGame(folder, file)
@@ -1056,6 +1105,7 @@ export class Library {
       fps: 0,
       vcodec: '',
       hasAudio: false,
+      audioTracks: [],
       thumb: '',
       sprite: '',
       spriteFrames: 0,
@@ -1093,6 +1143,7 @@ export class Library {
     this.store.deleteClip(clip.id)
     this.media.remove(clip.id)
     void removeArtifacts(clip)
+    void removeAudioTracks(clip.id)
     this.added.delete(clip.id)
     this.updated.delete(clip.id)
     this.removed.add(clip.id)

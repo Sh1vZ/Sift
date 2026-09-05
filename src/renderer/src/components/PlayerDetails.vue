@@ -197,6 +197,32 @@ function cancelName(): void {
 
 // ------------------------------------------------------------------ rows
 
+function channels(count: number): string {
+  if (count === 1) return 'mono'
+  if (count === 2) return 'stereo'
+  if (count === 6) return '5.1'
+  if (count === 8) return '7.1'
+  return count > 0 ? `${count} ch` : ''
+}
+
+/**
+ * One track reads as it always has. Several are worth spelling out: it is the
+ * only place the codec and channel layout of each are visible, and the reason
+ * the player is offering a mixer at all.
+ */
+function audioValue(c: Clip): string {
+  const tracks = c.audioTracks ?? []
+  if (tracks.length > 1)
+    return tracks
+      .map((t, i) => {
+        const detail = [t.codec.toUpperCase(), channels(t.channels)].filter(Boolean).join(' ')
+        return `${t.title || t.language || `Track ${i + 1}`}${detail ? ` (${detail})` : ''}`
+      })
+      .join(', ')
+  if (c.hasAudio) return 'Included'
+  return c.muted ? 'Removed' : 'None'
+}
+
 const rows = computed<Row[]>(() => {
   const c = props.clip
   const dims = c.width && c.height ? `${c.width} × ${c.height}` : ''
@@ -208,7 +234,7 @@ const rows = computed<Row[]>(() => {
     { label: 'Codec', value: [codec.value, rate].filter(Boolean).join(' · ') },
     {
       label: 'Audio',
-      value: c.probeState === 'ok' ? (c.hasAudio ? 'Included' : c.muted ? 'Removed' : 'None') : '',
+      value: c.probeState === 'ok' ? audioValue(c) : '',
     },
     {
       label: 'Size',

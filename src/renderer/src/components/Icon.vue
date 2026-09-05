@@ -59,6 +59,7 @@ const ICONS: Record<string, string> = {
   sparkles: 'i-lucide-sparkles',
   cpu: 'i-lucide-cpu',
   'list-video': 'i-lucide-list-video',
+  'audio-lines': 'i-lucide-audio-lines',
   radar: 'i-lucide-radar',
   'video-off': 'i-lucide-video-off',
   search: 'i-lucide-search',

@@ -33,6 +33,7 @@ const api: Api = {
     setFavourite: (id, favourite) =>
       ipcRenderer.invoke('clip:set-favourite', id, favourite === true),
     setSeen: (id, seen) => ipcRenderer.invoke('clip:set-seen', id, seen === true),
+    audioTrack: (id, index) => ipcRenderer.invoke('clip:audio-track', id, index),
   },
   exports: {
     cancel: (id) => ipcRenderer.invoke('export:cancel', id),
@@ -87,6 +88,7 @@ const api: Api = {
   },
   mediaUrl: (clipId) => `clip://media/${clipId}`,
   thumbUrl: (file) => `clip://thumb/${encodeURIComponent(file)}`,
+  audioUrl: (file) => `clip://audio/${encodeURIComponent(file)}`,
   // The renderer never sees `File.path`; this is the one sanctioned way to a path.
   pathForFile: (file) => webUtils.getPathForFile(file),
 }

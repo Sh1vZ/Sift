@@ -38,6 +38,18 @@ const toggles: Array<{
     description: 'When a clip ends, continue with the next one in the grid.',
   },
 ]
+
+/**
+ * ShadowPlay and OBS write game audio and the mic as separate tracks. Track
+ * numbers rather than names because the recorder tags neither: which is which
+ * is a per-setup fact the player's mixer shows in full.
+ */
+const audioTrackOptions = [
+  { label: 'All tracks', value: -1 },
+  { label: 'Track 1', value: 0 },
+  { label: 'Track 2', value: 1 },
+  { label: 'Track 3', value: 2 },
+]
 </script>
 
 <template>
@@ -60,6 +72,24 @@ const toggles: Array<{
             :model-value="settings[t.key]"
             :aria-label="t.title"
             @update:model-value="(v: boolean) => updateSettings({ [t.key]: v })"
+          />
+        </template>
+      </SettingsRow>
+
+      <SettingsRow
+        id="default-audio-track"
+        icon="audio-lines"
+        title="Default audio track"
+        description="Which track a clip with several starts on — ShadowPlay and OBS record game audio and mic apart. Name the tracks and mix them from the player's audio button."
+      >
+        <template #trailing>
+          <USelect
+            :model-value="settings.defaultAudioTrack"
+            :items="audioTrackOptions"
+            icon="i-lucide-audio-lines"
+            class="w-40"
+            aria-label="Default audio track"
+            @update:model-value="(v: number) => updateSettings({ defaultAudioTrack: v })"
           />
         </template>
       </SettingsRow>

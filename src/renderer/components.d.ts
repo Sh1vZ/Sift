@@ -16,6 +16,7 @@ declare module 'vue' {
     ActivityPanel: typeof import('./src/components/ActivityPanel.vue')['default']
     ActivityView: typeof import('./src/components/ActivityView.vue')['default']
     AnimatedList: typeof import('./src/components/bits/AnimatedList.vue')['default']
+    AudioMixer: typeof import('./src/components/AudioMixer.vue')['default']
     Aurora: typeof import('./src/components/bits/Aurora.vue')['default']
     BlurText: typeof import('./src/components/bits/BlurText.vue')['default']
     ChangelogBlocks: typeof import('./src/components/changelog/ChangelogBlocks.vue')['default']

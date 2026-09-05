@@ -5,6 +5,7 @@ import {
   type ActivityKind,
   type ActivityRecord,
   type ActivityStatus,
+  type AudioTrack,
   type Clip,
   type LibraryFolder,
   type Settings,
@@ -75,6 +76,14 @@ const MIGRATIONS: Array<(db: DatabaseSync) => void> = [
   // v7 -> v8: finished work (exports, uploads, renames…) is kept as history
   // instead of vanishing seconds after the job ends.
   (db) => db.exec(ACTIVITY_TABLE),
+  // v8 -> v9: clips carry their audio streams, so the player can offer the mic
+  // and the game separately. needsWork() only re-enqueues a clip whose probe is
+  // pending or whose artifacts went stale, so without the reset every clip
+  // already indexed would keep an empty track list for good.
+  (db) => {
+    db.exec("ALTER TABLE clips ADD COLUMN audio_tracks TEXT NOT NULL DEFAULT ''")
+    db.exec("UPDATE clips SET probe_state = 'pending' WHERE has_audio = 1")
+  },
 ]
 const SCHEMA_VERSION = MIGRATIONS.length + 1
 
@@ -188,7 +197,8 @@ CREATE TABLE IF NOT EXISTS clips (
   youtube_stage          TEXT NOT NULL DEFAULT '',
   youtube_reason         TEXT NOT NULL DEFAULT '',
   youtube_checked_at_ms  REAL NOT NULL DEFAULT 0,
-  youtube_watch_until_ms REAL NOT NULL DEFAULT 0
+  youtube_watch_until_ms REAL NOT NULL DEFAULT 0,
+  audio_tracks   TEXT NOT NULL DEFAULT ''
 );
 ${YOUTUBE_ACCOUNTS_TABLE}
 ${GAME_ALIASES_TABLE}
@@ -268,6 +278,7 @@ interface ClipRow {
   youtube_reason: string
   youtube_checked_at_ms: number
   youtube_watch_until_ms: number
+  audio_tracks: string
 }
 
 /** A `youtube_accounts` row as stored. The `_enc` columns hold base64 ciphertext or ''. */
@@ -418,9 +429,9 @@ export class Store {
           duration, width, height, fps, vcodec, has_audio, thumb, sprite, sprite_frames, probe_state,
           source_id, trim_start, trim_end, muted, created_at_ms, youtube_id, favourite, seen_at_ms,
           source_game, youtube_account_id, youtube_stage, youtube_reason, youtube_checked_at_ms,
-          youtube_watch_until_ms)
+          youtube_watch_until_ms, audio_tracks)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-          ?, ?, ?, ?, ?)
+          ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
           path = excluded.path, name = excluded.name, title = excluded.title, ext = excluded.ext,
           folder_id = excluded.folder_id, game = excluded.game, size = excluded.size,
@@ -435,7 +446,8 @@ export class Store {
           youtube_account_id = excluded.youtube_account_id, youtube_stage = excluded.youtube_stage,
           youtube_reason = excluded.youtube_reason,
           youtube_checked_at_ms = excluded.youtube_checked_at_ms,
-          youtube_watch_until_ms = excluded.youtube_watch_until_ms`),
+          youtube_watch_until_ms = excluded.youtube_watch_until_ms,
+          audio_tracks = excluded.audio_tracks`),
       deleteClip: db.prepare('DELETE FROM clips WHERE id = ?'),
       setSetting: db.prepare(
         'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
@@ -744,6 +756,7 @@ export class Store {
       c.youtubeReason,
       c.youtubeCheckedAtMs,
       c.youtubeWatchUntilMs,
+      JSON.stringify(c.audioTracks ?? []),
     )
   }
 
@@ -766,6 +779,21 @@ export class Store {
       a.added_at_ms,
       a.sort,
     )
+  }
+}
+
+/**
+ * Rows written before the column existed hold '', and a row is not worth losing
+ * over malformed JSON: either way the clip reads as untracked until its next
+ * probe, which the v8 -> v9 migration has already queued.
+ */
+function parseTracks(raw: string): AudioTrack[] {
+  if (!raw) return []
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    return Array.isArray(parsed) ? (parsed as AudioTrack[]) : []
+  } catch {
+    return []
   }
 }
 
@@ -807,6 +835,7 @@ function rowToClip(r: ClipRow): Clip {
     youtubeReason: r.youtube_reason,
     youtubeCheckedAtMs: r.youtube_checked_at_ms,
     youtubeWatchUntilMs: r.youtube_watch_until_ms,
+    audioTracks: parseTracks(r.audio_tracks),
     favourite: Boolean(r.favourite),
     seenAtMs: r.seen_at_ms,
   }

@@ -5,6 +5,27 @@ import type { UploadJob, VideoStage, YouTubeState } from './youtube'
 
 export type ProbeState = 'pending' | 'ok' | 'failed'
 
+/**
+ * One audio stream inside a clip. ShadowPlay and OBS write game audio and mic
+ * as separate streams, and Chromium only ever renders one of them, so the
+ * player needs to know what else is in the file.
+ */
+export interface AudioTrack {
+  /** The n in `-map 0:a:n`. Type-relative, NOT ffprobe's absolute stream index. */
+  index: number
+  /** Absolute ffprobe stream index. Display and debugging only; never fed to -map. */
+  streamIndex: number
+  codec: string
+  channels: number
+  /** From stream tags. ShadowPlay leaves both empty; the UI falls back to "Track n". */
+  title: string
+  language: string
+  /** The stream Chromium plays from the file itself, so the one never extracted. */
+  isDefault: boolean
+  /** Seconds to add to video time when seeking this track; measured at extraction. */
+  offset: number
+}
+
 export interface Clip {
   /** Stable id derived from the absolute file path. */
   id: string
@@ -32,6 +53,8 @@ export interface Clip {
   fps: number
   vcodec: string
   hasAudio: boolean
+  /** Every audio stream in the file. Empty until the clip has been probed. */
+  audioTracks: AudioTrack[]
   /** File names inside the cache dir, empty when not generated (yet). */
   thumb: string
   sprite: string
@@ -102,6 +125,11 @@ export interface ExportRequest {
   start: number
   end: number
   muted: boolean
+  /**
+   * Type-relative indices of the audio tracks to keep. Absent keeps every
+   * track, which is what an export with no mixer selection asks for.
+   */
+  tracks?: number[]
 }
 
 export interface ExportJob {
@@ -116,6 +144,8 @@ export interface ExportJob {
   start: number
   end: number
   muted: boolean
+  /** Audio tracks the export keeps; absent keeps every one. */
+  tracks?: number[]
   state: ExportState
   /** 0..1 */
   progress: number
@@ -204,6 +234,18 @@ export interface Settings {
   autoplayNext: boolean
   volume: number
   muted: boolean
+  /**
+   * Which audio track the player solos when a clip has more than one:
+   * -1 leaves them all audible, 0 and up solo that track.
+   */
+  defaultAudioTrack: number
+  /**
+   * What to call each audio track, by position. Recorders write the same track
+   * in the same slot every time — ShadowPlay puts game audio first and the mic
+   * second — so a name given once fits the whole library. '' falls back to
+   * "Track n".
+   */
+  audioTrackNames: string[]
   gridSize: GridSize
   /** Whether the player opens with its details pane showing. */
   detailsPane: boolean
@@ -433,6 +475,8 @@ export const DEFAULT_SETTINGS: Settings = {
   autoplayNext: false,
   volume: 0.8,
   muted: false,
+  defaultAudioTrack: -1,
+  audioTrackNames: [],
   gridSize: 'large',
   detailsPane: true,
   editOnOpen: true,

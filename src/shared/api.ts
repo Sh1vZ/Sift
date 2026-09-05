@@ -76,6 +76,12 @@ export interface Api {
     setFavourite(id: string, favourite: boolean): Promise<ActionResult>
     /** Marks the clip watched (stamping the time) or back to unwatched. */
     setSeen(id: string, seen: boolean): Promise<ActionResult>
+    /**
+     * Cuts one audio track out to its own file and returns its name, for
+     * `audioUrl`. Cached, so asking twice costs nothing the second time.
+     * Refused for the default track: the <video> element already plays it.
+     */
+    audioTrack(id: string, index: number): Promise<ActionResult & { file?: string }>
   }
   exports: {
     cancel(id: string): Promise<ActionResult>
@@ -161,6 +167,8 @@ export interface Api {
   on<K extends EventName>(name: K, handler: (payload: EventMap[K]) => void): () => void
   mediaUrl(clipId: string): string
   thumbUrl(file: string): string
+  /** Plays an extracted audio track; `file` comes from `clips.audioTrack`. */
+  audioUrl(file: string): string
   /** Absolute path behind a dropped `File`; `''` for one that is not backed by disk. */
   pathForFile(file: File): string
 }

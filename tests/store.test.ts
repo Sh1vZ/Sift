@@ -60,6 +60,7 @@ const clip = (id: string): Clip => ({
   fps: 0,
   vcodec: '',
   hasAudio: false,
+  audioTracks: [],
   thumb: '',
   sprite: '',
   spriteFrames: 0,
@@ -112,8 +113,10 @@ CREATE TABLE clips (
 );
 INSERT INTO meta (key, value) VALUES ('schema_version', '2');
 INSERT INTO folders (id, path, name, added_at_ms) VALUES ('old', 'D:/Old', 'Old', 1);
-INSERT INTO clips (id, path, name, title, ext, folder_id, game, size, mtime_ms, recorded_at_ms)
-  VALUES ('oc', 'D:/Old/Game/x.mp4', 'x', 'x', '.mp4', 'old', 'Game', 1, 1, 1);
+INSERT INTO clips (id, path, name, title, ext, folder_id, game, size, mtime_ms, recorded_at_ms, probe_state)
+  VALUES ('oc', 'D:/Old/Game/x.mp4', 'x', 'x', '.mp4', 'old', 'Game', 1, 1, 1, 'ok');
+INSERT INTO clips (id, path, name, title, ext, folder_id, game, size, mtime_ms, recorded_at_ms, probe_state, has_audio)
+  VALUES ('oa', 'D:/Old/Game/a.mp4', 'a', 'a', '.mp4', 'old', 'Game', 1, 1, 1, 'ok', 1);
 `
 
 async function storeCases(): Promise<void> {
@@ -267,7 +270,17 @@ async function migrationCase(): Promise<void> {
     ].every((c) => names.includes(c)),
     'migration added the YouTube processing columns',
   )
-  check(version === '8', 'schema version advanced to 8')
+  check(version === '9', 'schema version advanced to 9')
+  check(names.includes('audio_tracks'), 'migration added the audio_tracks column')
+  check(
+    store.data.clips.oa?.probeState === 'pending' && store.data.clips.oc?.probeState === 'ok',
+    'clips with audio are re-probed for their tracks, silent ones are left alone',
+  )
+  check(
+    Array.isArray(store.data.clips.oc?.audioTracks) &&
+      store.data.clips.oc?.audioTracks.length === 0,
+    'a row written before the column reads as having no tracks',
+  )
   check(
     count(
       oldFile,
@@ -363,6 +376,7 @@ function exportHelperCases(): void {
     start: 1.5,
     end: 4,
     muted: false,
+    tracks: null,
     vcodec: 'hevc',
   })
   const i = args.indexOf('-i')
@@ -384,11 +398,38 @@ function exportHelperCases(): void {
     start: 0,
     end: 1,
     muted: true,
+    tracks: null,
     vcodec: 'h264',
   })
   check(
     muted.includes('-an') && !muted.includes('0:a?') && !muted.includes('hvc1'),
     'muted drops audio',
+  )
+  const subset = buildExportArgs({
+    src: 'in.mp4',
+    out: 'out.mp4',
+    start: 0,
+    end: 1,
+    muted: false,
+    tracks: [1],
+    vcodec: 'h264',
+  })
+  check(
+    subset.includes('0:a:1?') && !subset.includes('0:a?') && !subset.includes('-an'),
+    'a track subset maps just those tracks',
+  )
+  const noTracks = buildExportArgs({
+    src: 'in.mp4',
+    out: 'out.mp4',
+    start: 0,
+    end: 1,
+    muted: false,
+    tracks: [],
+    vcodec: 'h264',
+  })
+  check(
+    noTracks.includes('-an') && !noTracks.some((a) => a.startsWith('0:a')),
+    'an empty selection is a silent export',
   )
 }
 

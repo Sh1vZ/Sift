@@ -3,6 +3,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { DropdownMenuItem } from '@nuxt/ui'
 import type { Clip } from '@shared/types'
 import ElasticSlider from './bits/ElasticSlider.vue'
+import AudioMixer from './AudioMixer.vue'
 import FavouriteButton from './FavouriteButton.vue'
 import PlayerDetails from './PlayerDetails.vue'
 import TrimBar from './TrimBar.vue'
@@ -18,6 +19,26 @@ import {
   updateSettings,
 } from '@/composables/useLibrary'
 import { clipMenuItems, deleteClipDialog } from '@/composables/useClipMenu'
+import {
+  applyGains,
+  audibleTracks,
+  auxSrc,
+  auxTracks,
+  cycleSolo,
+  ensureTracks,
+  hasMixer,
+  loadTracks,
+  pauseAll,
+  registerAux,
+  releaseAll,
+  resetTracks,
+  setVideo,
+  startTicking,
+  stopTicking,
+  syncAll,
+  videoMuted,
+  videoVolume,
+} from '@/composables/useAudioMixer'
 import { shortcutsOpen } from '@/composables/useShortcuts'
 import { searchOpen } from '@/composables/useSearch'
 import {
@@ -294,12 +315,16 @@ function seekTo(seconds: number): void {
   time.value = t
   lastTime = t
   ended.value = false
+  // Setting currentTime fires nothing the mixer could mirror, and every jump in
+  // the player comes through here — the trim preview's loop included.
+  syncAll()
 }
 const seekBy = (delta: number): void => seekTo(time.value + delta)
 
 /** One frame at the clip's rate, paused so the frame you land on stays put. */
 function stepFrame(direction: -1 | 1): void {
   video.value?.pause()
+  pauseAll()
   seekBy(direction / (clip.value.fps || 30))
 }
 
@@ -311,21 +336,36 @@ function persistVolume(): void {
     400,
   )
 }
+/**
+ * Master volume and mute reach the video and every extra track together, each
+ * scaled by that track's own gain. One place computes it so a soloed track
+ * cannot drift out of step with the slider.
+ */
+function applyVolume(): void {
+  if (video.value) {
+    video.value.volume = videoVolume(volume.value)
+    video.value.muted = videoMuted(muted.value)
+  }
+  applyGains(volume.value, muted.value)
+}
 function setVolume(value: number): void {
   volume.value = clamp(value, 0, 1)
-  if (video.value) video.value.volume = volume.value
+  applyVolume()
   if (volume.value > 0 && muted.value) setMuted(false)
   else persistVolume()
 }
 function setMuted(value: boolean): void {
   muted.value = value
-  if (video.value) video.value.muted = value
+  applyVolume()
   persistVolume()
 }
 function setRate(r: number): void {
   rate.value = r
   if (video.value) video.value.playbackRate = r
+  // The corrector trims around the video's rate, so it has to see the new one.
+  syncAll()
 }
+
 async function toggleFullscreen(): Promise<void> {
   try {
     if (document.fullscreenElement) await document.exitFullscreen()
@@ -344,16 +384,35 @@ function onLoadedMetadata(): void {
   const v = video.value
   if (!v) return
   duration.value = v.duration || clip.value.duration
-  v.volume = volume.value
-  v.muted = muted.value
+  applyVolume()
   v.playbackRate = rate.value
-  if (resumeAt < 0) return
+  if (resumeAt < 0) {
+    syncAll()
+    return
+  }
   // Back from the tray: land on the frame we left, paused. The element carries
   // `autoplay`, and pause() is what clears that flag — without it a window
   // restored from the tray would start playing on its own.
   v.currentTime = Math.min(resumeAt, duration.value)
   resumeAt = -1
   v.pause()
+  // Aux elements reload on their own schedule; this puts whichever have
+  // arrived onto the restored frame, and the rest follow as they load.
+  syncAll()
+}
+
+/**
+ * An extra track is ready. Registration happens here rather than through a
+ * template ref: the mixer keys elements by track index, this fires again after
+ * a suspend reload, and it does not churn on the re-render every `timeupdate`
+ * causes. A track that never loads simply stays silent — an error veil over a
+ * perfectly good video would be the worse failure.
+ */
+function onAuxLoaded(index: number, e: Event): void {
+  registerAux(index, e.target as HTMLAudioElement)
+  applyVolume()
+  syncAll()
+  startTicking()
 }
 /** Fraction of a clip that counts as having watched it. */
 const SEEN_AT = 0.9
@@ -399,6 +458,9 @@ function onEnded(): void {
     return
   }
   playing.value = false
+  // A mic track commonly runs a moment past the last video frame; without this
+  // its tail plays over the start of whatever autoplay moves on to.
+  pauseAll()
   // Watched to the very end, even if no `timeupdate` landed past the threshold.
   void markSeen(clip.value)
   if (settings.value.autoplayNext && hasNext.value) {
@@ -414,6 +476,31 @@ function onError(): void {
   failed.value = true
   playing.value = false
   buffering.value = false
+}
+
+function onPlay(): void {
+  playing.value = true
+  // Frame stepping and scrubbing leave the aux elements wherever they stopped,
+  // so they are lined up here rather than trusted to be in place already.
+  syncAll()
+  startTicking()
+}
+function onPause(): void {
+  playing.value = false
+  pauseAll()
+  stopTicking()
+}
+/**
+ * A stall on the video decoder does not stall the extracted tracks — they would
+ * run on ahead for as long as the source takes to catch up.
+ */
+function onWaiting(): void {
+  buffering.value = true
+  pauseAll()
+}
+function onPlaying(): void {
+  buffering.value = false
+  syncAll()
 }
 
 // ------------------------------------------------------------- seek bar
@@ -439,7 +526,7 @@ function onSeekLeave(): void {
 
 function toggleEdit(): void {
   if (editing.value) exitEdit()
-  else if (canEdit.value) enterEdit(clip.value)
+  else if (canEdit.value) enterEdit(clip.value, audibleTracks.value)
   poke()
 }
 
@@ -468,6 +555,9 @@ function close(): void {
   if (closing.value) return
   closing.value = true
   video.value?.pause()
+  // closePlayer is a GSAP callback, so the overlay lives on for the length of
+  // the animation; without this the extra tracks play through all of it.
+  releaseAll()
   // The stage goes back to the poster before anything moves, as on the way in
   // (see `flipping`). Scaling or fading the live frame has Chromium draw the
   // video through shader variants it compiles on first use — a 250 ms freeze
@@ -549,6 +639,13 @@ function onKey(e: KeyboardEvent): void {
       break
     case 's':
       void toggleFavourite(clip.value)
+      break
+    case 'a':
+      if (hasMixer.value) {
+        cycleSolo()
+        applyVolume()
+        showFlash('i-lucide-audio-lines')
+      } else handled = false
       break
     case 'f':
       void toggleFullscreen()
@@ -636,12 +733,17 @@ function consumePendingEdit(): void {
   }
   if (!autoEdit || !canEdit.value) return
   autoEdit = false
-  enterEdit(clip.value)
+  enterEdit(clip.value, audibleTracks.value)
 }
 
 watch(
   () => clip.value.id,
   () => {
+    // First, before anything can await: the outgoing clip's tracks are still
+    // playing, and the new clip's extractions are a round trip away.
+    releaseAll()
+    loadTracks(clip.value)
+    void ensureTracks(clip.value)
     exitEdit()
     time.value = 0
     lastTime = 0
@@ -682,9 +784,14 @@ watch(windowVisible, async (vis) => {
   if (!v) return
   resumeAt = v.currentTime
   v.pause()
+  // Before the flag: load() below rewinds every element to 0, and a corrector
+  // still running would take that for real drift and drag the video after it.
+  stopTicking()
+  pauseAll()
   suspended.value = true
   await nextTick() // Vue removes the src attribute
   v.load() // and this is what actually releases the decoder and the buffers
+  releaseAll() // same for every extra track, which Vue has just unbound too
   buffered.value = 0
   buffering.value = false
 })
@@ -697,6 +804,9 @@ onMounted(async () => {
     observer.observe(stageArea.value)
   }
   fitStage()
+  setVideo(video.value)
+  loadTracks(clip.value)
+  void ensureTracks(clip.value)
   await nextTick()
   // The media is attached from here, so a flip that cannot run (reduced motion,
   // no origin card) has to release it in the same tick rather than never.
@@ -718,6 +828,8 @@ onBeforeUnmount(() => {
   // Dropping the attribute alone leaves the decoder and the buffered media
   // attached until the element is collected; load() hands them back now.
   video.value?.load()
+  releaseAll()
+  resetTracks()
 })
 </script>
 
@@ -830,13 +942,27 @@ onBeforeUnmount(() => {
             @loadeddata="frameReady = true"
             @timeupdate="onTimeUpdate"
             @progress="onProgress"
-            @play="playing = true"
-            @pause="playing = false"
-            @waiting="buffering = true"
-            @playing="buffering = false"
+            @play="onPlay"
+            @pause="onPause"
+            @waiting="onWaiting"
+            @playing="onPlaying"
             @canplay="buffering = false"
+            @seeked="syncAll"
             @ended="onEnded"
             @error="onError"
+          />
+
+          <!-- Audio tracks the <video> element will not play: Chromium renders
+               only the container's default one, so the rest ride alongside as
+               their own elements and are kept in step with it. Gated on the
+               same flags as the video's own src, or they would start during
+               the open flip while there is no picture yet. -->
+          <audio
+            v-for="track in auxTracks"
+            :key="track.index"
+            :src="suspended || flipping ? undefined : auxSrc(track.index) || undefined"
+            preload="auto"
+            @loadedmetadata="(e: Event) => onAuxLoaded(track.index, e)"
           />
 
           <!-- Stands in for the video until it has a frame: through the open
@@ -995,6 +1121,28 @@ onBeforeUnmount(() => {
       <div class="edit-slot" :class="{ open: editing }" :inert="editing ? undefined : true">
         <div class="edit-row">
           <div class="range">
+            <div class="step">
+              <UTooltip text="Previous frame" :kbds="[',']">
+                <UButton
+                  icon="i-lucide-chevron-left"
+                  color="neutral"
+                  variant="ghost"
+                  square
+                  aria-label="Previous frame"
+                  @click="stepFrame(-1)"
+                />
+              </UTooltip>
+              <UTooltip text="Next frame" :kbds="['.']">
+                <UButton
+                  icon="i-lucide-chevron-right"
+                  color="neutral"
+                  variant="ghost"
+                  square
+                  aria-label="Next frame"
+                  @click="stepFrame(1)"
+                />
+              </UTooltip>
+            </div>
             <UTooltip text="Set start to the playhead" :kbds="['[']">
               <UButton
                 class="mono point"
@@ -1030,6 +1178,7 @@ onBeforeUnmount(() => {
                 @click="resetRange"
               />
             </UTooltip>
+            <AudioMixer v-if="hasMixer && editing" @change="applyVolume" @toggle="poke" />
             <UTooltip
               :text="clip.hasAudio ? 'Drop the audio from the export' : 'Source has no audio'"
               :kbds="['Shift', 'M']"
@@ -1151,28 +1300,11 @@ onBeforeUnmount(() => {
           </span>
         </div>
         <div class="group">
-          <template v-if="editing">
-            <UTooltip text="Previous frame" :kbds="[',']">
-              <UButton
-                icon="i-lucide-chevron-left"
-                color="neutral"
-                variant="ghost"
-                square
-                aria-label="Previous frame"
-                @click="stepFrame(-1)"
-              />
-            </UTooltip>
-            <UTooltip text="Next frame" :kbds="['.']">
-              <UButton
-                icon="i-lucide-chevron-right"
-                color="neutral"
-                variant="ghost"
-                square
-                aria-label="Next frame"
-                @click="stepFrame(1)"
-              />
-            </UTooltip>
-          </template>
+          <!-- Only worth a control when there is a choice to make: a clip with
+               one audio track is served by the volume slider alone. While
+               trimming it moves into the edit row, where the audible tracks
+               are the ones the export keeps. -->
+          <AudioMixer v-if="hasMixer && !editing" @change="applyVolume" @toggle="poke" />
           <UDropdownMenu
             :items="rateItems"
             :content="{ side: 'top', align: 'end' }"
@@ -1606,6 +1738,13 @@ onBeforeUnmount(() => {
   align-items: center;
   flex-wrap: wrap;
   gap: var(--s-1);
+}
+/* Kept tight together: they are one control, and they sit at the head of the
+   range row because you step to the frame before you mark it. */
+.step {
+  display: flex;
+  align-items: center;
+  margin-right: var(--s-1);
 }
 .point {
   min-width: 116px;

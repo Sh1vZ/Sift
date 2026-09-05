@@ -217,6 +217,12 @@ export const SETTINGS_ROWS: SettingsRowIndex[] = [
     keywords: 'trim timeline player default',
   },
   { id: 'autoplay-next', tab: 'playback', label: 'Autoplay next clip', keywords: 'continue end' },
+  {
+    id: 'default-audio-track',
+    tab: 'playback',
+    label: 'Default audio track',
+    keywords: 'sound mic microphone game commentary shadowplay stream channel mixer',
+  },
   { id: 'shortcuts', tab: 'playback', label: 'Keyboard shortcuts', keywords: 'keys hotkeys' },
   { id: 'animations', tab: 'playback', label: 'Animations', keywords: 'motion transitions' },
   { id: 'theme', tab: 'themes', label: 'Theme', keywords: 'colour color oled dark palette' },
