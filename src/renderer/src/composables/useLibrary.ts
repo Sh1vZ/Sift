@@ -785,7 +785,7 @@ export async function copyYouTubeLink(clip: Clip): Promise<void> {
  * while an upload is fresh; this is the button for after it has stopped.
  */
 export async function checkOnYouTube(clip: Clip): Promise<void> {
-  await withPending(clip.id, 'check-youtube', 'Asking YouTube…', async () => {
+  await withPending(clip.id, 'check-youtube', 'Checking status…', async () => {
     const res = await api.clips.checkOnYouTube(clip.id)
     if (!res.ok) toast('error', 'Could not check the video', res.error)
   })

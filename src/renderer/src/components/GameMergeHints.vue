@@ -40,7 +40,7 @@ async function merge(): Promise<void> {
       :actions="[
         { label: 'Merge', color: 'primary', variant: 'subtle', onClick: () => void merge() },
         {
-          label: 'Not the same',
+          label: 'Keep them separate',
           color: 'neutral',
           variant: 'ghost',
           onClick: () => void dismissMergeSuggestion(hint!.key),

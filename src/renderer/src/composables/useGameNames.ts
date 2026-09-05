@@ -39,14 +39,14 @@ export async function mergeGamesDialog(from: GameSummary, into: GameSummary): Pr
 /** Puts a renamed or merged game back under the names its folders gave it. */
 export async function splitGameDialog(g: GameSummary): Promise<void> {
   const ok = await confirm({
-    title: `Use the folder name${g.sources.length === 1 ? '' : 's'} again?`,
+    title: g.sources.length === 1 ? 'Use the folder name again?' : 'Undo the merge?',
     message:
       g.sources.length === 1
         ? 'The card goes back to the name its folder has on disk.'
-        : `This card splits back into ${g.sources.length} games, one per folder.`,
+        : `This card splits back into ${g.sources.length} games, one per folder, exactly as before the merge.`,
     detail: g.sources.join(', '),
     detailIcon: 'i-lucide-folder',
-    confirmLabel: g.sources.length === 1 ? 'Reset name' : 'Split',
+    confirmLabel: g.sources.length === 1 ? 'Reset name' : 'Undo merge',
   })
   if (!ok) return
   await setGameAlias(g.sources, null)

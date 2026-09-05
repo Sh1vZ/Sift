@@ -106,7 +106,7 @@ function videoActions(clipId: string): ToastAction[] | undefined {
   const clip = getClip(clipId)
   return clip
     ? [
-        { label: 'Copy link', onClick: () => void copyYouTubeLink(clip) },
+        { label: 'Copy YouTube link', onClick: () => void copyYouTubeLink(clip) },
         { label: 'Open on YouTube', onClick: () => void openYouTube(clip) },
       ]
     : undefined

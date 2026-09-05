@@ -176,7 +176,7 @@ export function clipMenuItems(clip: Clip, opts: ClipMenuOptions): ClipMenuItem[]
       ]
     : [
         {
-          label: clip.youtubeId ? 'Upload to YouTube again' : 'Upload to YouTube',
+          label: clip.youtubeId ? 'Upload again' : 'Upload to YouTube',
           icon: 'i-lucide-youtube',
           disabled: clip.probeState !== 'ok' || busy,
           onSelect: () => openUploadDialog(clip),

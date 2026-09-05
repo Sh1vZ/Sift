@@ -157,14 +157,14 @@ function openUploaded(j: UploadJob): void {
           @click="cancelUpload(item.job.id)"
         />
         <template v-else>
-          <UTooltip v-if="stalled(item.job)" text="Ask YouTube now">
+          <UTooltip v-if="stalled(item.job)" text="Check status now">
             <UButton
               icon="i-lucide-refresh-cw"
               color="neutral"
               variant="ghost"
               size="sm"
               square
-              aria-label="Check on YouTube now"
+              aria-label="Check status now"
               @click="checkUploadNow(item.job)"
             />
           </UTooltip>
