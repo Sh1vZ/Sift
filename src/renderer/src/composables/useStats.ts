@@ -2,6 +2,7 @@ import { computed, ref } from 'vue'
 import type { AppStats, Clip } from '@shared/types'
 import { formatResolution } from '@/utils/format'
 import { QUALITY_TIERS, qualityTier } from '@/utils/quality'
+import { confirm } from './useDialogs'
 import { recordings, folders, games, now } from './useLibrary'
 import { toast } from './useToasts'
 
@@ -36,6 +37,31 @@ export async function refreshStats(): Promise<void> {
 export async function revealAppData(): Promise<void> {
   const res = await api.library.revealData()
   if (!res.ok) toast('error', 'Could not open the folder', res.error)
+}
+
+/** Empties the preview cache after a confirm; main rebuilds it in the background. */
+export async function clearPreviews(): Promise<void> {
+  const ok = await confirm({
+    title: 'Clear the preview cache?',
+    message:
+      'Every poster frame and scrub strip is deleted and rebuilt in the background. Cards show placeholders until their previews come back.',
+    detailIcon: 'i-lucide-image',
+    confirmLabel: 'Clear previews',
+    danger: true,
+  })
+  if (!ok) return
+  const res = await api.library.clearPreviews()
+  if (!res.ok) {
+    toast('error', 'Could not clear the previews', res.error)
+    return
+  }
+  const n = res.files ?? 0
+  toast(
+    'success',
+    'Preview cache cleared',
+    `${n} file${n === 1 ? '' : 's'} removed. Previews are being rebuilt.`,
+  )
+  await refreshStats()
 }
 
 // ------------------------------------------------------------ library totals

@@ -365,6 +365,31 @@ export class Library {
     return { ok: true }
   }
 
+  /**
+   * Wipes the preview cache and rebuilds it. Every clip's poster and strip are
+   * unlinked and their fields cleared, so the cards fall back to placeholders at
+   * once; probed clips are then queued again and refill in the background. A
+   * job already in flight may land a fresh file just after the wipe — its patch
+   * names that file, so the index stays consistent either way.
+   */
+  async clearPreviews(): Promise<ActionResult & { files?: number }> {
+    let files = 0
+    for (const clip of Object.values(this.store.data.clips)) {
+      this.media.remove(clip.id)
+      if (!clip.thumb && !clip.sprite) continue
+      if (clip.thumb) files++
+      if (clip.sprite) files++
+      await removeArtifacts(clip)
+      this.applyPatch({ id: clip.id, thumb: '', sprite: '', spriteFrames: 0 })
+    }
+    if (this.settings.generateThumbnails) {
+      for (const clip of Object.values(this.store.data.clips)) {
+        if (clip.probeState === 'ok') this.media.enqueue(clip)
+      }
+    }
+    return { ok: true, files }
+  }
+
   // ----------------------------------------------------------- clips folder
 
   defaultClipsDir(): string {

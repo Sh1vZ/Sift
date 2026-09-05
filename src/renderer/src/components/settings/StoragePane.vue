@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import SettingsPanel from './SettingsPanel.vue'
 import SettingsRow from './SettingsRow.vue'
 import { now } from '@/composables/useLibrary'
 import {
   appStats,
+  clearPreviews,
   libraryTotals,
   refreshStats,
   revealAppData,
@@ -34,6 +35,16 @@ const measuredLabel = computed(() =>
     ? `Measured ${formatRelative(appStats.value.generatedAtMs, now.value).toLowerCase()}`
     : 'Measuring…',
 )
+
+const clearing = ref(false)
+async function onClearPreviews(): Promise<void> {
+  clearing.value = true
+  try {
+    await clearPreviews()
+  } finally {
+    clearing.value = false
+  }
+}
 
 // Walking the app-data folder is on-demand, so only measure if nothing is cached.
 onMounted(() => {
@@ -109,7 +120,20 @@ onMounted(() => {
               title="Preview cache"
               :description="`${n.format(appStats.storage.cacheFiles)} poster frames and hover-scrub strips, generated once and reused.`"
               :value="formatBytes(appStats.storage.cacheBytes)"
-            />
+            >
+              <template #trailing>
+                <UButton
+                  icon="i-lucide-eraser"
+                  label="Clear previews"
+                  color="neutral"
+                  variant="subtle"
+                  size="sm"
+                  :disabled="!appStats.storage.cacheFiles"
+                  :loading="clearing"
+                  @click="onClearPreviews()"
+                />
+              </template>
+            </SettingsRow>
 
             <SettingsRow
               id="storage-database"

@@ -44,6 +44,7 @@ export function registerIpc(
   ipcMain.handle('library:add-folder-path', (_e, p) => library.addFolder(str(p)))
   ipcMain.handle('library:remove-folder', (_e, id) => library.removeFolder(str(id)))
   ipcMain.handle('library:rescan', (_e, id) => library.rescan(str(id) || undefined))
+  ipcMain.handle('library:clear-previews', () => library.clearPreviews())
   ipcMain.handle('library:set-settings', (_e, patch) => {
     const p = { ...((patch ?? {}) as Partial<Settings>) }
     // Unknown theme ids would leave the renderer on no theme block at all.

@@ -9,6 +9,7 @@ const api: Api = {
     addFolderPath: (path) => ipcRenderer.invoke('library:add-folder-path', path),
     removeFolder: (id) => ipcRenderer.invoke('library:remove-folder', id),
     rescan: (folderId) => ipcRenderer.invoke('library:rescan', folderId ?? ''),
+    clearPreviews: () => ipcRenderer.invoke('library:clear-previews'),
     setSettings: (patch) => ipcRenderer.invoke('library:set-settings', patch),
     setGameAlias: (sources, display) =>
       ipcRenderer.invoke('library:set-game-alias', sources, display),
