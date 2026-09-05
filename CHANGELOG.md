@@ -7,6 +7,31 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 uses [semantic versioning](https://semver.org/spec/v2.0.0.html) — beta builds carry a
 `-beta.N` suffix and update from the beta channel.
 
+## [1.0.0-beta.6] - 2026-09-05
+
+### Added
+
+- **Per-track audio in the player.** ShadowPlay and OBS record the game and your mic
+  as separate tracks, and until now only the one the file marked default was ever
+  heard — so a mic you did not want was simply stuck in the clip. The player now
+  lists every track and lets you solo one or mix them, each with its own volume and
+  mute. Trim and export carry the choice through, so a clip exported with the mic
+  silenced ships without it. Clips already in your library are re-examined in the
+  background after this update so their tracks appear.
+
+### Changed
+
+- Favouriting is a heart rather than a star, on cards, in the player and in search.
+
+### Fixed
+
+- Clips are marked watched again when you play one through. Because the player opens
+  in edit mode by default, the rule that stopped a looping trim preview from counting
+  was skipping nearly every clip. Playing a full-length preview now counts as a
+  watch, while looping a genuinely trimmed selection still does not.
+- The sidebar's labels no longer jump out of place partway through a collapse. They
+  hold while the column narrows and lead the way when it opens again.
+
 ## [1.0.0-beta.5] - 2026-09-05
 
 ### Added
