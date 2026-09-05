@@ -8,7 +8,7 @@ import { motionEnabled } from '@/composables/useMotion'
 import { activeTheme } from '@/composables/useTheme'
 
 /**
- * The star, everywhere it appears: on a card, in the player's control bar and
+ * The heart, everywhere it appears: on a card, in the player's control bar and
  * in the details pane. One component so the three surfaces agree on the label,
  * the pressed state and the burst — the card needs its own circular treatment
  * because it sits on a thumbnail, the other two are ordinary control-bar buttons.
@@ -31,8 +31,8 @@ const label = computed(() =>
 )
 
 /**
- * Which way the star just moved, so each direction gets its own answer. Keyed off
- * the click rather than off `favourite`, or every already-starred card would
+ * Which way the heart just moved, so each direction gets its own answer. Keyed off
+ * the click rather than off `favourite`, or every already-favourited card would
  * animate as it mounts while you scroll the grid.
  */
 const pulse = ref<'on' | 'off' | null>(null)
@@ -72,7 +72,7 @@ function onClick(e: MouseEvent): void {
           'pulse-on': pulse === 'on',
           'pulse-off': pulse === 'off',
         }"
-        icon="i-lucide-star"
+        icon="i-lucide-heart"
         :color="clip.favourite ? 'primary' : 'neutral'"
         :variant="clip.favourite ? 'soft' : 'ghost'"
         square
@@ -97,7 +97,7 @@ function onClick(e: MouseEvent): void {
         @keydown.enter.stop
         @keydown.space.stop
       >
-        <Icon name="star" :size="16" :stroke="1.9" />
+        <Icon name="heart" :size="16" :stroke="1.9" />
       </button>
     </UTooltip>
   </span>
@@ -159,15 +159,15 @@ function onClick(e: MouseEvent): void {
     color var(--dur-fast) var(--ease-out),
     background-color var(--dur-fast) var(--ease-out);
 }
-/* Starred reads at rest — that is the whole point of starring. */
+/* A favourite reads at rest — that is the whole point of favouriting. */
 .card-btn:focus-visible,
 .card-btn.is-on {
   --fav-shown: 1;
   --fav-scale: 1;
 }
 /* Hover must NOT borrow the favourited colour. When both looked the same, turning
-   a favourite off while the pointer was still on the star looked like nothing had
-   happened at all. Hover only lifts the disc; the theme colour means "starred". */
+   a favourite off while the pointer was still on the heart looked like nothing had
+   happened at all. Hover only lifts the disc; the theme colour means "favourited". */
 .card-btn:hover {
   color: var(--fg-strong);
   background: color-mix(in srgb, var(--scrim) 95%, transparent);
@@ -183,14 +183,14 @@ function onClick(e: MouseEvent): void {
   transform: scale(0.86);
   transition-duration: var(--dur-fast);
 }
-/* Each direction gets its own answer: out for starring, in for unstarring.
+/* Each direction gets its own answer: out for adding, in for removing.
    `html.no-motion` collapses both. */
 .card-btn.pulse-on :deep(.icon),
-.chrome-btn.pulse-on :deep(span[class*='i-lucide-star']) {
+.chrome-btn.pulse-on :deep(span[class*='i-lucide-heart']) {
   animation: fav-on var(--dur) var(--ease-spring);
 }
 .card-btn.pulse-off :deep(.icon),
-.chrome-btn.pulse-off :deep(span[class*='i-lucide-star']) {
+.chrome-btn.pulse-off :deep(span[class*='i-lucide-heart']) {
   animation: fav-off var(--dur) var(--ease-out);
 }
 @keyframes fav-on {

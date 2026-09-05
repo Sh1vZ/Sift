@@ -11,7 +11,7 @@
  * Adapted: the draw loop only runs while sparks are alive (upstream ran a
  * requestAnimationFrame loop forever), the canvas is DPR-aware, a `disabled`
  * prop honours the app's reduced-motion setting, and `spark()` is exposed so a
- * control that stops its own click (the favourite star, which must not reach
+ * control that stops its own click (the favourite heart, which must not reach
  * the card behind it) can still fire the burst. `lineWidth` is a prop too, so a
  * burst can be made heavier than the upstream hairline.
  */

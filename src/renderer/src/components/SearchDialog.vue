@@ -125,7 +125,7 @@ const poster = (c: Clip): string => (c.thumb ? api.thumbUrl(c.thumb) : '')
                 <span>{{ formatRelative(c.recordedAtMs, now) }}</span>
               </span>
             </span>
-            <Icon v-if="c.favourite" class="star" name="star" :size="15" :stroke="1.8" />
+            <Icon v-if="c.favourite" class="fav" name="heart" :size="15" :stroke="1.8" />
             <UIcon v-if="c.youtubeId" class="yt" name="i-lucide-youtube" />
           </button>
         </div>
@@ -236,9 +236,9 @@ const poster = (c: Clip): string => (c.thumb ? api.thumbUrl(c.thumb) : '')
 .dot {
   color: var(--fg-dim);
 }
-.star {
+.fav {
   flex: 0 0 auto;
-  color: var(--warning);
+  color: var(--primary);
 }
 .yt {
   flex: 0 0 auto;

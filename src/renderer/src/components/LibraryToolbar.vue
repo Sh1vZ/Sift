@@ -156,7 +156,7 @@ defineExpose({ focus })
 
     <UButton
       label="Favourites"
-      icon="i-lucide-star"
+      icon="i-lucide-heart"
       :color="filters.favourites ? 'primary' : 'neutral'"
       :variant="filters.favourites ? 'soft' : 'subtle'"
       :aria-pressed="filters.favourites"

@@ -85,7 +85,7 @@ const ICONS: Record<string, string> = {
   'list-music': 'i-lucide-list-music',
   'file-json': 'i-lucide-file-json',
   lock: 'i-lucide-lock',
-  star: 'i-lucide-star',
+  heart: 'i-lucide-heart',
   'search-x': 'i-lucide-search-x',
   'eye-off': 'i-lucide-eye-off',
   history: 'i-lucide-history',

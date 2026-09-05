@@ -486,7 +486,7 @@ const prettyGameName = (s: string): string => s.replace(/_+/g, ' ').replace(/\s+
 /**
  * Renames a game, or merges several into one — display only, nothing on disk
  * moves. `sources` are `Clip.sourceGame` values; a null display puts each game
- * back under the name its folder gave it. Optimistic like the star: the grid
+ * back under the name its folder gave it. Optimistic like the heart: the grid
  * regroups in the same frame and the `clips:updated` push confirms after.
  */
 export async function setGameAlias(sources: string[], display: string | null): Promise<boolean> {
@@ -716,7 +716,7 @@ export function revealClip(clip: Clip): void {
 }
 
 // ------------------------------------------------------------- user state
-// Flipped in the local map first so the star and the dimming answer the click
+// Flipped in the local map first so the heart and the dimming answer the click
 // in the same frame; the `clips:updated` push confirms a moment later. No
 // `withPending` veil — that is for actions that touch the disk and take time.
 

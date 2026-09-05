@@ -414,7 +414,7 @@ const seen = computed(() => Boolean(props.clip.seenAtMs) && !veil.value)
     transform var(--dur) var(--ease-out),
     box-shadow var(--dur) var(--ease-out);
 }
-/* Reveals the favourite star, which lives in another component and so cannot be
+/* Reveals the favourite heart, which lives in another component and so cannot be
    reached by a selector from here. FavouriteButton reads both. */
 .clip-card:hover,
 .clip-card:focus-visible,
@@ -584,7 +584,7 @@ const seen = computed(() => Boolean(props.clip.seenAtMs) && !veil.value)
   position: static;
 }
 /* Watched is a state, not a spec, so it does not borrow the violet the quality
-   chip uses — nor the rose reserved for YouTube, nor the filled primary the star
+   chip uses — nor the rose reserved for YouTube, nor the filled primary the favourite
    owns. Plain white on the same dark chip is what is left, and it is also the
    most legible of the four. Never the off-palette green it used to be. */
 .badge.seen {
