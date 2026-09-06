@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import type { LibraryFolder } from '@shared/types'
+import type { Clip, LibraryFolder } from '@shared/types'
 import DropWash from '../DropWash.vue'
 import SettingsPanel from './SettingsPanel.vue'
 import SettingsRow from './SettingsRow.vue'
@@ -19,10 +19,44 @@ import { confirm } from '@/composables/useDialogs'
 const libraryFolders = computed(() => folders.value.filter((f) => f.kind === 'library'))
 const withThumbs = computed(() => recordings.value.filter((c) => c.thumb).length)
 
+interface Counts {
+  videos: number
+  images: number
+}
+
+/** Recordings and screenshots tallied apart, for the summary and each folder's badge. */
+function countsOf(clips: Clip[]): Counts {
+  const n: Counts = { videos: 0, images: 0 }
+  for (const c of clips) {
+    if (c.kind === 'image') n.images++
+    else n.videos++
+  }
+  return n
+}
+
+/** "40 clips · 7 screenshots", or just the clips where there are no stills. */
+function countLabel(c: Counts): string {
+  const clips = `${c.videos} clip${c.videos === 1 ? '' : 's'}`
+  return c.images ? `${clips} · ${c.images} screenshot${c.images === 1 ? '' : 's'}` : clips
+}
+
 const summary = computed(() => {
   const f = libraryFolders.value.length
-  return `${recordings.value.length} clips indexed across ${f} folder${f === 1 ? '' : 's'} · ${withThumbs.value} with previews. Drop a folder here to add it.`
+  return `${countLabel(countsOf(recordings.value))} indexed across ${f} folder${f === 1 ? '' : 's'} · ${withThumbs.value} with previews. Drop a folder here to add it.`
 })
+
+/** Each folder's own tally, live from the index rather than the count its last scan wrote. */
+const folderCounts = computed(() => {
+  const map = new Map<string, Clip[]>()
+  for (const c of recordings.value) {
+    const list = map.get(c.folderId)
+    if (list) list.push(c)
+    else map.set(c.folderId, [c])
+  }
+  return new Map([...map].map(([id, clips]) => [id, countsOf(clips)]))
+})
+const folderLabel = (f: LibraryFolder): string =>
+  countLabel(folderCounts.value.get(f.id) ?? { videos: f.clipCount, images: 0 })
 
 /** Folders whose removal is still stopping watchers and dropping clips; their button spins. */
 const removing = ref<string[]>([])
@@ -111,12 +145,7 @@ async function remove(folder: LibraryFolder): Promise<void> {
               </template>
 
               <template #trailing>
-                <UBadge
-                  color="neutral"
-                  variant="soft"
-                  :label="`${f.clipCount} clips`"
-                  class="mono count"
-                />
+                <UBadge color="neutral" variant="soft" :label="folderLabel(f)" class="mono count" />
                 <UButton
                   icon="i-lucide-refresh-cw"
                   label="Rescan"

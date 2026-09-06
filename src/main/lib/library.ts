@@ -21,6 +21,7 @@ import type {
   WarmupClip,
   WhatsNew,
 } from '@shared/types'
+import { isHdrImage, mediaKindOf } from '@shared/types'
 import { ActivityLog } from './activity'
 import { fullChangelog, releaseNotesFor } from './changelog'
 import { copyFileToClipboard } from './clipboard'
@@ -44,15 +45,19 @@ import {
   ffmpegAvailable,
   keyframeBefore,
   makeArtifacts,
+  makeImageThumb,
+  makeJxrRender,
   probe,
+  probeImage,
   removeArtifacts,
   removeAudioTracks,
+  renderName,
   runLong,
   spriteName,
   thumbName,
 } from './media'
 import { FFMPEG, cacheDir, libraryDb, userDataDir } from './paths'
-import { walkVideos } from './scanner'
+import { walkMedia } from './scanner'
 import { collectStats } from './stats'
 import { Store } from './store'
 import { watchFolder } from './watcher'
@@ -219,6 +224,8 @@ export class Library {
     const reachable = new Set(this.store.data.folders.filter((f) => f.available).map((f) => f.id))
     const byClass = new Map<string, Clip>()
     for (const c of Object.values(this.store.data.clips)) {
+      // A still is drawn by the image path, which has no shader of its own to warm.
+      if (c.kind === 'image') continue
       if (c.probeState !== 'ok' || !c.width || !c.height || !reachable.has(c.folderId)) continue
       const align = c.vcodec === 'hevc' ? 32 : 16
       const key = `${c.vcodec}:${c.width % align ? 'x' : ''}${c.height % align ? 'y' : ''}`
@@ -445,16 +452,18 @@ export class Library {
     let files = 0
     for (const clip of Object.values(this.store.data.clips)) {
       this.media.remove(clip.id)
-      if (!clip.thumb && !clip.sprite) continue
+      if (!clip.thumb && !clip.sprite && !clip.render) continue
       if (clip.thumb) files++
       if (clip.sprite) files++
+      if (clip.render) files++
       await removeArtifacts(clip)
-      this.applyPatch({ id: clip.id, thumb: '', sprite: '', spriteFrames: 0 })
+      this.applyPatch({ id: clip.id, thumb: '', sprite: '', spriteFrames: 0, render: '' })
     }
-    if (this.settings.generateThumbnails) {
-      for (const clip of Object.values(this.store.data.clips)) {
-        if (clip.probeState === 'ok') this.media.enqueue(clip)
-      }
+    for (const clip of Object.values(this.store.data.clips)) {
+      if (clip.probeState !== 'ok') continue
+      // Previews are optional; the render of an HDR screenshot is not — it is
+      // the only form of the file the viewer can show.
+      if (this.settings.generateThumbnails || isHdrImage(clip.ext)) this.media.enqueue(clip)
     }
     return { ok: true, files }
   }
@@ -618,6 +627,9 @@ export class Library {
         if (clip.probeState === 'ok' && !clip.thumb) this.media.enqueue(clip)
       }
     }
+    // The walk decides what is in the index, so the stills come and go with a
+    // rescan: dropped as unseen when switched off, found when switched on.
+    if (before.indexScreenshots !== s.indexScreenshots) this.rescan()
     this.emit('settings:changed', { ...s })
     return s
   }
@@ -664,9 +676,15 @@ export class Library {
         () => (next.sprite = ''),
       )
     }
+    if (clip.render) {
+      next.render = renderName(next)
+      await fsRename(join(cacheDir(), clip.render), join(cacheDir(), next.render)).catch(
+        () => (next.render = ''),
+      )
+    }
     // Posters are moved above because regenerating them costs an ffmpeg run per
     // clip; extractions are named off the id too, but re-cutting one is cheap
-    // and lazy, so they go rather than earning a third rename loop.
+    // and lazy, so they go rather than earning a fourth rename loop.
     void removeAudioTracks(clip.id)
     delete this.store.data.clips[clip.id]
     this.store.data.clips[next.id] = next
@@ -675,7 +693,9 @@ export class Library {
     this.removed.add(clip.id)
     this.added.set(next.id, next)
     this.scheduleFlush()
-    if (!next.thumb || !next.sprite) this.media.enqueue(next, true)
+    // Asked the same way the scan asks, so a still — which never has a strip —
+    // is not sent back to the queue on every rename.
+    if (this.needsWork(next)) this.media.enqueue(next, true)
     // History about the old id follows the clip to its new one.
     this.store.rekeyActivityClip(clip.id, next.id, target)
     this.recordClipAction('rename', next, { detail: `was ${clip.name}${clip.ext}` })
@@ -903,6 +923,7 @@ export class Library {
         name: job.name,
         title: cleanTitle(job.name, sourceGame),
         ext: job.ext,
+        kind: 'video',
         folderId: folder.id,
         game: this.displayGame(sourceGame),
         sourceGame,
@@ -921,6 +942,7 @@ export class Library {
         thumb: '',
         sprite: '',
         spriteFrames: 0,
+        render: '',
         probeState: 'pending',
         sourceId: source.id,
         trimStart: job.start,
@@ -1017,7 +1039,8 @@ export class Library {
     let dropped = 0
     // A library root may contain the clips folder; those files belong to the Clips view only.
     const skip = folder.kind === 'library' ? (dir: string) => this.isUnderClipsRoot(dir) : undefined
-    for await (const file of walkVideos(folder.path, { skip })) {
+    const includeImages = this.indexesImages(folder)
+    for await (const file of walkMedia(folder.path, { skip, includeImages })) {
       const id = clipId(file)
       seen.add(id)
       count++
@@ -1078,9 +1101,23 @@ export class Library {
     }
   }
 
+  /**
+   * Screenshots are indexed from the recording folders only, and only while
+   * the setting says so; the exports folder is for the clips Sift cut and
+   * never takes a still, whatever lands in it.
+   */
+  private indexesImages(folder: LibraryFolder): boolean {
+    return folder.kind === 'library' && this.settings.indexScreenshots
+  }
+
   private needsWork(clip: Clip): boolean {
     if (clip.probeState === 'pending') return true
     if (clip.probeState === 'failed') return false
+    if (clip.kind === 'image') {
+      // The render is what the viewer shows; without it an HDR screenshot is nothing.
+      if (isHdrImage(clip.ext) && !clip.render) return true
+      return this.settings.generateThumbnails && (!clip.thumb || artifactsStale(clip))
+    }
     // Artifacts an older build cut hold different frames than this one asks for,
     // so they are as good as missing — the difference being that the clip keeps
     // showing them until the replacements land.
@@ -1105,6 +1142,7 @@ export class Library {
       // later rename of the game must not leave old titles disagreeing with new.
       title: cleanTitle(name, sourceGame),
       ext,
+      kind: mediaKindOf(ext) ?? 'video',
       folderId: folder.id,
       // Re-applied on every index pass, so a rename or merge survives a rescan.
       game: this.displayGame(sourceGame),
@@ -1122,6 +1160,7 @@ export class Library {
       thumb: '',
       sprite: '',
       spriteFrames: 0,
+      render: '',
       probeState: 'pending',
       // Provenance survives a re-index of a changed file; a foreign file in the
       // clips folder counts from when it appeared there.
@@ -1166,6 +1205,7 @@ export class Library {
   // ------------------------------------------------------------- media jobs
 
   private async processClip(clip: Clip): Promise<ClipPatch> {
+    if (clip.kind === 'image') return this.processImage(clip)
     if (!ffmpegAvailable()) return { id: clip.id, probeState: 'failed' }
     const info = await probe(clip.path)
     this.applyPatch({ id: clip.id, ...info, probeState: 'ok' })
@@ -1190,6 +1230,53 @@ export class Library {
         })
       } catch {
         /* the card falls back to a placeholder and hover preview stays off */
+      }
+    }
+    return { id: clip.id }
+  }
+
+  /**
+   * A screenshot's turn in the queue: read its size, then cut its poster. An
+   * HDR one is rendered to SDR first — the render is the probe, since ffprobe
+   * cannot open the original, and the poster is cut from it.
+   */
+  private async processImage(clip: Clip): Promise<ClipPatch> {
+    if (!ffmpegAvailable()) return { id: clip.id, probeState: 'failed' }
+    const hdr = isHdrImage(clip.ext)
+    const known = clip.width && clip.height ? { width: clip.width, height: clip.height } : undefined
+    const info = hdr
+      ? await makeJxrRender(clip, known)
+      : { ...(await probeImage(clip.path)), render: '' }
+    // Zeroed rather than read: ffprobe gives a GIF the duration and frame rate
+    // of its animation, and a still must never look like a clip.
+    this.applyPatch({
+      id: clip.id,
+      width: info.width,
+      height: info.height,
+      render: info.render,
+      duration: 0,
+      fps: 0,
+      vcodec: '',
+      hasAudio: false,
+      audioTracks: [],
+      probeState: 'ok',
+    })
+    // A render an older build made was replaced under a new name just now.
+    if (clip.render && clip.render !== info.render)
+      await removeArtifacts({ thumb: '', sprite: '', render: clip.render })
+    if (!this.settings.generateThumbnails) return { id: clip.id }
+
+    const current = this.store.data.clips[clip.id]
+    if (!current) return { id: clip.id }
+    if (!current.thumb || current.thumb !== thumbName(current)) {
+      const was = current.thumb
+      try {
+        const source = hdr ? join(cacheDir(), current.render) : current.path
+        const made = await makeImageThumb(current, source)
+        this.applyPatch({ id: clip.id, thumb: made.thumb })
+        if (was && was !== made.thumb) await removeArtifacts({ thumb: was, sprite: '' })
+      } catch {
+        /* the card falls back to a placeholder */
       }
     }
     return { id: clip.id }
@@ -1223,7 +1310,7 @@ export class Library {
           if (clip) this.dropClip(clip)
         },
       },
-      ignored,
+      { ignored, includeImages: () => this.indexesImages(folder) },
     )
     this.watchers.set(folder.id, watcher)
   }

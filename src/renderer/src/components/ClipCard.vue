@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import type { Clip, ExportJob } from '@shared/types'
+import { imageFormatLabel } from '@shared/types'
 import type { UploadJob } from '@shared/youtube'
 import type { ClipMenuItem } from '@/composables/useClipMenu'
 import FavouriteButton from './FavouriteButton.vue'
@@ -46,6 +47,9 @@ const frame = ref(0)
 const posterLoaded = ref(false)
 const spriteLoaded = ref(false)
 
+/** A screenshot: viewed rather than played, labelled by format rather than length. */
+const isImage = computed(() => props.clip.kind === 'image')
+const format = computed(() => (isImage.value ? imageFormatLabel(props.clip.ext) : ''))
 const poster = computed(() => (props.clip.thumb ? api.thumbUrl(props.clip.thumb) : ''))
 const sprite = computed(() => (props.clip.sprite ? api.thumbUrl(props.clip.sprite) : ''))
 const frames = computed(() => props.clip.spriteFrames)
@@ -211,7 +215,7 @@ const seen = computed(() => Boolean(props.clip.seenAtMs) && !veil.value)
     :data-clip-id="clip.id"
     tabindex="0"
     :role="job ? 'group' : 'button'"
-    :aria-label="job ? `${jobLabel} ${clip.title}` : `Play ${clip.title}`"
+    :aria-label="job ? `${jobLabel} ${clip.title}` : `${isImage ? 'View' : 'Play'} ${clip.title}`"
     :aria-busy="veil?.busy || undefined"
     @click="open"
     @keydown.enter.prevent="open"
@@ -236,7 +240,15 @@ const seen = computed(() => Boolean(props.clip.seenAtMs) && !veil.value)
           <div v-if="!poster || !posterLoaded" class="placeholder">
             <USkeleton v-if="clip.probeState === 'pending'" class="placeholder-skeleton" />
             <Icon
-              :name="clip.probeState === 'failed' ? 'video-off' : 'film'"
+              :name="
+                clip.probeState === 'failed'
+                  ? isImage
+                    ? 'image-off'
+                    : 'video-off'
+                  : isImage
+                    ? 'image'
+                    : 'film'
+              "
               :size="26"
               :stroke="1.6"
             />
@@ -327,7 +339,13 @@ const seen = computed(() => Boolean(props.clip.seenAtMs) && !veil.value)
              carries what it is. Grouped, so neither has to know the other is
              there and the pair stays inside the thumbnail on a compact card. -->
         <div v-if="seen || ytBadge" class="badges-tr">
-          <UBadge v-if="seen" class="badge seen" size="sm" icon="i-lucide-check" label="Watched" />
+          <UBadge
+            v-if="seen"
+            class="badge seen"
+            size="sm"
+            icon="i-lucide-check"
+            :label="isImage ? 'Viewed' : 'Watched'"
+          />
           <UBadge
             v-if="ytBadge"
             class="badge yt"
@@ -346,10 +364,12 @@ const seen = computed(() => Boolean(props.clip.seenAtMs) && !veil.value)
           size="sm"
           :label="formatDuration(clip.duration)"
         />
+        <!-- A still has no length; its format takes the corner instead. -->
+        <UBadge v-else-if="format && !job" class="badge format" size="sm" :label="format" />
 
         <!-- No play hint while a veil is up: it would sit on the veil's label. -->
-        <span v-if="!veil" class="play-hint" aria-hidden="true">
-          <Icon name="play" :size="20" />
+        <span v-if="!veil" class="play-hint" :class="{ 'is-view': isImage }" aria-hidden="true">
+          <Icon :name="isImage ? 'zoom-in' : 'play'" :size="20" />
         </span>
       </div>
 
@@ -654,10 +674,19 @@ const seen = computed(() => Boolean(props.clip.seenAtMs) && !veil.value)
     opacity var(--dur) var(--ease-out),
     transform var(--dur-slow) var(--ease-spring);
 }
+/* The play glyph is nudged right to sit on its optical centre; the zoom glass is symmetric. */
+.play-hint.is-view {
+  padding-left: 0;
+}
 .clip-card:hover .play-hint,
 .clip-card:focus-visible .play-hint {
   opacity: 1;
   transform: scale(1);
+}
+/* The format is a spec like the resolution, so it reads in the same violet. */
+.badge.format {
+  color: var(--secondary);
+  letter-spacing: 0.06em;
 }
 .clip-card:hover .scrub.is-loaded ~ .play-hint {
   opacity: 0;

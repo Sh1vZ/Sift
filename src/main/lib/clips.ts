@@ -27,12 +27,17 @@ export function parseRecordedAt(name: string): number | null {
   return null
 }
 
-/** Strip the timestamp / DVR suffix so the card shows something human. */
+/**
+ * Strip the timestamp / DVR suffix so the card shows something human. The
+ * word ShadowPlay puts on its screenshots goes the same way: the card already
+ * says what the file is, so "Crimson Desert Screenshot" would say it twice.
+ */
 export function cleanTitle(name: string, game: string): string {
   let t = name
     .replace(/\s*\d{4}[.\-_]\d{2}[.\-_]\d{2}.*$/, '')
     .replace(/\s*\d{8}[_\-T]?\d{6}.*$/, '')
     .replace(/\.DVR$/i, '')
+    .replace(/[\s_]+Screenshot[\s_]*$/i, '')
     .replace(/_+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()

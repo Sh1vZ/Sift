@@ -84,6 +84,15 @@ const MIGRATIONS: Array<(db: DatabaseSync) => void> = [
     db.exec("ALTER TABLE clips ADD COLUMN audio_tracks TEXT NOT NULL DEFAULT ''")
     db.exec("UPDATE clips SET probe_state = 'pending' WHERE has_audio = 1")
   },
+  // v9 -> v10: screenshots join the index beside the recordings. `kind` tells
+  // a still from a video, and `render` names the SDR copy Sift makes of an
+  // HDR (.jxr) screenshot so the viewer has something Chromium can decode.
+  // Every row already here is a video, which the default says; the stills
+  // themselves arrive with the next scan.
+  (db) => {
+    db.exec("ALTER TABLE clips ADD COLUMN kind TEXT NOT NULL DEFAULT 'video'")
+    db.exec("ALTER TABLE clips ADD COLUMN render TEXT NOT NULL DEFAULT ''")
+  },
 ]
 const SCHEMA_VERSION = MIGRATIONS.length + 1
 
@@ -198,7 +207,9 @@ CREATE TABLE IF NOT EXISTS clips (
   youtube_reason         TEXT NOT NULL DEFAULT '',
   youtube_checked_at_ms  REAL NOT NULL DEFAULT 0,
   youtube_watch_until_ms REAL NOT NULL DEFAULT 0,
-  audio_tracks   TEXT NOT NULL DEFAULT ''
+  audio_tracks   TEXT NOT NULL DEFAULT '',
+  kind           TEXT NOT NULL DEFAULT 'video',
+  render         TEXT NOT NULL DEFAULT ''
 );
 ${YOUTUBE_ACCOUNTS_TABLE}
 ${GAME_ALIASES_TABLE}
@@ -279,6 +290,8 @@ interface ClipRow {
   youtube_checked_at_ms: number
   youtube_watch_until_ms: number
   audio_tracks: string
+  kind: string
+  render: string
 }
 
 /** A `youtube_accounts` row as stored. The `_enc` columns hold base64 ciphertext or ''. */
@@ -429,9 +442,9 @@ export class Store {
           duration, width, height, fps, vcodec, has_audio, thumb, sprite, sprite_frames, probe_state,
           source_id, trim_start, trim_end, muted, created_at_ms, youtube_id, favourite, seen_at_ms,
           source_game, youtube_account_id, youtube_stage, youtube_reason, youtube_checked_at_ms,
-          youtube_watch_until_ms, audio_tracks)
+          youtube_watch_until_ms, audio_tracks, kind, render)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-          ?, ?, ?, ?, ?, ?)
+          ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
           path = excluded.path, name = excluded.name, title = excluded.title, ext = excluded.ext,
           folder_id = excluded.folder_id, game = excluded.game, size = excluded.size,
@@ -447,7 +460,7 @@ export class Store {
           youtube_reason = excluded.youtube_reason,
           youtube_checked_at_ms = excluded.youtube_checked_at_ms,
           youtube_watch_until_ms = excluded.youtube_watch_until_ms,
-          audio_tracks = excluded.audio_tracks`),
+          audio_tracks = excluded.audio_tracks, kind = excluded.kind, render = excluded.render`),
       deleteClip: db.prepare('DELETE FROM clips WHERE id = ?'),
       setSetting: db.prepare(
         'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
@@ -757,6 +770,8 @@ export class Store {
       c.youtubeCheckedAtMs,
       c.youtubeWatchUntilMs,
       JSON.stringify(c.audioTracks ?? []),
+      c.kind,
+      c.render,
     )
   }
 
@@ -836,6 +851,10 @@ function rowToClip(r: ClipRow): Clip {
     youtubeCheckedAtMs: r.youtube_checked_at_ms,
     youtubeWatchUntilMs: r.youtube_watch_until_ms,
     audioTracks: parseTracks(r.audio_tracks),
+    // Anything but the one other kind reads as a video, the shape every row
+    // written before the column had.
+    kind: r.kind === 'image' ? 'image' : 'video',
+    render: r.render,
     favourite: Boolean(r.favourite),
     seenAtMs: r.seen_at_ms,
   }

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import type { Clip } from '@shared/types'
+import { imageFormatLabel } from '@shared/types'
 import FavouriteButton from './FavouriteButton.vue'
 import {
   checkOnYouTube,
@@ -76,7 +77,12 @@ const CODEC_LABELS: Record<string, string> = {
 
 const pending = computed(() => props.clip.probeState === 'pending')
 const failed = computed(() => props.clip.probeState === 'failed')
-const canEdit = computed(() => props.clip.probeState === 'ok' && props.clip.duration > 0)
+/** A screenshot: no quality tier, codec, audio or duration to speak of, and nothing to trim or upload. */
+const isImage = computed(() => props.clip.kind === 'image')
+const format = computed(() => (isImage.value ? imageFormatLabel(props.clip.ext, true) : ''))
+const canEdit = computed(
+  () => !isImage.value && props.clip.probeState === 'ok' && props.clip.duration > 0,
+)
 const tier = computed(() => qualityTier(props.clip))
 const codec = computed(() => {
   const c = props.clip.vcodec
@@ -226,6 +232,14 @@ function audioValue(c: Clip): string {
 const rows = computed<Row[]>(() => {
   const c = props.clip
   const dims = c.width && c.height ? `${c.width} × ${c.height}` : ''
+  if (isImage.value)
+    return [
+      { label: 'Resolution', value: dims, mono: true },
+      { label: 'Format', value: format.value },
+      { label: 'Size', value: formatBytes(c.size), mono: true },
+      { label: 'Taken', value: formatFull(c.recordedAtMs) },
+      { label: 'Game', value: c.game },
+    ]
   const fps = c.fps ? `${Math.round(c.fps)} fps` : ''
   const rate = formatBitrate(bitrate(c))
   return [
@@ -295,6 +309,7 @@ const rows = computed<Row[]>(() => {
     <div class="scroll">
       <div class="chips">
         <UBadge
+          v-if="!isImage"
           :color="tier.color"
           variant="soft"
           size="md"
@@ -303,6 +318,14 @@ const rows = computed<Row[]>(() => {
         />
         <UBadge v-if="resolution" color="neutral" variant="subtle" size="md" :label="resolution" />
         <UBadge v-if="codec" color="neutral" variant="subtle" size="md" :label="codec" />
+        <UBadge
+          v-if="format"
+          color="neutral"
+          variant="subtle"
+          size="md"
+          icon="i-lucide-image"
+          :label="format"
+        />
         <UBadge
           v-if="clip.youtubeId"
           :color="stage?.bad ? 'warning' : 'error'"
@@ -476,6 +499,7 @@ const rows = computed<Row[]>(() => {
 
     <footer class="actions">
       <UButton
+        v-if="!isImage"
         icon="i-lucide-scissors"
         :label="editing ? 'Cancel trim' : 'Trim & export'"
         :color="editing ? 'neutral' : 'primary'"
@@ -505,7 +529,10 @@ const rows = computed<Row[]>(() => {
         />
       </div>
       <div class="actions-row">
-        <UTooltip :text="clip.youtubeId ? 'Upload to YouTube again' : 'Upload to YouTube'">
+        <UTooltip
+          v-if="!isImage"
+          :text="clip.youtubeId ? 'Upload to YouTube again' : 'Upload to YouTube'"
+        >
           <UButton
             class="grow"
             icon="i-lucide-youtube"

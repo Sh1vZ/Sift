@@ -52,6 +52,7 @@ export function exportExt(sourceExt: string): string {
 /** Error message, or null when the request is fine to run. */
 export function validateExportRequest(req: ExportRequest, clip: Clip | undefined): string | null {
   if (!clip) return 'Clip not found.'
+  if (clip.kind === 'image') return 'Screenshots cannot be trimmed.'
   if (clip.probeState !== 'ok' || clip.duration <= 0)
     return 'Media info is still loading for this clip.'
   const named = sanitizeName(req.name)

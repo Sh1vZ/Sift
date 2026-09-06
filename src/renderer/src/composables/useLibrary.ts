@@ -105,7 +105,10 @@ export function scopeOf(clip: Clip): 'library' | 'clips' {
 
 export interface GameSummary {
   name: string
+  /** Everything indexed for the game, videos and screenshots together. */
   count: number
+  videoCount: number
+  imageCount: number
   cover: string
   latestMs: number
   totalDuration: number
@@ -124,6 +127,8 @@ export const games = computed<GameSummary[]>(() => {
       g = {
         name: c.game,
         count: 0,
+        videoCount: 0,
+        imageCount: 0,
         cover: '',
         latestMs: 0,
         totalDuration: 0,
@@ -137,6 +142,8 @@ export const games = computed<GameSummary[]>(() => {
     }
     g.sourceSet.add(c.sourceGame)
     g.count++
+    if (c.kind === 'image') g.imageCount++
+    else g.videoCount++
     g.totalDuration += c.duration
     g.totalSize += c.size
     if (c.recordedAtMs > g.latestMs) g.latestMs = c.recordedAtMs
@@ -184,6 +191,15 @@ export const SHARE_FILTERS: Array<{ value: ShareFilter; label: string; icon: str
   { value: 'unshared', label: 'Not shared', icon: 'i-lucide-cloud-off' },
 ]
 
+export type MediaFilter = 'all' | 'video' | 'image'
+
+/** The toolbar's segmented control: which kind of card a game's grid shows. */
+export const MEDIA_FILTERS: Array<{ value: MediaFilter; label: string; icon: string }> = [
+  { value: 'all', label: 'Videos and screenshots', icon: 'i-lucide-layers' },
+  { value: 'video', label: 'Videos only', icon: 'i-lucide-film' },
+  { value: 'image', label: 'Screenshots only', icon: 'i-lucide-image' },
+]
+
 /** Which grid a filter belongs to: a game's recordings, or the Clips view. */
 export type FilterScope = 'library' | 'clips'
 
@@ -193,6 +209,8 @@ export interface ViewFilters {
   favourites: boolean
   unwatched: boolean
   share: ShareFilter
+  /** Videos, screenshots, or both. Only a game's grid has both; the Clips view stays on 'all'. */
+  kind: MediaFilter
 }
 
 const blankFilters = (): ViewFilters => ({
@@ -200,6 +218,7 @@ const blankFilters = (): ViewFilters => ({
   favourites: false,
   unwatched: false,
   share: 'all',
+  kind: 'all',
 })
 
 /**
@@ -214,15 +233,16 @@ export const clipsFilters = reactive<ViewFilters>(blankFilters())
 export const filtersFor = (scope: FilterScope): ViewFilters =>
   scope === 'clips' ? clipsFilters : libraryFilters
 
-/** A toggle or the sharing select — not the name filter — is hiding clips. */
+/** A toggle, the sharing select or the media kind — not the name filter — is hiding clips. */
 export const isNarrowed = (f: ViewFilters): boolean =>
-  f.favourites || f.unwatched || f.share !== 'all'
+  f.favourites || f.unwatched || f.share !== 'all' || f.kind !== 'all'
 
 export function clearFilters(scope: FilterScope): void {
   const f = filtersFor(scope)
   f.favourites = false
   f.unwatched = false
   f.share = 'all'
+  f.kind = 'all'
 }
 
 /** The Clips view's order. The in-game order is a persisted setting; this one resets with the app. */
@@ -236,6 +256,7 @@ const matchesQuery = (c: Clip, q: string, qs: string): boolean =>
   !q || c.title.toLowerCase().includes(q) || squash(c.title).includes(qs)
 
 const matches = (c: Clip, f: ViewFilters, q: string, qs: string): boolean =>
+  (f.kind === 'all' || c.kind === f.kind) &&
   (f.share === 'all' || (f.share === 'shared') === Boolean(c.youtubeId)) &&
   (!f.favourites || c.favourite) &&
   (!f.unwatched || !c.seenAtMs) &&
@@ -254,6 +275,12 @@ export const visibleClips = computed<Clip[]>(() => {
 export const gameClipCount = computed<number>(() => {
   const game = selectedGame.value
   return game ? recordings.value.filter((c) => c.game === game).length : recordings.value.length
+})
+
+/** Whether the open game has any screenshots — what earns the media filter its place in the toolbar. */
+export const gameHasImages = computed<boolean>(() => {
+  const game = selectedGame.value
+  return game !== null && recordings.value.some((c) => c.game === game && c.kind === 'image')
 })
 
 export interface Section {

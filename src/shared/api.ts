@@ -32,8 +32,9 @@ export interface Api {
     removeFolder(id: string): Promise<ActionResult>
     rescan(folderId?: string): Promise<ActionResult>
     /**
-     * Deletes every cached poster and scrub strip. They are rebuilt in the
-     * background from the clips that are still probed, so the cards refill.
+     * Deletes every cached poster, scrub strip and HDR screenshot render. They
+     * are rebuilt in the background from the clips that are still probed, so
+     * the cards refill.
      */
     clearPreviews(): Promise<ActionResult & { files?: number }>
     setSettings(patch: Partial<Settings>): Promise<Settings>

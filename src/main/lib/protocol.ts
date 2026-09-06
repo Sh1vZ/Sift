@@ -18,6 +18,12 @@ const MIME: Record<string, string> = {
   '.flv': 'video/x-flv',
   '.ts': 'video/mp2t',
   '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.png': 'image/png',
+  '.bmp': 'image/bmp',
+  '.gif': 'image/gif',
+  // No `.jxr`: Chromium cannot decode one, so the viewer is handed the SDR
+  // render (a jpg in the cache) through `clip://thumb`, never the original.
   '.m4a': 'audio/mp4',
 }
 
@@ -40,9 +46,10 @@ export function registerScheme(): void {
 }
 
 /**
- * `clip://media/<clipId>` streams a library video with HTTP range support so
- * the <video> element can seek instantly. `clip://thumb/<file>` serves cached
- * posters/sprites and `clip://audio/<file>` the audio tracks pulled out of
+ * `clip://media/<clipId>` streams a library file — a video, or a screenshot
+ * for the viewer — with HTTP range support so the <video> element can seek
+ * instantly. `clip://thumb/<file>` serves cached posters, sprites and
+ * screenshot renders, and `clip://audio/<file>` the audio tracks pulled out of
  * multi-track clips. The renderer never gets to name an arbitrary path: media
  * is looked up by id, and the other two are confined to one directory each
  * with a fixed extension. Cutting a track is `clip:audio-track`'s job, not

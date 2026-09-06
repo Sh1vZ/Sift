@@ -208,7 +208,7 @@ onMounted(() => {
               id="storage-previews"
               icon="image"
               title="Preview cache"
-              :description="`${n.format(appStats.storage.cacheFiles)} poster frames and hover-scrub strips, generated once and reused.`"
+              :description="`${n.format(appStats.storage.cacheFiles)} poster frames, hover-scrub strips and HDR screenshot renders, generated once and reused.`"
               :value="formatBytes(appStats.storage.cacheBytes)"
             >
               <template #trailing>

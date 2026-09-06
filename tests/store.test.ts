@@ -49,6 +49,7 @@ const clip = (id: string): Clip => ({
   name: id,
   title: 'Valorant',
   ext: '.mp4',
+  kind: 'video',
   folderId: 'f1',
   game: 'Valorant',
   sourceGame: 'Valorant',
@@ -65,6 +66,7 @@ const clip = (id: string): Clip => ({
   thumb: '',
   sprite: '',
   spriteFrames: 0,
+  render: '',
   probeState: 'pending',
   sourceId: '',
   trimStart: 0,
@@ -271,8 +273,16 @@ async function migrationCase(): Promise<void> {
     ].every((c) => names.includes(c)),
     'migration added the YouTube processing columns',
   )
-  check(version === '9', 'schema version advanced to 9')
+  check(version === '10', 'schema version advanced to 10')
   check(names.includes('audio_tracks'), 'migration added the audio_tracks column')
+  check(
+    names.includes('kind') && names.includes('render'),
+    'migration added the media kind and render columns',
+  )
+  check(
+    store.data.clips.oc?.kind === 'video' && store.data.clips.oc?.render === '',
+    'rows from before screenshots existed read as videos with no render',
+  )
   check(
     store.data.clips.oa?.probeState === 'pending' && store.data.clips.oc?.probeState === 'ok',
     'clips with audio are re-probed for their tracks, silent ones are left alone',

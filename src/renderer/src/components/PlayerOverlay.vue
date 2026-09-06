@@ -2,8 +2,10 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { DropdownMenuItem } from '@nuxt/ui'
 import type { Clip } from '@shared/types'
+import { imageFormatLabel } from '@shared/types'
 import ElasticSlider from './bits/ElasticSlider.vue'
 import AudioMixer from './AudioMixer.vue'
+import ImageStage from './ImageStage.vue'
 import FavouriteButton from './FavouriteButton.vue'
 import PlayerDetails from './PlayerDetails.vue'
 import TrimBar from './TrimBar.vue'
@@ -100,6 +102,24 @@ const seekEl = ref<HTMLElement | null>(null)
 
 // The overlay only mounts while a clip is open.
 const clip = computed(() => current.value!)
+/**
+ * A screenshot: the stage is a picture, the chrome is a viewer's, and every
+ * playback control stands down. The <video> stays mounted underneath, hidden —
+ * the audio mixer took hold of it once at mount and keeps it for the next clip.
+ */
+const isImage = computed(() => clip.value.kind === 'image')
+// Structural rather than `InstanceType<typeof ImageStage>`: .vue modules carry
+// no types for eslint, and this is the whole of the surface the keys call.
+const imageStage = ref<{
+  zoomIn: () => void
+  zoomOut: () => void
+  fit: () => void
+  actual: () => void
+  toggleFit: () => void
+  pan: (dx: number, dy: number) => void
+  isFit: boolean
+  PAN_STEP: number
+} | null>(null)
 /** This clip's YouTube upload, live or just finished, for the banner over the stage. */
 const upload = computed(() => uploadByClip.value[clip.value.id])
 /** A slow action (delete, rename, YouTube removal) running on this clip. */
@@ -133,8 +153,17 @@ const frameReady = ref(false)
 const poster = computed(() => (clip.value.thumb ? api.thumbUrl(clip.value.thumb) : ''))
 const showPoster = computed(() => Boolean(poster.value) && (flipping.value || !frameReady.value))
 const src = computed(() =>
-  suspended.value || flipping.value ? undefined : api.mediaUrl(clip.value.id),
+  suspended.value || flipping.value || isImage.value ? undefined : api.mediaUrl(clip.value.id),
 )
+/**
+ * What the image stage shows: the SDR render of an HDR screenshot, else the
+ * original through the same door the video uses. Gated like the video's src,
+ * so the poster carries the flip and nothing decodes while the window is away.
+ */
+const imageSrc = computed(() => {
+  if (!isImage.value || suspended.value || flipping.value) return undefined
+  return clip.value.render ? api.thumbUrl(clip.value.render) : api.mediaUrl(clip.value.id)
+})
 const ratio = computed(() =>
   clip.value.width && clip.value.height ? clip.value.width / clip.value.height : 16 / 9,
 )
@@ -143,7 +172,7 @@ const meta = computed(() =>
     clip.value.game,
     formatFull(clip.value.recordedAtMs),
     formatResolution(clip.value.width, clip.value.height, clip.value.fps),
-    formatBitrate(bitrate(clip.value)),
+    isImage.value ? imageFormatLabel(clip.value.ext, true) : formatBitrate(bitrate(clip.value)),
     formatBytes(clip.value.size),
   ]
     .filter(Boolean)
@@ -204,6 +233,46 @@ const failedActions = computed(() => [
     onClick: () => revealClip(clip.value),
   },
 ])
+const failedCopy = computed(() =>
+  isImage.value
+    ? {
+        icon: 'i-lucide-image-off',
+        title: "Can't show this image",
+        text: 'The file may be damaged, or its format is not one the viewer can decode. You can still open it from Explorer.',
+      }
+    : {
+        icon: 'i-lucide-video-off',
+        title: "Can't play this file",
+        text: 'The codec may not be supported by the built-in player. You can still open it from Explorer.',
+      },
+)
+
+// ------------------------------------------------------------- viewer
+
+/** Zoom as the image bar shows it, and whether the picture is at fit. */
+const zoomPercent = ref(100)
+const zoomFit = ref(true)
+function onZoom(percent: number, atFit: boolean): void {
+  zoomPercent.value = percent
+  zoomFit.value = atFit
+}
+
+/**
+ * A screenshot counts as seen once it has been on screen a moment — opened
+ * and looked at, not stepped past on the way to another clip.
+ */
+const SEEN_AFTER_MS = 1000
+let seenTimer = 0
+function cancelDwell(): void {
+  window.clearTimeout(seenTimer)
+  seenTimer = 0
+}
+function onImageLoaded(): void {
+  frameReady.value = true
+  cancelDwell()
+  const target = clip.value
+  seenTimer = window.setTimeout(() => void markSeen(target), SEEN_AFTER_MS)
+}
 
 /**
  * Every clip action, reachable whether or not the details pane is showing.
@@ -251,7 +320,9 @@ function poke(): void {
   // Edit mode keeps the chrome up: you are working in it, not watching.
   if (editing.value) return
   hideTimer = window.setTimeout(() => {
-    if (playing.value && !seeking.value && hoverPct.value === null) controls.value = false
+    // A picture is "playing" for this purpose: the chrome gets out of its way too.
+    if ((playing.value || isImage.value) && !seeking.value && hoverPct.value === null)
+      controls.value = false
   }, 3500)
 }
 
@@ -290,6 +361,8 @@ function showFlash(icon: string): void {
 }
 
 function togglePlay(): void {
+  // A click on a picture is a click on a picture; the hidden video must not start.
+  if (isImage.value) return
   const v = video.value
   if (!v || failed.value) return
   if (v.paused) {
@@ -566,6 +639,7 @@ function toggleDetails(): void {
 function close(): void {
   if (closing.value) return
   closing.value = true
+  cancelDwell()
   video.value?.pause()
   // closePlayer is a GSAP callback, so the overlay lives on for the length of
   // the animation; without this the extra tracks play through all of it.
@@ -611,12 +685,84 @@ function remove(): void {
 
 // ------------------------------------------------------------- keyboard
 
+/**
+ * The viewer's keys. Playback keys mean nothing to a picture and fall through
+ * unhandled; the arrows pan a zoomed picture and step clips at fit, which is
+ * what a photo viewer does with them.
+ */
+function onImageKey(e: KeyboardEvent): void {
+  const stageApi = imageStage.value
+  const step = stageApi?.PAN_STEP ?? 80
+  let handled = true
+  switch (e.key) {
+    case 'Escape':
+      if (document.fullscreenElement) void document.exitFullscreen()
+      else close()
+      break
+    case 's':
+      void toggleFavourite(clip.value)
+      break
+    case 'f':
+      void toggleFullscreen()
+      break
+    case 'i':
+      toggleDetails()
+      break
+    case 'n':
+      stepClip(1)
+      break
+    case 'p':
+      stepClip(-1)
+      break
+    case '+':
+    case '=':
+      stageApi?.zoomIn()
+      break
+    case '-':
+    case '_':
+      stageApi?.zoomOut()
+      break
+    case '0':
+      stageApi?.fit()
+      break
+    case '1':
+      stageApi?.actual()
+      break
+    case ' ':
+      stageApi?.toggleFit()
+      break
+    case 'ArrowLeft':
+      if (stageApi?.isFit) stepClip(-1)
+      else stageApi?.pan(step, 0)
+      break
+    case 'ArrowRight':
+      if (stageApi?.isFit) stepClip(1)
+      else stageApi?.pan(-step, 0)
+      break
+    case 'ArrowUp':
+      if (stageApi && !stageApi.isFit) stageApi.pan(0, step)
+      else handled = false
+      break
+    case 'ArrowDown':
+      if (stageApi && !stageApi.isFit) stageApi.pan(0, -step)
+      else handled = false
+      break
+    default:
+      handled = false
+  }
+  if (handled) {
+    e.preventDefault()
+    poke()
+  }
+}
+
 function onKey(e: KeyboardEvent): void {
   // A modal owns the keyboard: the confirm/prompt host, the upload form, or the
   // shortcut list.
   if (dialog.value || uploadDialog.value || shortcutsOpen.value || searchOpen.value) return
   const tag = (e.target as HTMLElement | null)?.tagName
   if (tag === 'INPUT' || tag === 'TEXTAREA') return
+  if (isImage.value) return onImageKey(e)
   let handled = true
   switch (e.key) {
     case ' ':
@@ -766,6 +912,13 @@ watch(
     buffering.value = false
     // The poster covers the swap so stepping through clips does not flash black.
     frameReady.value = false
+    cancelDwell()
+    if (isImage.value) {
+      // Nothing plays under a picture: the previous clip's decoder goes back now
+      // rather than when the element is next given a source.
+      video.value?.pause()
+      void nextTick(() => video.value?.load())
+    }
     consumePendingEdit()
     poke()
   },
@@ -801,6 +954,8 @@ watch(windowVisible, async (vis) => {
   stopTicking()
   pauseAll()
   suspended.value = true
+  // The picture is dropped with the flag; the poster stands in until it is back.
+  if (isImage.value) frameReady.value = false
   await nextTick() // Vue removes the src attribute
   v.load() // and this is what actually releases the decoder and the buffers
   releaseAll() // same for every extra track, which Vue has just unbound too
@@ -835,6 +990,7 @@ onBeforeUnmount(() => {
   observer?.disconnect()
   window.clearTimeout(hideTimer)
   window.clearTimeout(volumeTimer)
+  cancelDwell()
   video.value?.pause()
   video.value?.removeAttribute('src')
   // Dropping the attribute alone leaves the decoder and the buffered media
@@ -852,7 +1008,8 @@ onBeforeUnmount(() => {
       'is-fullscreen': fullscreen,
       'with-details': details && !fullscreen,
       'is-editing': editing,
-      'no-cursor': !controls && playing,
+      'is-image': isImage,
+      'no-cursor': !controls && (playing || isImage),
       'controls-hidden': !controls,
     }"
     @mousemove="poke"
@@ -874,7 +1031,7 @@ onBeforeUnmount(() => {
         <p class="truncate">{{ meta }}</p>
       </div>
       <div class="actions">
-        <UTooltip :text="editHint" :kbds="['E']">
+        <UTooltip v-if="!isImage" :text="editHint" :kbds="['E']">
           <UButton
             icon="i-lucide-scissors"
             :color="editing ? 'primary' : 'neutral'"
@@ -944,7 +1101,10 @@ onBeforeUnmount(() => {
           @click="togglePlay"
           @dblclick="toggleFullscreen"
         >
+          <!-- Hidden rather than gone under a picture: the audio mixer holds
+               this element from mount, and a fresh one would leave it behind. -->
           <video
+            v-show="!isImage"
             ref="video"
             :src="src"
             :loop="loop && !editing"
@@ -962,6 +1122,22 @@ onBeforeUnmount(() => {
             @seeked="syncAll"
             @ended="onEnded"
             @error="onError"
+          />
+
+          <!-- The picture, zoomed and panned by its own transform inside the
+               stage the flip animates; the poster below still covers the swap. -->
+          <ImageStage
+            v-if="isImage"
+            ref="imageStage"
+            :src="imageSrc"
+            :width="clip.width"
+            :height="clip.height"
+            :box="stageSize"
+            :alt="clip.title"
+            @load="onImageLoaded"
+            @error="onError"
+            @zoom="onZoom"
+            @interact="poke"
           />
 
           <!-- Audio tracks the <video> element will not play: Chromium renders
@@ -1033,11 +1209,11 @@ onBeforeUnmount(() => {
             <div v-if="failed" class="veil failed" @click.stop>
               <UAlert
                 class="failed-alert"
-                icon="i-lucide-video-off"
+                :icon="failedCopy.icon"
                 color="error"
                 variant="soft"
-                title="Can't play this file"
-                description="The codec may not be supported by the built-in player. You can still open it from Explorer."
+                :title="failedCopy.title"
+                :description="failedCopy.text"
                 :actions="failedActions"
               />
             </div>
@@ -1080,7 +1256,92 @@ onBeforeUnmount(() => {
       />
     </Transition>
 
-    <div class="controls" @click.stop>
+    <!-- The viewer's bar: the picture has nothing to play, so the row is zoom
+         and the way to the next one. -->
+    <div v-if="isImage" class="controls image-bar" @click.stop>
+      <UTooltip text="Previous" :kbds="['P']">
+        <UButton
+          icon="i-lucide-skip-back"
+          color="neutral"
+          variant="ghost"
+          square
+          :disabled="!hasPrev"
+          aria-label="Previous"
+          @click="stepClip(-1)"
+        />
+      </UTooltip>
+      <div class="zoom-group">
+        <UTooltip text="Zoom out" :kbds="['-']">
+          <UButton
+            icon="i-lucide-zoom-out"
+            color="neutral"
+            variant="ghost"
+            square
+            aria-label="Zoom out"
+            @click="imageStage?.zoomOut()"
+          />
+        </UTooltip>
+        <UTooltip text="Fit to the screen" :kbds="['0']">
+          <UButton
+            class="zoom-label mono"
+            :label="`${zoomPercent}%`"
+            color="neutral"
+            variant="ghost"
+            size="md"
+            aria-label="Zoom level; press to fit the screen"
+            aria-live="polite"
+            @click="imageStage?.fit()"
+          />
+        </UTooltip>
+        <UTooltip text="Zoom in" :kbds="['+']">
+          <UButton
+            icon="i-lucide-zoom-in"
+            color="neutral"
+            variant="ghost"
+            square
+            aria-label="Zoom in"
+            @click="imageStage?.zoomIn()"
+          />
+        </UTooltip>
+        <UTooltip :text="zoomFit ? 'Actual size' : 'Fit to the screen'" :kbds="['Space']">
+          <UButton
+            :icon="zoomFit ? 'i-lucide-expand' : 'i-lucide-shrink'"
+            :label="zoomFit ? '1:1' : 'Fit'"
+            color="neutral"
+            variant="subtle"
+            size="md"
+            :aria-label="zoomFit ? 'Show at actual size' : 'Fit to the screen'"
+            @click="imageStage?.toggleFit()"
+          />
+        </UTooltip>
+      </div>
+      <div class="group">
+        <FavouriteButton :clip="clip" />
+        <UTooltip :text="fullscreen ? 'Exit fullscreen' : 'Fullscreen'" :kbds="['F']">
+          <UButton
+            :icon="fullscreen ? 'i-lucide-minimize' : 'i-lucide-maximize'"
+            color="neutral"
+            variant="ghost"
+            square
+            aria-label="Toggle fullscreen"
+            @click="toggleFullscreen"
+          />
+        </UTooltip>
+        <UTooltip text="Next" :kbds="['N']">
+          <UButton
+            icon="i-lucide-skip-forward"
+            color="neutral"
+            variant="ghost"
+            square
+            :disabled="!hasNext"
+            aria-label="Next"
+            @click="stepClip(1)"
+          />
+        </UTooltip>
+      </div>
+    </div>
+
+    <div v-else class="controls" @click.stop>
       <!-- Both timelines share one box, anchored to the same baseline: its height
            animates between them while they cross-fade in place, so entering and
            leaving edit mode reads as one move rather than a swap. -->
@@ -1384,6 +1645,10 @@ onBeforeUnmount(() => {
 }
 .player.is-editing {
   --controls-h: 252px;
+}
+/* One row of buttons, no timeline: the picture gets the height back. */
+.player.is-image {
+  --controls-h: 84px;
 }
 /* Near the 980px minimum window the pane gives width back so the video keeps
    the larger share of the screen. */
@@ -1861,6 +2126,25 @@ onBeforeUnmount(() => {
 .rate {
   /* Fixed width so cycling 1× → 1.25× does not shuffle the controls beside it. */
   min-width: 52px;
+  justify-content: center;
+  text-transform: none;
+}
+
+/* The viewer's bar: previous on the left, next on the right, zoom between. */
+.image-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-4);
+}
+.zoom-group {
+  display: flex;
+  align-items: center;
+  gap: var(--s-1);
+}
+/* Fixed width so 100% → 1000% does not shuffle the buttons beside it. */
+.zoom-label {
+  min-width: 68px;
   justify-content: center;
   text-transform: none;
 }

@@ -5,7 +5,9 @@ import type { GridSize, GroupBy, SortBy } from '@shared/types'
 import {
   exportSort,
   filtersFor,
+  gameHasImages,
   gridGroupBy,
+  MEDIA_FILTERS,
   settings,
   SHARE_FILTERS,
   updateSettings,
@@ -170,6 +172,27 @@ defineExpose({ focus })
       :aria-pressed="filters.unwatched"
       @click="filters.unwatched = !filters.unwatched"
     />
+
+    <!-- Only where there is a choice to make: a game with no screenshots keeps
+         the row it always had, and a filter already set is never hidden from
+         the person who set it. -->
+    <UFieldGroup
+      v-if="scope === 'library' && (gameHasImages || filters.kind !== 'all')"
+      role="group"
+      aria-label="Show videos, screenshots or both"
+    >
+      <UTooltip v-for="m in MEDIA_FILTERS" :key="m.value" :text="m.label">
+        <UButton
+          :icon="m.icon"
+          :color="filters.kind === m.value ? 'primary' : 'neutral'"
+          :variant="filters.kind === m.value ? 'soft' : 'subtle'"
+          square
+          :aria-label="m.label"
+          :aria-pressed="filters.kind === m.value"
+          @click="filters.kind = m.value"
+        />
+      </UTooltip>
+    </UFieldGroup>
 
     <USelect
       v-model="sortModel"

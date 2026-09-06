@@ -62,12 +62,13 @@ export async function renameClipDialog(clip: Clip): Promise<Clip | null> {
 }
 
 export async function deleteClipDialog(clip: Clip, before?: () => void): Promise<boolean> {
+  const image = clip.kind === 'image'
   const choice = await confirmWithAlt({
-    title: 'Delete this clip?',
+    title: image ? 'Delete this screenshot?' : 'Delete this clip?',
     message:
       'It goes to the Recycle Bin, so you can still restore it from there. Deleting permanently erases the file from disk right away.',
     detail: clip.name + clip.ext,
-    detailIcon: 'i-lucide-file-video',
+    detailIcon: image ? 'i-lucide-file-image' : 'i-lucide-file-video',
     confirmLabel: 'Delete',
     danger: true,
     alt: { label: 'Delete permanently', danger: true },
@@ -106,17 +107,21 @@ export function clipMenuItems(clip: Clip, opts: ClipMenuOptions): ClipMenuItem[]
   }
   const from = opts.variant === 'export' ? 'clips' : 'library'
   const rect = (): Rect | null => opts.rectOf?.(clip) ?? null
+  // A screenshot is looked at, not played, and has nothing to trim.
+  const image = clip.kind === 'image'
   const main: ClipMenuItem[] = opts.omitOpen
     ? []
-    : [
-        { label: 'Play', icon: 'i-lucide-play', onSelect: () => openClip(clip, rect(), from) },
-        {
-          label: 'Trim & export',
-          icon: 'i-lucide-scissors',
-          disabled: clip.probeState !== 'ok' || !clip.duration,
-          onSelect: () => openClip(clip, rect(), from, true),
-        },
-      ]
+    : image
+      ? [{ label: 'View', icon: 'i-lucide-image', onSelect: () => openClip(clip, rect(), from) }]
+      : [
+          { label: 'Play', icon: 'i-lucide-play', onSelect: () => openClip(clip, rect(), from) },
+          {
+            label: 'Trim & export',
+            icon: 'i-lucide-scissors',
+            disabled: clip.probeState !== 'ok' || !clip.duration,
+            onSelect: () => openClip(clip, rect(), from, true),
+          },
+        ]
   if (opts.variant === 'export') {
     main.push(
       {
@@ -137,10 +142,17 @@ export function clipMenuItems(clip: Clip, opts: ClipMenuOptions): ClipMenuItem[]
   // collide with it wait until it lands.
   const busy = Boolean(pendingByClip.value[clip.id])
   main.push(
-    // The watched flag is set for you at 90 % of playback; this is the override
-    // for a clip you skimmed, or one you want back in the unwatched list.
+    // The watched flag is set for you at 90 % of playback (on opening, for a
+    // screenshot); this is the override for a clip you skimmed, or one you
+    // want back in the unwatched list.
     {
-      label: clip.seenAtMs ? 'Mark as unwatched' : 'Mark as watched',
+      label: clip.seenAtMs
+        ? image
+          ? 'Mark as unviewed'
+          : 'Mark as unwatched'
+        : image
+          ? 'Mark as viewed'
+          : 'Mark as watched',
       icon: clip.seenAtMs ? 'i-lucide-eye-off' : 'i-lucide-eye',
       onSelect: () => void markSeen(clip, !clip.seenAtMs),
     },
@@ -163,25 +175,28 @@ export function clipMenuItems(clip: Clip, opts: ClipMenuOptions): ClipMenuItem[]
     },
   )
   // Sharing gets its own group: a live upload swaps the entry for its Cancel.
+  // YouTube takes videos only, so a screenshot has no group at all.
   const up = uploadByClip.value[clip.id]
   const uploading = Boolean(up && (up.state === 'queued' || up.state === 'uploading'))
-  const share: ClipMenuItem[] = uploading
-    ? [
-        {
-          label: 'Cancel upload',
-          icon: 'i-lucide-x',
-          color: 'error',
-          onSelect: () => void cancelUpload(up.id),
-        },
-      ]
-    : [
-        {
-          label: clip.youtubeId ? 'Upload again' : 'Upload to YouTube',
-          icon: 'i-lucide-youtube',
-          disabled: clip.probeState !== 'ok' || busy,
-          onSelect: () => openUploadDialog(clip),
-        },
-      ]
+  const share: ClipMenuItem[] = image
+    ? []
+    : uploading
+      ? [
+          {
+            label: 'Cancel upload',
+            icon: 'i-lucide-x',
+            color: 'error',
+            onSelect: () => void cancelUpload(up.id),
+          },
+        ]
+      : [
+          {
+            label: clip.youtubeId ? 'Upload again' : 'Upload to YouTube',
+            icon: 'i-lucide-youtube',
+            disabled: clip.probeState !== 'ok' || busy,
+            onSelect: () => openUploadDialog(clip),
+          },
+        ]
   if (clip.youtubeId && !uploading) {
     share.push(
       {
@@ -203,17 +218,15 @@ export function clipMenuItems(clip: Clip, opts: ClipMenuOptions): ClipMenuItem[]
       },
     )
   }
-  return [
-    main,
-    share,
-    [
-      {
-        label: 'Delete',
-        icon: 'i-lucide-trash-2',
-        color: 'error',
-        disabled: busy,
-        onSelect: () => void deleteClipDialog(clip, opts.beforeDelete),
-      },
-    ],
+  const danger: ClipMenuItem[] = [
+    {
+      label: 'Delete',
+      icon: 'i-lucide-trash-2',
+      color: 'error',
+      disabled: busy,
+      onSelect: () => void deleteClipDialog(clip, opts.beforeDelete),
+    },
   ]
+  // An empty group would still draw its separator.
+  return [main, share, danger].filter((group) => group.length)
 }

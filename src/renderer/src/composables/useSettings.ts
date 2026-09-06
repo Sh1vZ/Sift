@@ -197,6 +197,12 @@ export const SETTINGS_ROWS: SettingsRowIndex[] = [
     keywords: 'new recordings automatically watcher live',
   },
   {
+    id: 'index-screenshots',
+    tab: 'indexing',
+    label: 'Index screenshots',
+    keywords: 'png jpg bmp gif jxr hdr images captures photos stills pictures',
+  },
+  {
     id: 'generate-previews',
     tab: 'indexing',
     label: 'Generate previews',

@@ -5,7 +5,7 @@ import SettingsPanel from './SettingsPanel.vue'
 import SettingsRow from './SettingsRow.vue'
 import { allClips, folders, scan, settings, updateSettings } from '@/composables/useLibrary'
 
-type ToggleKey = keyof Pick<Settings, 'watchFolders' | 'generateThumbnails'>
+type ToggleKey = keyof Pick<Settings, 'watchFolders' | 'indexScreenshots' | 'generateThumbnails'>
 
 const toggles: Array<{
   key: ToggleKey
@@ -23,9 +23,17 @@ const toggles: Array<{
       'Pick up new recordings the moment they finish writing. Uses a lightweight OS file watcher.',
   },
   {
+    key: 'indexScreenshots',
+    id: 'index-screenshots',
+    icon: 'image',
+    title: 'Index screenshots',
+    description:
+      'PNG, JPG, BMP and GIF captures beside your recordings, in the same grids. HDR screenshots (.jxr) are tone-mapped once and kept in the preview cache.',
+  },
+  {
     key: 'generateThumbnails',
     id: 'generate-previews',
-    icon: 'image',
+    icon: 'sparkles',
     title: 'Generate previews',
     description:
       'Poster frames and hover-scrub strips, rendered once by ffmpeg at low CPU priority and kept in the preview cache.',

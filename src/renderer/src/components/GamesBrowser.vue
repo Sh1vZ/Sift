@@ -32,6 +32,15 @@ const api = window.api
 const keyOf = (g: GameSummary): string => g.name
 const open = (g: GameSummary): void => openGame(g.name)
 
+/** "12 clips · 5 screenshots": each kind in its own words, and only the kinds the game has. */
+function countLabel(g: GameSummary): string {
+  const parts: string[] = []
+  if (g.videoCount || !g.imageCount)
+    parts.push(`${g.videoCount} clip${g.videoCount === 1 ? '' : 's'}`)
+  if (g.imageCount) parts.push(`${g.imageCount} screenshot${g.imageCount === 1 ? '' : 's'}`)
+  return parts.join(' · ')
+}
+
 /** A game's actions: what you can do to it without stepping in. */
 function gameMenu(g: GameSummary, targets: GameSummary[]) {
   const newest = newestClipOf(g.name)
@@ -211,18 +220,16 @@ const menuOpen = ref(false)
                   <span class="text">
                     <span class="name truncate">{{ g.name }}</span>
                     <span class="stats">
-                      <UBadge
-                        color="primary"
-                        variant="soft"
-                        size="md"
-                        :label="`${g.count} clip${g.count === 1 ? '' : 's'}`"
-                      />
-                      <span class="mono">{{ formatDuration(g.totalDuration) }}</span>
-                      <span class="dot">·</span>
+                      <UBadge color="primary" variant="soft" size="md" :label="countLabel(g)" />
+                      <!-- A game of screenshots alone has no playtime to show. -->
+                      <template v-if="g.totalDuration">
+                        <span class="mono">{{ formatDuration(g.totalDuration) }}</span>
+                        <span class="dot">·</span>
+                      </template>
                       <span>{{ formatBytes(g.totalSize) }}</span>
                     </span>
                     <span class="last truncate"
-                      >Last clip {{ formatRelative(g.latestMs, now).toLowerCase() }}</span
+                      >Last capture {{ formatRelative(g.latestMs, now).toLowerCase() }}</span
                     >
                   </span>
                   <Icon name="chevron-right" :size="20" class="chev" />

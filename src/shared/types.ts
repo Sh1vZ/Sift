@@ -5,6 +5,9 @@ import type { UploadJob, VideoStage, YouTubeState } from './youtube'
 
 export type ProbeState = 'pending' | 'ok' | 'failed'
 
+/** What a library record is: a recording you play, or a screenshot you look at. */
+export type MediaKind = 'video' | 'image'
+
 /**
  * One audio stream inside a clip. ShadowPlay and OBS write game audio and mic
  * as separate streams, and Chromium only ever renders one of them, so the
@@ -35,6 +38,12 @@ export interface Clip {
   /** Cleaned-up display title (ShadowPlay date/DVR noise stripped). */
   title: string
   ext: string
+  /**
+   * Video or still. Decides the card, the viewer and the actions offered: a
+   * screenshot has no duration, no audio, no scrub strip, and cannot be trimmed
+   * or uploaded. Every media field below is zero or empty for one.
+   */
+  kind: MediaKind
   folderId: string
   /** Group the clip belongs to — the game, as the app shows it. */
   game: string
@@ -59,6 +68,12 @@ export interface Clip {
   thumb: string
   sprite: string
   spriteFrames: number
+  /**
+   * Cache file name of the SDR copy Sift made of an HDR screenshot (.jxr),
+   * which Chromium cannot decode itself; the viewer shows this instead of the
+   * original. '' for every other file, whose original is shown as it is.
+   */
+  render: string
   probeState: ProbeState
   /** Id of the recording this clip was exported from; '' for recordings and foreign files. */
   sourceId: string
@@ -247,6 +262,11 @@ export interface Settings {
    */
   audioTrackNames: string[]
   gridSize: GridSize
+  /**
+   * Index screenshots found beside the recordings (see `IMAGE_EXTENSIONS`).
+   * Off leaves the game folders' stills out of the library entirely.
+   */
+  indexScreenshots: boolean
   /** Whether the player opens with its details pane showing. */
   detailsPane: boolean
   /** Open the player straight into trim mode whenever the clip can be trimmed. */
@@ -329,7 +349,7 @@ export interface StorageStats {
   userDataPath: string
   /** library.db plus its -wal / -shm sidecars. */
   databaseBytes: number
-  /** Poster frames and hover-scrub strips. */
+  /** Poster frames, hover-scrub strips and HDR screenshot renders. */
   cacheBytes: number
   cacheFiles: number
   /** Everything else Electron keeps there: GPU cache, logs, local storage. */
@@ -467,6 +487,51 @@ export const VIDEO_EXTENSIONS = [
   '.ts',
 ] as const
 
+/**
+ * Stills the scanner picks up beside the recordings when the setting allows.
+ * ShadowPlay saves its screenshots into the same game folders as its clips:
+ * PNG or JPG for SDR, and `.jxr` (JPEG XR) when the game runs in HDR — that
+ * one Chromium cannot decode, so main renders an SDR copy of it (see
+ * `Clip.render`). Not webp: nothing the user's tools write.
+ */
+export const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.bmp', '.gif', '.jxr'] as const
+
+const VIDEO_EXT_SET: ReadonlySet<string> = new Set(VIDEO_EXTENSIONS)
+const IMAGE_EXT_SET: ReadonlySet<string> = new Set(IMAGE_EXTENSIONS)
+
+/** Which kind of record a file extension makes; null for a file Sift does not index. */
+export function mediaKindOf(ext: string): MediaKind | null {
+  const e = ext.toLowerCase()
+  if (VIDEO_EXT_SET.has(e)) return 'video'
+  if (IMAGE_EXT_SET.has(e)) return 'image'
+  return null
+}
+
+/** True for the one format whose original the app never shows: it is rendered first. */
+export function isHdrImage(ext: string): boolean {
+  return ext.toLowerCase() === '.jxr'
+}
+
+const IMAGE_FORMAT_LABELS: Record<string, { short: string; long: string }> = {
+  '.png': { short: 'PNG', long: 'PNG' },
+  '.jpg': { short: 'JPG', long: 'JPEG' },
+  '.jpeg': { short: 'JPG', long: 'JPEG' },
+  '.bmp': { short: 'BMP', long: 'BMP' },
+  '.gif': { short: 'GIF', long: 'GIF' },
+  '.jxr': { short: 'HDR', long: 'JPEG XR · HDR' },
+}
+
+/**
+ * What a screenshot is, in the words a card badge (`short`) or a details row
+ * (`long`) uses. The card says "HDR" rather than "JXR" because that is what
+ * the format means to the person who took the shot.
+ */
+export function imageFormatLabel(ext: string, long = false): string {
+  const entry = IMAGE_FORMAT_LABELS[ext.toLowerCase()]
+  if (!entry) return ext.replace(/^\./, '').toUpperCase()
+  return long ? entry.long : entry.short
+}
+
 export const DEFAULT_SETTINGS: Settings = {
   watchFolders: true,
   generateThumbnails: true,
@@ -478,6 +543,7 @@ export const DEFAULT_SETTINGS: Settings = {
   defaultAudioTrack: -1,
   audioTrackNames: [],
   gridSize: 'large',
+  indexScreenshots: true,
   detailsPane: true,
   editOnOpen: true,
   sort: 'newest',

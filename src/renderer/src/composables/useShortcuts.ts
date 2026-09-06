@@ -81,6 +81,22 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
     ],
   },
   {
+    title: 'Screenshots',
+    rows: [
+      { chords: [['+'], ['-']], label: 'Zoom in / out' },
+      { chords: [['0']], label: 'Fit to the screen' },
+      { chords: [['1']], label: 'Actual size' },
+      { chords: [['Space']], label: 'Fit ⇄ actual size' },
+      { chords: [['arrowleft'], ['arrowright']], label: 'Previous / next; pan when zoomed in' },
+      { chords: [['arrowup'], ['arrowdown']], label: 'Pan when zoomed in' },
+      { chords: [['N'], ['P']], label: 'Next / previous' },
+      { chords: [['S']], label: 'Favourite' },
+      { chords: [['F']], label: 'Fullscreen' },
+      { chords: [['I']], label: 'Details pane' },
+      { chords: [['escape']], label: 'Back' },
+    ],
+  },
+  {
     title: 'Edit mode',
     rows: [
       { chords: [['['], [']']], label: 'Set start / end to the playhead' },

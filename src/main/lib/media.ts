@@ -1,8 +1,11 @@
 import { spawn, type ChildProcess } from 'node:child_process'
 import { access, readdir, rename as fsRename, unlink } from 'node:fs/promises'
 import { cpus, constants as osConstants, setPriority } from 'node:os'
-import { extname, join } from 'node:path'
+import { basename, dirname, extname, join } from 'node:path'
+import { Worker } from 'node:worker_threads'
 import type { AudioTrack, Clip, ClipPatch } from '@shared/types'
+import { jxrTuning } from './jxr'
+import jxrWorkerPath from './jxr.worker?modulePath'
 import { FFMPEG, FFPROBE, audioDir, cacheDir } from './paths'
 
 export const SPRITE_FRAMES = 10
@@ -55,6 +58,13 @@ export interface Artifacts {
   spriteFrames: number
 }
 
+/** What the JPEG XR helper hands back: the render's cache name and the size it read. */
+export interface JxrRender {
+  render: string
+  width: number
+  height: number
+}
+
 function lowerPriority(pid: number | undefined): void {
   if (!pid) return
   try {
@@ -66,16 +76,36 @@ function lowerPriority(pid: number | undefined): void {
 
 /** Every live ffmpeg/ffprobe child, so shutdown can kill them instead of orphaning them. */
 const active = new Set<ChildProcess>()
+/** Every live JPEG XR decode thread, for the same reason. */
+const workers = new Set<Worker>()
 
-function run(bin: string, args: string[]): Promise<{ code: number; stdout: string }> {
+function run(
+  bin: string,
+  args: string[],
+  /** `input` is written to the child's stdin and closed, for ffmpeg's `pipe:0`. */
+  opts: { input?: Uint8Array } = {},
+): Promise<{ code: number; stdout: string; stderrTail: string }> {
   return new Promise((resolve, reject) => {
-    const child = spawn(bin, args, { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] })
+    const child = spawn(bin, args, {
+      windowsHide: true,
+      stdio: [opts.input ? 'pipe' : 'ignore', 'pipe', 'pipe'],
+    })
     active.add(child)
     lowerPriority(child.pid)
+    if (opts.input && child.stdin) {
+      // A child that quits early closes the pipe under the write; its exit code
+      // tells that story, so the write error itself is not one.
+      child.stdin.on('error', () => undefined)
+      child.stdin.end(opts.input)
+    }
     let stdout = ''
+    // Only the end of stderr is kept, for the message a failure is reported with.
+    let stderrTail = ''
     const timer = setTimeout(() => child.kill(), JOB_TIMEOUT_MS)
-    child.stdout.on('data', (d) => (stdout += d))
-    child.stderr.on('data', () => undefined)
+    child.stdout?.on('data', (d) => (stdout += d))
+    child.stderr?.on('data', (d: Buffer) => {
+      stderrTail = (stderrTail + d.toString()).slice(-2048)
+    })
     child.on('error', (err) => {
       clearTimeout(timer)
       active.delete(child)
@@ -84,7 +114,7 @@ function run(bin: string, args: string[]): Promise<{ code: number; stdout: strin
     child.on('close', (code) => {
       clearTimeout(timer)
       active.delete(child)
-      resolve({ code: code ?? -1, stdout })
+      resolve({ code: code ?? -1, stdout, stderrTail: stderrTail.trim() })
     })
   })
 }
@@ -92,6 +122,8 @@ function run(bin: string, args: string[]): Promise<{ code: number; stdout: strin
 export function killActiveJobs(): void {
   for (const child of active) child.kill()
   active.clear()
+  for (const worker of workers) void worker.terminate()
+  workers.clear()
 }
 
 export interface LongJobOptions {
@@ -334,12 +366,17 @@ export function thumbName(clip: Clip): string {
 export function spriteName(clip: Clip): string {
   return `${clip.id}-${Math.round(clip.mtimeMs)}-v${ARTIFACT_VERSION}.sprite.jpg`
 }
+/** The SDR copy of an HDR screenshot. A jpg in the cache, so `clip://thumb` can serve it. */
+export function renderName(clip: Clip): string {
+  return `${clip.id}-${Math.round(clip.mtimeMs)}-v${ARTIFACT_VERSION}.render.jpg`
+}
 
 /** Cached under a name this build would not write: the frames in it are not the ones it wants. */
 export function artifactsStale(clip: Clip): boolean {
   return Boolean(
     (clip.thumb && clip.thumb !== thumbName(clip)) ||
-    (clip.sprite && clip.sprite !== spriteName(clip)),
+    (clip.sprite && clip.sprite !== spriteName(clip)) ||
+    (clip.render && clip.render !== renderName(clip)),
   )
 }
 
@@ -452,6 +489,146 @@ export async function makeArtifacts(clip: Clip, duration: number): Promise<Artif
 }
 
 /**
+ * Size of a still, by the same ffprobe call the videos get. A screenshot is
+ * a one-frame "video stream" to it — and, for a GIF, a many-frame one with a
+ * duration and a frame rate the caller must not take for a clip's.
+ */
+export async function probeImage(filePath: string): Promise<{ width: number; height: number }> {
+  const info = await probe(filePath)
+  if (!info.width || !info.height) throw new Error('No image dimensions found')
+  return { width: info.width, height: info.height }
+}
+
+/**
+ * The card poster for a screenshot: one scaled frame, so a GIF's is its first.
+ * `source` is the file to read — the original, or for an HDR screenshot the
+ * SDR render, since ffmpeg cannot open the original. No scrub strip: there is
+ * nothing to scrub through.
+ */
+export async function makeImageThumb(clip: Clip, source = clip.path): Promise<{ thumb: string }> {
+  const thumb = thumbName(clip)
+  const thumbPath = join(cacheDir(), thumb)
+  if (await exists(thumbPath)) return { thumb }
+  const { code } = await run(FFMPEG, [
+    '-y',
+    '-v',
+    'error',
+    '-threads',
+    '1',
+    '-i',
+    source,
+    '-vf',
+    `scale=${THUMB_WIDTH}:-2:flags=${SCALE_FLAGS}`,
+    '-frames:v',
+    '1',
+    '-q:v',
+    '4',
+    thumbPath,
+  ])
+  if (code !== 0) {
+    await unlink(thumbPath).catch(() => undefined)
+    throw new Error(`ffmpeg image thumb exited with ${code}`)
+  }
+  return { thumb }
+}
+
+/** Quality of the full-size render on ffmpeg's 2–31 mjpeg scale (lower is better): it is the whole picture the viewer shows. */
+const RENDER_QUALITY = 3
+
+interface DecodedRgb {
+  width: number
+  height: number
+  /** Packed 8-bit RGB, already tone mapped. */
+  rgb: Uint8Array
+}
+
+/**
+ * Decodes and tone maps one HDR screenshot on a worker thread
+ * (lib/jxr.worker.ts). One worker per file: a fresh WebAssembly heap each
+ * time, gone with the thread, and the queue already bounds how many run at
+ * once. The job timeout applies as it does to a child process.
+ */
+function decodeJxr(path: string): Promise<DecodedRgb> {
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(jxrWorkerPath, { workerData: { path, tuning: jxrTuning() } })
+    workers.add(worker)
+    let settled = false
+    const finish = (outcome: () => void): void => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      workers.delete(worker)
+      outcome()
+      void worker.terminate()
+    }
+    const timer = setTimeout(
+      () => finish(() => reject(new Error('JPEG XR decode timed out'))),
+      JOB_TIMEOUT_MS,
+    )
+    worker.once('message', (msg: DecodedRgb | { error: string }) =>
+      finish(() => ('error' in msg ? reject(new Error(msg.error)) : resolve(msg))),
+    )
+    worker.once('error', (err: unknown) =>
+      finish(() => reject(err instanceof Error ? err : new Error(String(err)))),
+    )
+    worker.once('exit', (code) =>
+      finish(() => reject(new Error(`JPEG XR worker exited with ${code}`))),
+    )
+  })
+}
+
+/** Writes packed RGB as a JPEG through the bundled ffmpeg — to a temp name first, so a cache hit is never half a file. */
+async function encodeRgbJpeg(image: DecodedRgb, out: string): Promise<void> {
+  const temp = join(dirname(out), `~${basename(out)}`)
+  const { code } = await run(
+    FFMPEG,
+    [
+      '-y',
+      '-v',
+      'error',
+      '-threads',
+      '1',
+      '-f',
+      'rawvideo',
+      '-pix_fmt',
+      'rgb24',
+      '-video_size',
+      `${image.width}x${image.height}`,
+      '-i',
+      'pipe:0',
+      '-frames:v',
+      '1',
+      '-q:v',
+      String(RENDER_QUALITY),
+      temp,
+    ],
+    { input: image.rgb },
+  )
+  if (code !== 0) {
+    await unlink(temp).catch(() => undefined)
+    throw new Error(`ffmpeg render exited with ${code}`)
+  }
+  await fsRename(temp, out)
+}
+
+/**
+ * The SDR copy of an HDR screenshot, made once. Doubles as the probe: ffprobe
+ * cannot read the file, and the decode reports the size.
+ */
+export async function makeJxrRender(
+  clip: Clip,
+  /** The size from an earlier decode: with it, a render already on disk is not made twice. */
+  known?: { width: number; height: number },
+): Promise<JxrRender> {
+  const render = renderName(clip)
+  const out = join(cacheDir(), render)
+  if (known && (await exists(out))) return { render, ...known }
+  const image = await decodeJxr(clip.path)
+  await encodeRgbJpeg(image, out)
+  return { render, width: image.width, height: image.height }
+}
+
+/**
  * Name of the cached extraction for one audio track. Carries the mtime for the
  * same reason the poster does: a re-recorded file must never hit a stale cache.
  */
@@ -524,8 +701,10 @@ export async function removeAudioTracks(clipId: string): Promise<void> {
   }
 }
 
-export async function removeArtifacts(clip: Pick<Clip, 'thumb' | 'sprite'>): Promise<void> {
-  for (const f of [clip.thumb, clip.sprite]) {
+export async function removeArtifacts(
+  clip: Pick<Clip, 'thumb' | 'sprite'> & { render?: string },
+): Promise<void> {
+  for (const f of [clip.thumb, clip.sprite, clip.render ?? '']) {
     if (!f) continue
     await unlink(join(cacheDir(), f)).catch(() => undefined)
   }

@@ -68,6 +68,7 @@ export function registerIpc(
     if (p.autoCheckUpdates !== undefined) p.autoCheckUpdates = p.autoCheckUpdates === true
     if (p.sidebarCollapsed !== undefined) p.sidebarCollapsed = p.sidebarCollapsed === true
     if (p.youtubeCheckStatus !== undefined) p.youtubeCheckStatus = p.youtubeCheckStatus === true
+    if (p.indexScreenshots !== undefined) p.indexScreenshots = p.indexScreenshots === true
     if (p.lastSeenVersion !== undefined) p.lastSeenVersion = str(p.lastSeenVersion)
     // -1 is "leave every track audible"; anything below that is not a track.
     // Capped both ways: these are labels for a handful of streams, not storage.

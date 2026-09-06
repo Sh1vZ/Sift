@@ -114,7 +114,7 @@ const poster = (c: Clip): string => (c.thumb ? api.thumbUrl(c.thumb) : '')
           >
             <span class="thumb">
               <img v-if="poster(c)" :src="poster(c)" alt="" loading="lazy" decoding="async" />
-              <Icon v-else name="film" :size="16" :stroke="1.6" />
+              <Icon v-else :name="c.kind === 'image' ? 'image' : 'film'" :size="16" :stroke="1.6" />
               <span v-if="c.duration" class="len mono">{{ formatDuration(c.duration) }}</span>
             </span>
             <span class="text">

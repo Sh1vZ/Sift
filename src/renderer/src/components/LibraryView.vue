@@ -53,10 +53,20 @@ const filters = libraryFilters
 // Filter/sort/group/size changes restart the grid from the top with a stagger.
 const gridResetKey = computed(
   () =>
-    `${selectedGame.value}|${settings.value.sort}|${settings.value.groupBy}|${settings.value.gridSize}|${filters.share}|${filters.favourites}|${filters.unwatched}|${filters.query}`,
+    `${selectedGame.value}|${settings.value.sort}|${settings.value.groupBy}|${settings.value.gridSize}|${filters.share}|${filters.kind}|${filters.favourites}|${filters.unwatched}|${filters.query}`,
 )
 /** A filter is hiding some of this game's clips. */
 const narrowed = computed(() => inGame.value && libraryStats.value.count !== gameClipCount.value)
+/** The home screen's count line: recordings and screenshots in their own words. */
+const libraryKinds = computed(() => {
+  let videos = 0
+  let images = 0
+  for (const c of recordings.value) {
+    if (c.kind === 'image') images++
+    else videos++
+  }
+  return { videos, images }
+})
 /** The games search is hiding some games. */
 const gamesNarrowed = computed(() => filteredGames.value.length !== games.value.length)
 
@@ -68,12 +78,28 @@ const gameSortOptions: Array<{ label: string; value: GameSort; icon: string }> =
 
 /** Names whichever filter emptied the grid, so the empty state is actionable. */
 const filteredTitle = computed(() => {
-  if (filters.favourites && filters.unwatched) return 'No unwatched favourites in this game'
-  if (filters.favourites) return 'Nothing from this game is a favourite yet'
-  if (filters.unwatched) return "You've watched everything in this game"
-  return filters.share === 'shared'
-    ? 'Nothing from this game is on YouTube yet'
-    : 'Every clip of this game is on YouTube'
+  // The media filter changes the noun; the toggles say the rest.
+  const kind = filters.kind
+  const plural = kind === 'image' ? 'screenshots' : kind === 'video' ? 'videos' : 'clips'
+  if (filters.favourites && filters.unwatched)
+    return kind === 'all'
+      ? 'No unwatched favourites in this game'
+      : `No unwatched favourite ${plural} in this game`
+  if (filters.favourites)
+    return kind === 'all'
+      ? 'Nothing from this game is a favourite yet'
+      : `No favourite ${plural} from this game yet`
+  if (filters.unwatched) {
+    if (kind === 'image') return "You've seen every screenshot of this game"
+    if (kind === 'video') return "You've watched every video of this game"
+    return "You've watched everything in this game"
+  }
+  if (filters.share === 'shared') return 'Nothing from this game is on YouTube yet'
+  if (filters.share === 'unshared')
+    return kind === 'all'
+      ? 'Every clip of this game is on YouTube'
+      : `Every video of this game is on YouTube`
+  return kind === 'image' ? 'No screenshots of this game yet' : 'No videos of this game yet'
 })
 
 /** Library-level actions rare enough to sit behind one button beside Add folder. */
@@ -207,12 +233,18 @@ const { dropping } = useFolderDrop(stageEl, () => !inGame.value)
                   <span>
                     <CountUp
                       v-if="motionEnabled"
-                      :to="recordings.length"
+                      :to="libraryKinds.videos"
                       :duration="0.9"
-                    /><template v-else>{{ recordings.length }}</template> clip{{
-                      recordings.length === 1 ? '' : 's'
+                    /><template v-else>{{ libraryKinds.videos }}</template> clip{{
+                      libraryKinds.videos === 1 ? '' : 's'
                     }}
                   </span>
+                  <template v-if="libraryKinds.images">
+                    <span class="dot">·</span>
+                    <span>
+                      {{ libraryKinds.images }} screenshot{{ libraryKinds.images === 1 ? '' : 's' }}
+                    </span>
+                  </template>
                 </p>
                 <p v-else key="none" class="stats">No games yet</p>
               </Transition>
@@ -355,9 +387,12 @@ const { dropping } = useFolderDrop(stageEl, () => !inGame.value)
           icon="i-lucide-filter-x"
           :title="filteredTitle"
           :description="
-            filters.favourites || filters.unwatched
-              ? 'Clear the filter to see the rest of this game.'
-              : 'The sharing filter is hiding the rest.'
+            filters.share !== 'all' &&
+            !filters.favourites &&
+            !filters.unwatched &&
+            filters.kind === 'all'
+              ? 'The sharing filter is hiding the rest.'
+              : 'Clear the filter to see the rest of this game.'
           "
         >
           <template #actions>

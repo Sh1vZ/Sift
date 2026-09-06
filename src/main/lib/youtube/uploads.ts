@@ -95,6 +95,7 @@ export class YouTubeUploads {
     if (invalid) return { ok: false, error: invalid }
     const clip = this.deps.getClip(req.clipId)
     if (!clip) return { ok: false, error: 'Clip not found.' }
+    if (clip.kind === 'image') return { ok: false, error: 'YouTube takes videos, not screenshots.' }
     if (clip.probeState !== 'ok')
       return { ok: false, error: 'This clip has not been read yet. Try again in a moment.' }
     if (!existsSync(clip.path)) return { ok: false, error: 'The file is no longer on disk.' }
