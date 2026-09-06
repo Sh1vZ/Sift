@@ -7,6 +7,20 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 uses [semantic versioning](https://semver.org/spec/v2.0.0.html) — beta builds carry a
 `-beta.N` suffix and update from the beta channel.
 
+## [1.0.0-beta.8] - 2026-09-06
+
+### Fixed
+
+- A clip exported with more than one audio track kept now sounds the same everywhere
+  else. Sift was writing those tracks out side by side, and every other player —
+  Discord, browsers, Windows' own — plays exactly one of them and drops the rest, so
+  a clip you shared could arrive without your mic, or without the game. The tracks
+  you keep are now summed into one, at the levels you set in the player, which is
+  what you heard in Sift and the only shape another player will render whole. The
+  video is still copied across untouched, so exports stay fast and keep their
+  original quality; only the audio is re-encoded, and only when you keep more than
+  one track.
+
 ## [1.0.0-beta.7] - 2026-09-05
 
 ### Changed
