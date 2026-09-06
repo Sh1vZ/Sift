@@ -30,6 +30,12 @@ const POSTER_TIME = 0
 const ARTIFACT_VERSION = 2
 /** Past this, a stream start difference is a misread file rather than a real offset. */
 const MAX_TRACK_OFFSET_S = 1
+/**
+ * How much to read when looking for the keyframe before an export's in-point.
+ * A few frames is enough: the seek that precedes the read is what finds the
+ * keyframe, the read only has to reach far enough to report it.
+ */
+const KEYFRAME_WINDOW_S = 0.05
 /** Containers whose AAC needs its ASC rebuilt on the way into mp4. */
 const ADTS_CONTAINERS = new Set(['.mkv', '.ts', '.flv', '.avi', '.webm'])
 
@@ -178,9 +184,15 @@ interface FfprobeStream {
   tags?: { language?: string; title?: string }
 }
 
+interface FfprobePacket {
+  pts_time?: string
+  flags?: string
+}
+
 interface FfprobeJson {
   format?: { duration?: string }
   streams?: FfprobeStream[]
+  packets?: FfprobePacket[]
 }
 
 /** Seconds, or 0 for the ffprobe spellings of "no idea" (absent, 'N/A', NaN). */
@@ -267,6 +279,52 @@ export async function probe(filePath: string): Promise<ProbeResult> {
     hasAudio: tracks.length > 0,
     audioTracks: tracks,
   }
+}
+
+/**
+ * When the last video keyframe at or before `at` is, in seconds from the start
+ * of the file, or null when ffprobe cannot say.
+ *
+ * `-read_intervals` seeks before it reads, and a seek lands on the keyframe at
+ * or before its target, so a window of a couple of frames starting at `at`
+ * reports that keyframe as its first packet however long the GOP is — without
+ * reading the file from the top. The stream's own start time is asked for in
+ * the same call and taken back off: packet times carry it, and `-ss` adds it
+ * again, so a file that does not start at zero would be seeked twice as far.
+ */
+export async function keyframeBefore(filePath: string, at: number): Promise<number | null> {
+  if (!(at > 0)) return null
+  const { code, stdout } = await run(FFPROBE, [
+    '-v',
+    'error',
+    '-print_format',
+    'json',
+    '-select_streams',
+    'v:0',
+    '-show_entries',
+    'stream=start_time:packet=pts_time,flags',
+    '-read_intervals',
+    `${at.toFixed(3)}%+${KEYFRAME_WINDOW_S}`,
+    filePath,
+  ])
+  if (code !== 0) return null
+  let json: FfprobeJson
+  try {
+    json = JSON.parse(stdout) as FfprobeJson
+  } catch {
+    return null
+  }
+  const base = seconds(json.streams?.[0]?.start_time)
+  let best = -1
+  for (const packet of json.packets ?? []) {
+    // 'K' is the key-frame flag; the rest of the field is discard/corrupt.
+    if (!packet.flags?.includes('K')) continue
+    const pts = Number(packet.pts_time)
+    if (!Number.isFinite(pts)) continue
+    const t = pts - base
+    if (t >= 0 && t <= at && t > best) best = t
+  }
+  return best < 0 ? null : best
 }
 
 /** Cache names include the mtime so a re-recorded file never shows a stale poster. */

@@ -63,18 +63,82 @@ export function validateExportRequest(req: ExportRequest, clip: Clip | undefined
   return null
 }
 
+/** Bitrate for a mixed-down track; what the player's own track extraction uses. */
+const MIX_BITRATE = '192k'
+/** Filter graph label the mixed stream comes out on. */
+const MIX_OUT = '[mix]'
+
 export interface ExportPlan {
   src: string
   out: string
+  /** In-point on the source timeline, in seconds. */
   start: number
   end: number
+  /**
+   * Where to actually seek: the source keyframe at or before `start`, when it
+   * has been looked up. Only a mixed export needs it — see `buildExportArgs`.
+   */
+  seek?: number
   muted: boolean
   /**
    * Audio tracks to keep, by type-relative index. `null` keeps every track,
    * `[]` keeps none — the same thing `muted` asks for.
    */
   tracks: number[] | null
+  /** Audio streams the source has, which is what `tracks: null` resolves to. */
+  audioCount: number
   vcodec: string
+}
+
+/** The kept tracks as concrete indices, with anything the source no longer has dropped. */
+function keptTracks(p: ExportPlan): number[] {
+  if (p.muted) return []
+  const all = Array.from({ length: Math.max(0, p.audioCount) }, (_, i) => i)
+  return p.tracks ? p.tracks.filter((k) => all.includes(k)) : all
+}
+
+/**
+ * Encoder for the mixed track, by output container, or '' where the export
+ * keeps the source's own streams instead. Only the containers Sift actually
+ * writes are mixed: mp4 for everything ShadowPlay and OBS record, webm for the
+ * one source kind mp4 cannot carry. avi/wmv/flv keep the old copy path rather
+ * than have this guess at an encoder each of them accepts — no recorder Sift
+ * targets writes multi-track audio into one.
+ */
+function mixCodec(out: string): string {
+  const name = out.toLowerCase()
+  if (name.endsWith('.webm')) return 'libopus'
+  if (name.endsWith('.avi') || name.endsWith('.wmv') || name.endsWith('.flv')) return ''
+  return 'aac'
+}
+
+/**
+ * True when the export has to sum several tracks into one, which is the only
+ * case that re-encodes audio — and so the only one that has to be seeked to a
+ * keyframe (see `buildExportArgs`).
+ */
+export function mixesAudio(p: ExportPlan): boolean {
+  return keptTracks(p).length > 1 && mixCodec(p.out) !== ''
+}
+
+/**
+ * Sum the kept tracks into one stereo stream.
+ *
+ * Every input is pinned to the same sample format and layout first, because a
+ * mic is routinely mono where game audio is stereo or 5.1, and amix mixes one
+ * layout. Sample rates are left to ffmpeg, which inserts a resampler only if
+ * the tracks actually disagree. `normalize=0` keeps each track at its recorded
+ * level: the player sums them in the mixer at full volume, and dividing by the
+ * track count here would make every shared clip quieter than what was heard in
+ * the app.
+ */
+function mixGraph(tracks: number[]): string {
+  const heads = tracks.map(
+    (k, i) => `[0:a:${k}]aformat=sample_fmts=fltp:channel_layouts=stereo[s${i}]`,
+  )
+  const inputs = tracks.map((_, i) => `[s${i}]`).join('')
+  const amix = `amix=inputs=${tracks.length}:duration=longest:dropout_transition=0:normalize=0`
+  return `${heads.join(';')};${inputs}${amix}${MIX_OUT}`
 }
 
 /**
@@ -82,12 +146,26 @@ export interface ExportPlan {
  * seeks to the keyframe at or before `start` without decoding, and stops
  * reading at `end` on the source timeline (exact, unaffected by the keyframe
  * shift). `make_zero` rebases the timestamps the seek leaves negative, which
- * mp4 would otherwise reject. Audio defaults to every track (ShadowPlay writes
- * game and mic separately) and narrows to `tracks` when the mixer picked a
- * subset; subtitle/data streams are dropped because mp4 cannot carry most of
- * them.
+ * mp4 would otherwise reject. Subtitle/data streams are dropped because mp4
+ * cannot carry most of them.
+ *
+ * Audio defaults to every track (ShadowPlay writes game and mic separately)
+ * and narrows to `tracks` when the mixer picked a subset. Keeping several as
+ * separate streams is what the file would need to be re-openable in Sift's own
+ * mixer, but every other player — Discord, browsers, Windows' own — plays
+ * exactly one of them and drops the rest, so a shared clip would lose its mic.
+ * Several kept tracks are therefore summed into one, which is the mix the app
+ * plays and the only shape another player will render whole. The video is
+ * still copied; only the audio is re-encoded.
+ *
+ * Mixing is also the one path that cares where the seek lands: for a copied
+ * stream ffmpeg keeps everything from the keyframe on, but a decoded one is
+ * cut at `start` exactly, which would leave the run-up to the in-point silent.
+ * Seeking to the keyframe itself (`seek`) makes both start together again.
  */
 export function buildExportArgs(p: ExportPlan): string[] {
+  const kept = keptTracks(p)
+  const codec = mixesAudio(p) ? mixCodec(p.out) : ''
   const args = [
     '-y',
     '-nostdin',
@@ -96,21 +174,24 @@ export function buildExportArgs(p: ExportPlan): string[] {
     '-threads',
     '1',
     '-ss',
-    p.start.toFixed(3),
+    (codec ? (p.seek ?? p.start) : p.start).toFixed(3),
     '-to',
     p.end.toFixed(3),
     '-i',
     p.src,
-    '-map',
-    '0:v:0',
   ]
-  // Each map keeps the trailing `?` for the same reason the catch-all does: a
+  if (codec) args.push('-filter_complex', mixGraph(kept))
+  args.push('-map', '0:v:0')
+  // Each map keeps the trailing `?` for the same reason the catch-all did: a
   // selection made against a file that has since been re-recorded with fewer
   // tracks would otherwise abort the whole export rather than skip the stream.
-  if (p.muted || p.tracks?.length === 0) args.push('-an')
-  else if (!p.tracks) args.push('-map', '0:a?')
-  else for (const k of p.tracks) args.push('-map', `0:a:${k}?`)
-  args.push('-sn', '-dn', '-c', 'copy', '-avoid_negative_ts', 'make_zero')
+  if (!kept.length) args.push('-an')
+  else if (codec) args.push('-map', MIX_OUT)
+  else for (const k of kept) args.push('-map', `0:a:${k}?`)
+  args.push('-sn', '-dn')
+  if (codec) args.push('-c:v', 'copy', '-c:a', codec, '-b:a', MIX_BITRATE)
+  else args.push('-c', 'copy')
+  args.push('-avoid_negative_ts', 'make_zero')
   // Apple-style tag so the mp4 also plays in players that only know hvc1.
   if (p.vcodec === 'hevc' && p.out.toLowerCase().endsWith('.mp4')) args.push('-tag:v', 'hvc1')
   args.push('-progress', 'pipe:1', '-stats_period', '0.25', '-nostats', p.out)

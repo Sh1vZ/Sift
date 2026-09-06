@@ -22,6 +22,7 @@ import {
 import {
   buildExportArgs,
   exportExt,
+  mixesAudio,
   safeGameDir,
   sanitizeName,
   uniqueName,
@@ -377,6 +378,7 @@ function exportHelperCases(): void {
     end: 4,
     muted: false,
     tracks: null,
+    audioCount: 1,
     vcodec: 'hevc',
   })
   const i = args.indexOf('-i')
@@ -385,7 +387,7 @@ function exportHelperCases(): void {
     'seek and stop are input options',
   )
   check(
-    args.includes('0:a?') && !args.includes('-an') && args.includes('hvc1'),
+    args.includes('0:a:0?') && !args.includes('-an') && args.includes('hvc1'),
     'audio mapped, hevc tagged',
   )
   check(
@@ -399,10 +401,11 @@ function exportHelperCases(): void {
     end: 1,
     muted: true,
     tracks: null,
+    audioCount: 2,
     vcodec: 'h264',
   })
   check(
-    muted.includes('-an') && !muted.includes('0:a?') && !muted.includes('hvc1'),
+    muted.includes('-an') && !muted.some((a) => a.startsWith('0:a')) && !muted.includes('hvc1'),
     'muted drops audio',
   )
   const subset = buildExportArgs({
@@ -412,11 +415,16 @@ function exportHelperCases(): void {
     end: 1,
     muted: false,
     tracks: [1],
+    audioCount: 2,
     vcodec: 'h264',
   })
   check(
-    subset.includes('0:a:1?') && !subset.includes('0:a?') && !subset.includes('-an'),
+    subset.includes('0:a:1?') && !subset.includes('0:a:0?') && !subset.includes('-an'),
     'a track subset maps just those tracks',
+  )
+  check(
+    subset.includes('copy') && !subset.includes('-filter_complex'),
+    'one kept track is still a stream copy',
   )
   const noTracks = buildExportArgs({
     src: 'in.mp4',
@@ -425,11 +433,73 @@ function exportHelperCases(): void {
     end: 1,
     muted: false,
     tracks: [],
+    audioCount: 2,
     vcodec: 'h264',
   })
   check(
     noTracks.includes('-an') && !noTracks.some((a) => a.startsWith('0:a')),
     'an empty selection is a silent export',
+  )
+  const stale = buildExportArgs({
+    src: 'in.mp4',
+    out: 'out.mp4',
+    start: 0,
+    end: 1,
+    muted: false,
+    tracks: [0, 3],
+    audioCount: 2,
+    vcodec: 'h264',
+  })
+  check(
+    stale.includes('0:a:0?') && !stale.some((a) => a.includes('0:a:3')),
+    'a selection naming a track the source lost keeps the rest',
+  )
+
+  const mixPlan = {
+    src: 'in.mp4',
+    out: 'out.mp4',
+    start: 1.5,
+    end: 4,
+    seek: 1.25,
+    muted: false,
+    tracks: null,
+    audioCount: 2,
+    vcodec: 'hevc',
+  }
+  check(mixesAudio(mixPlan), 'several kept tracks mix')
+  const mixed = buildExportArgs(mixPlan)
+  const graph = mixed[mixed.indexOf('-filter_complex') + 1] ?? ''
+  check(
+    graph.includes('[0:a:0]') && graph.includes('[0:a:1]') && graph.includes('amix=inputs=2'),
+    'the graph sums every kept track',
+  )
+  check(graph.includes('normalize=0'), 'the mix keeps each track at its own level')
+  check(
+    mixed.includes('[mix]') && mixed.includes('-c:a') && mixed[mixed.indexOf('-c:a') + 1] === 'aac',
+    'the mix is mapped and encoded',
+  )
+  check(
+    mixed.includes('-c:v') && mixed[mixed.indexOf('-c:v') + 1] === 'copy' && !mixed.includes('-c'),
+    'mixing still copies the video',
+  )
+  check(
+    mixed[mixed.indexOf('-ss') + 1] === '1.250',
+    'a mixed export seeks to the keyframe, not the in-point',
+  )
+  check(
+    buildExportArgs({ ...mixPlan, seek: undefined })[mixed.indexOf('-ss') + 1] === '1.500',
+    'an unknown keyframe falls back to the in-point',
+  )
+  check(
+    !mixesAudio({ ...mixPlan, out: 'out.avi' }) &&
+      buildExportArgs({ ...mixPlan, out: 'out.avi' }).includes('0:a:1?'),
+    'containers without a known encoder keep their own tracks',
+  )
+  check(
+    buildExportArgs({ ...mixPlan, out: 'out.webm' })[
+      buildExportArgs({ ...mixPlan, out: 'out.webm' }).indexOf('-c:a') + 1
+    ] === 'libopus',
+    'webm mixes to opus',
   )
 }
 

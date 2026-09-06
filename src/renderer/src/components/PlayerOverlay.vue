@@ -21,7 +21,6 @@ import {
 import { clipMenuItems, deleteClipDialog } from '@/composables/useClipMenu'
 import {
   applyGains,
-  audibleTracks,
   auxSrc,
   auxTracks,
   cycleSolo,
@@ -539,7 +538,7 @@ function onSeekLeave(): void {
 
 function toggleEdit(): void {
   if (editing.value) exitEdit()
-  else if (canEdit.value) enterEdit(clip.value, audibleTracks.value)
+  else if (canEdit.value) enterEdit(clip.value)
   poke()
 }
 
@@ -746,7 +745,7 @@ function consumePendingEdit(): void {
   }
   if (!autoEdit || !canEdit.value) return
   autoEdit = false
-  enterEdit(clip.value, audibleTracks.value)
+  enterEdit(clip.value)
 }
 
 watch(

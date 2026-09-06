@@ -27,8 +27,10 @@ import { copyFileToClipboard } from './clipboard'
 import { cleanTitle, clipId, deriveGame, parseRecordedAt, prettifyGame } from './clips'
 import {
   INVALID_NAME,
+  type ExportPlan,
   buildExportArgs,
   exportExt,
+  mixesAudio,
   parseProgressLine,
   safeGameDir,
   sanitizeName,
@@ -40,6 +42,7 @@ import {
   artifactsStale,
   extractAudioTrack,
   ffmpegAvailable,
+  keyframeBefore,
   makeArtifacts,
   probe,
   removeArtifacts,
@@ -852,23 +855,33 @@ export class Library {
     this.exportAbort = abort
     const span = job.end - job.start
     try {
-      const args = buildExportArgs({
+      const plan: ExportPlan = {
         src: source.path,
         out: tmp,
         start: job.start,
         end: job.end,
         muted: job.muted,
         tracks: job.tracks ?? null,
+        audioCount: source.audioTracks.length,
         vcodec: source.vcodec,
-      })
-      const { code, stderrTail } = await runLong(FFMPEG, args, {
+      }
+      // Only a mix is decoded, and only a decoded stream starts exactly where
+      // it was asked to — the copied video starts at the keyframe before that.
+      // Seeking both there keeps the run-up to the in-point from arriving
+      // silent. A source that will not give up its keyframes simply exports
+      // from the in-point, which costs that run-up its sound and nothing else.
+      if (mixesAudio(plan)) plan.seek = (await keyframeBefore(source.path, job.start)) ?? undefined
+      // What ffmpeg will actually write, which that seek makes a little longer
+      // than the selection; `span` is what the user asked for.
+      const written = job.end - (plan.seek ?? job.start)
+      const { code, stderrTail } = await runLong(FFMPEG, buildExportArgs(plan), {
         stallMs: EXPORT_STALL_MS,
         maxMs: EXPORT_MAX_MS,
         signal: abort.signal,
         onLine: (line) => {
           const t = parseProgressLine(line)
-          if (t === null || span <= 0) return
-          job.progress = Math.min(1, t / span)
+          if (t === null || written <= 0) return
+          job.progress = Math.min(1, t / written)
           this.scheduleExportsEmit()
         },
       })
