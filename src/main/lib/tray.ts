@@ -3,12 +3,11 @@ import { Menu, Tray, app, type NativeImage } from 'electron'
 export interface AppTray {
   /** The "Sift is still running" balloon shown the first time the window hides. */
   hint(): void
-  /** Swap the icon, e.g. when the theme changes; the balloon picks it up too. */
-  setIcon(icon: NativeImage): void
   destroy(): void
 }
 
-// The icon arrives at ICON_SIZE; Windows draws the notification area at 16pt logical.
+// The icon arrives at build/icon.png's 512px; Windows draws the notification
+// area at 16pt logical.
 const small = (icon: NativeImage): NativeImage => icon.resize({ width: 16, height: 16 })
 
 /**
@@ -21,16 +20,14 @@ const small = (icon: NativeImage): NativeImage => icon.resize({ width: 16, heigh
  * new one. `show` is main's single entry point for that.
  */
 export function createTray(opts: {
-  /** The themed app icon (see `syncIcon` in main/index.ts). */
+  /** The app icon (see `currentIcon` in main/index.ts). */
   icon: NativeImage
   /** Restore the window, building it again if the tray release already took it. */
   show: () => void
   /** Restore the window and put it on the OS pane of the settings screen. */
   onSettings: () => void
 }): AppTray {
-  let full = opts.icon
-
-  const tray = new Tray(small(full))
+  const tray = new Tray(small(opts.icon))
   tray.setToolTip('Sift')
   tray.setContextMenu(
     Menu.buildFromTemplate([
@@ -51,16 +48,12 @@ export function createTray(opts: {
     hint: () => {
       if (process.platform !== 'win32') return
       tray.displayBalloon({
-        icon: full,
+        icon: opts.icon,
         iconType: 'custom',
         title: 'Sift is still running',
         content:
           'The window closed to the tray, so new recordings keep being indexed. Right-click the tray icon to quit.',
       })
-    },
-    setIcon: (icon) => {
-      full = icon
-      tray.setImage(small(icon))
     },
     destroy: () => tray.destroy(),
   }

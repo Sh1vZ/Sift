@@ -51,8 +51,9 @@ export function ensureDirs(): void {
 }
 
 /**
- * The neutral app icon on disk, for the window's first paint; main swaps in the
- * themed render (lib/icon.ts) straight after, and the tray only ever sees that.
+ * The Sift logo on disk (drawn by scripts/icon.ts) — the window, the tray and,
+ * through the exe the installer stamped it onto, the taskbar all show this one
+ * image.
  * A packaged build gets it from extraResources (electron-builder.yml) because
  * the asar ships only out/**; dev and unpacked builds read it straight out of
  * build/. Undefined when neither is there — the window falls back to the exe icon.

@@ -2,13 +2,10 @@ import { app, type BrowserWindow, dialog, nativeImage, type NativeImage } from '
 import { setFlagsFromString } from 'node:v8'
 import { runInNewContext } from 'node:vm'
 import { electronApp, optimizer } from '@electron-toolkit/utils'
-import { THEME_BRAND } from '@shared/themes'
-import type { ThemeId } from '@shared/types'
 import { registerIpc } from './ipc'
 import { perfLog, userDataOverride } from './lib/env'
-import { ICON_SIZE, renderAppIcon } from './lib/icon'
 import { Library } from './lib/library'
-import { ensureDirs } from './lib/paths'
+import { appIconPath, ensureDirs } from './lib/paths'
 import { installProtocol, registerScheme } from './lib/protocol'
 import { createSplash, type Splash } from './lib/splash'
 import { createTray, type AppTray } from './lib/tray'
@@ -117,27 +114,24 @@ if (!app.requestSingleInstanceLock()) {
   app.on('second-instance', () => showMainWindow())
 
   /**
-   * The taskbar and tray icon follow the theme. It is drawn here from the
-   * theme's brand colours (lib/icon.ts) rather than read from build/icon.png,
-   * which stays the neutral icon for the installer, the shortcuts and the
-   * window's first paint. One render per theme, cached until the theme changes.
-   * Windows draws a *pinned* app from its shortcut, so a pinned Sift keeps the
-   * neutral icon while running; unpinned, Alt+Tab and the tray all switch.
+   * The one Sift logo, read from build/icon.png (drawn by scripts/icon.ts).
+   *
+   * The same image the installer wrote onto the exe and the shortcuts, so the
+   * window, Alt+Tab, the taskbar and the tray cannot disagree — which they
+   * would if this were drawn per theme: an installed app's taskbar button comes
+   * from the shortcut Windows matched it to, not from `setIcon`, so a themed
+   * window icon never reached the taskbar anyway.
+   *
+   * Loaded once. `createMainWindow` passes the same path at construction, so
+   * the window has it before its first paint.
    */
-  let iconTheme: ThemeId | null = null
   let appIcon: NativeImage | null = null
   function currentIcon(): NativeImage {
-    const theme = library?.settings.theme ?? 'sift'
-    if (!appIcon || theme !== iconTheme) {
-      iconTheme = theme
-      appIcon = nativeImage.createFromBuffer(renderAppIcon(THEME_BRAND[theme], ICON_SIZE))
+    if (!appIcon) {
+      const path = appIconPath()
+      appIcon = path ? nativeImage.createFromPath(path) : nativeImage.createEmpty()
     }
     return appIcon
-  }
-  function syncIcon(): void {
-    const icon = currentIcon()
-    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.setIcon(icon)
-    tray?.setIcon(icon)
   }
 
   /** The tray exists only while closing means 'hide', so nothing hides with no way back. */
@@ -230,7 +224,6 @@ if (!app.requestSingleInstanceLock()) {
     splash.theme(library.settings.theme, library.settings.animations)
     splash.status('Loading your clips…')
     mainWindow = wireWindow(createMainWindow({ autoShow: false, placement }))
-    syncIcon()
   }
 
   /** The tray's Settings item: restore the window, then put it on the OS pane. */
@@ -362,7 +355,6 @@ if (!app.requestSingleInstanceLock()) {
         mainWindow?.webContents.send('app:open-settings', null)
       },
       (s) => {
-        syncIcon()
         syncTray(s.minimizeToTray)
         updater?.setAutoCheck(s.autoCheckUpdates)
       },
@@ -374,10 +366,6 @@ if (!app.requestSingleInstanceLock()) {
     app.on('browser-window-created', (_, window) => optimizer.watchWindowShortcuts(window))
 
     mainWindow = wireWindow(createMainWindow({ autoShow: false }))
-    // Still hidden behind the splash, so the themed icon is in place before the
-    // taskbar button ever shows.
-    syncIcon()
-
     syncTray(library.settings.minimizeToTray)
 
     // SIFT_PERF_LOG=1: what each process costs, sampled from main so the numbers

@@ -1,11 +1,14 @@
 /**
- * The themed app icon: a valid PNG of the requested size whose pixels carry the
- * theme's colours where the design says they should. Runs on plain Node
+ * The Sift logo: a valid PNG carrying the mark where the design says it should
+ * be, on a transparent background, filling the canvas. Runs on plain Node
  * (`npm test`); the PNG is decoded here by hand since it is unfiltered RGBA.
+ * The committed build/icon.png is checked against the same renderer, so a
+ * geometry change that was never regenerated fails here rather than shipping.
  */
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { inflateSync } from 'node:zlib'
-import { hexToRgb, renderAppIcon } from '../src/main/lib/icon'
-import { THEME_BRAND } from '../src/shared/themes'
+import { LOGO_SIZE, hexToRgb, renderLogo } from '../scripts/icon'
 
 let failed = 0
 const check = (cond: unknown, msg: string): void => {
@@ -13,9 +16,11 @@ const check = (cond: unknown, msg: string): void => {
   console.log(`${cond ? 'ok  ' : 'FAIL'} ${msg}`)
 }
 
+type Px = [number, number, number, number]
+
 interface Decoded {
   size: number
-  at(x: number, y: number): [number, number, number, number]
+  at(x: number, y: number): Px
 }
 
 function decode(png: Buffer): Decoded {
@@ -40,15 +45,52 @@ function decode(png: Buffer): Decoded {
 }
 
 const near = (a: number, b: number, tol = 3): boolean => Math.abs(a - b) <= tol
-const isRgb = (px: [number, number, number, number], hex: string): boolean => {
+const isRgb = (px: Px, hex: string): boolean => {
   const [r, g, b] = hexToRgb(hex)
-  return near(px[0], r) && near(px[1], g) && near(px[2], b) && px[3] === 255
+  return near(px[0], r) && near(px[1], g) && near(px[2], b)
 }
 
-function iconCases(): void {
+/** True when a colour sits on the gradient between two hexes, within tolerance. */
+function onGradient(px: Px, from: string, to: string, tol = 4): boolean {
+  const a = hexToRgb(from)
+  const b = hexToRgb(to)
+  return [0, 1, 2].every(
+    (i) => px[i] >= Math.min(a[i], b[i]) - tol && px[i] <= Math.max(a[i], b[i]) + tol,
+  )
+}
+
+/**
+ * How much of the canvas the mark reaches. Measured as the extent of its
+ * bounding box, not as a count of rows holding ink — the mark is a stack of
+ * slats with gaps between them, so a fifth of its rows are empty by design.
+ */
+function coverage(img: Decoded): { columns: number; rows: number; opaque: number } {
+  let x0 = img.size
+  let y0 = img.size
+  let x1 = -1
+  let y1 = -1
+  let opaque = 0
+  for (let y = 0; y < img.size; y++) {
+    for (let x = 0; x < img.size; x++) {
+      const alpha = img.at(x, y)[3]
+      if (alpha === 255) opaque++
+      if (alpha <= 8) continue
+      if (x < x0) x0 = x
+      if (x > x1) x1 = x
+      if (y < y0) y0 = y
+      if (y > y1) y1 = y
+    }
+  }
+  return {
+    columns: (x1 - x0 + 1) / img.size,
+    rows: (y1 - y0 + 1) / img.size,
+    opaque: opaque / img.size ** 2,
+  }
+}
+
+function logoCases(): void {
   const size = 128
-  const brand = THEME_BRAND.ember
-  const png = renderAppIcon(brand, size)
+  const png = renderLogo(size)
   check(
     png.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])),
     'output starts with the PNG signature',
@@ -56,42 +98,66 @@ function iconCases(): void {
   const img = decode(png)
   check(img.size === size, `IHDR carries the requested size (${size})`)
 
-  check(img.at(0, 0)[3] === 0, 'the corner outside the rounded tile is transparent')
-  check(img.at(2, size / 2)[3] === 0, 'the margin left of the tile is transparent')
-  // Just inside the tile's left edge, halfway down: gradient, no glyph there.
-  const edge = img.at(Math.round(size * 0.1), size / 2)
-  check(edge[3] === 255, 'inside the tile is fully opaque')
   check(
-    !isRgb(edge, brand.onPrimary) && !isRgb(edge, brand.accent),
-    'the tile edge is gradient, not glyph',
+    img.at(0, 0)[3] === 0 &&
+      img.at(size - 1, 0)[3] === 0 &&
+      img.at(0, size - 1)[3] === 0 &&
+      img.at(size - 1, size - 1)[3] === 0,
+    'all four corners are transparent — there is no tile',
   )
 
-  // The middle slat (design y 22.5–30.5) crosses the triangle's widest part.
-  const unit = (size * (1 - (2 * 24) / 512) * 0.75) / 64
-  const g0 = (size - unit * 64) / 2
-  const slat = img.at(Math.round(g0 + 24 * unit), Math.round(g0 + 26.5 * unit))
-  check(isRgb(slat, brand.onPrimary), 'a middle slat pixel is the on-primary colour')
+  const { columns, rows, opaque } = coverage(img)
+  check(rows > 0.9, `the mark fills its taller axis (${Math.round(rows * 100)}% of rows)`)
+  check(columns > 0.7, `and most of the other (${Math.round(columns * 100)}% of columns)`)
+  // Inside an opaque tile this was ~1; the mark alone covers well under half.
+  check(opaque < 0.6, `the background is transparent (${Math.round(opaque * 100)}% opaque)`)
 
-  const gap = img.at(Math.round(g0 + 24 * unit), Math.round(g0 + 21.25 * unit))
-  check(!isRgb(gap, brand.onPrimary), 'the gap between slats shows the tile through')
-
-  // The fallen slat sits at design y 44.5–53.5 after its (5, 1) shift.
-  const last = img.at(Math.round(g0 + 24 * unit), Math.round(g0 + 48.5 * unit))
-  check(isRgb(last, brand.accent), 'the last slat is the accent colour')
-
-  const solar = decode(renderAppIcon(THEME_BRAND.solar, size))
+  // A slat carries the gradient rather than the flat white it had on the old
+  // tile. Searched over a range rather than one row: a row that lands on a band
+  // edge is only partly covered, so none of its pixels are fully opaque.
+  let slat: Px | null = null
+  for (let y = Math.round(size * 0.25); y < Math.round(size * 0.6) && !slat; y++) {
+    for (let x = 0; x < size && !slat; x++) {
+      if (img.at(x, y)[3] === 255) slat = img.at(x, y)
+    }
+  }
+  check(slat !== null, 'the middle slat is opaque')
   check(
-    isRgb(
-      solar.at(Math.round(g0 + 24 * unit), Math.round(g0 + 26.5 * unit)),
-      THEME_BRAND.solar.onPrimary,
-    ),
-    'a light identity (solar) draws its slats in its dark on-primary',
+    slat !== null && onGradient(slat, '#a78bfa', '#7c3aed'),
+    'a slat is drawn in the brand gradient, not white',
   )
 
-  const small = decode(renderAppIcon(brand, 16))
-  check(small.size === 16 && small.at(8, 8)[3] === 255, 'a 16px render is still a filled tile')
+  // The gap between two slats shows the background straight through.
+  let gap = false
+  for (let y = Math.round(size * 0.2); y < Math.round(size * 0.75); y++) {
+    if (img.at(Math.round(size * 0.3), y)[3] === 0) gap = true
+  }
+  check(gap, 'the gap between slats is transparent, not filled')
+
+  // The bar that fell through keeps its own colour, low in the canvas.
+  let fallen = false
+  for (let y = Math.round(size * 0.78); y < size && !fallen; y++) {
+    for (let x = 0; x < size && !fallen; x++) {
+      const px = img.at(x, y)
+      if (px[3] > 200 && isRgb(px, '#fb7185')) fallen = true
+    }
+  }
+  check(fallen, 'the last slat is the rose accent')
+
+  // The size that matters: the notification area draws at 16pt logical.
+  check(coverage(decode(renderLogo(16))).rows > 0.8, 'a 16px render still fills the canvas')
 }
 
-iconCases()
+/** The committed PNG has to be what the current renderer produces. */
+function committedIconCase(): void {
+  const png = readFileSync(join(process.cwd(), 'build', 'icon.png'))
+  check(
+    png.equals(renderLogo(LOGO_SIZE)),
+    'build/icon.png is current (run `npm run icon` if this fails)',
+  )
+}
+
+logoCases()
+committedIconCase()
 console.log(failed ? `\n${failed} check(s) failed` : '\nall icon checks passed')
 process.exit(failed ? 1 : 0)

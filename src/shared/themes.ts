@@ -5,8 +5,8 @@ import type { ThemeId } from './types'
  * the glyph colour that sits on it, and the accent. `tokens.css` is still the
  * source of truth for the renderer; this table mirrors just the four values
  * that have to be known outside CSS: the renderer's theme previews and Vue Bits
- * props, and the main process, which draws the taskbar and tray icon from them
- * (see main/lib/icon.ts). Keep it in step with the `html[data-theme]` blocks.
+ * props. The app icon does not follow the theme — it is one fixed mark, drawn
+ * by scripts/icon.ts. Keep this in step with the `html[data-theme]` blocks.
  */
 export interface ThemeBrand {
   primary: string
