@@ -7,6 +7,26 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 uses [semantic versioning](https://semver.org/spec/v2.0.0.html) — beta builds carry a
 `-beta.N` suffix and update from the beta channel.
 
+## [1.0.0-beta.9] - 2026-09-07
+
+### Added
+
+- **Screenshots.** PNG, JPG, BMP and GIF captures sit in the same grids as your
+  recordings, with an All / Videos / Screenshots switch, and open in the player as a
+  viewer you can zoom and pan.
+- **Eight new themes**: Cyberpunk, Noir, Venom and Mint, plus OLED Synthwave,
+  Cyberpunk, Noir and Venom.
+- Failures now raise a dialog saying what happened and what to do about it, instead
+  of a toast you might miss.
+
+### Changed
+
+- Posters render before scrub strips, and whatever is on screen renders first, so a
+  new folder fills in from the top rather than in scan order.
+- A folder whose media sits more than one level below it is refused when you add it,
+  naming the file that broke the rule.
+- The logo is redrawn, in the app, the taskbar and the tray.
+
 ## [1.0.0-beta.8] - 2026-09-06
 
 ### Fixed
