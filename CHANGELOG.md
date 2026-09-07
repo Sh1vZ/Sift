@@ -7,6 +7,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 uses [semantic versioning](https://semver.org/spec/v2.0.0.html) — beta builds carry a
 `-beta.N` suffix and update from the beta channel.
 
+## [1.0.0-beta.10] - 2026-09-07
+
+### Added
+
+- **A Favourites screen** in the sidebar, gathering everything you have hearted in
+  one place with the same filter and sort as the other grids.
+
 ## [1.0.0-beta.9] - 2026-09-07
 
 ### Added
