@@ -2,7 +2,7 @@ import { app, clipboard, shell } from 'electron'
 import { randomUUID } from 'node:crypto'
 import { existsSync, statSync, type Stats } from 'node:fs'
 import { mkdir, rename as fsRename, stat, unlink } from 'node:fs/promises'
-import { basename, dirname, extname, join, normalize } from 'node:path'
+import { basename, dirname, extname, join, normalize, relative } from 'node:path'
 import type { FSWatcher } from 'chokidar'
 import type { ChangelogRelease } from '@shared/changelog'
 import type {
@@ -59,7 +59,7 @@ import {
 } from './media'
 import { FFMPEG, cacheDir, libraryDb, userDataDir } from './paths'
 import { MediaQueue, type MediaJob } from './queue'
-import { walkMedia } from './scanner'
+import { MAX_MEDIA_DEPTH, findMediaTooDeep, walkMedia } from './scanner'
 import { collectStats } from './stats'
 import { Store } from './store'
 import { watchFolder } from './watcher'
@@ -373,7 +373,7 @@ export class Library {
 
   // ---------------------------------------------------------------- folders
 
-  addFolder(rawPath: string): { folder: LibraryFolder | null; error?: string } {
+  async addFolder(rawPath: string): Promise<{ folder: LibraryFolder | null; error?: string }> {
     const path = normalize(rawPath).replace(/[\\/]+$/, '')
     const lower = path.toLowerCase()
     if (this.isUnderClipsRoot(path)) {
@@ -403,6 +403,23 @@ export class Library {
     const st = statOrNull(path)
     if (st && !st.isDirectory()) {
       return { folder: null, error: 'That is a file. Drop the folder it lives in instead.' }
+    }
+    // Sift groups by the subfolder a clip sits in, so a recorder's
+    // `Recordings/<Game>/clip.mp4` is as deep as the layout can go. A root that
+    // buries clips further would collapse whole trees onto one game name, so it
+    // is refused here rather than half-indexed. An unreachable drive skips the
+    // check — there is nothing to walk, and the folder is added as unavailable.
+    if (st) {
+      const buried = await findMediaTooDeep(path, {
+        skip: (dir) => this.isUnderClipsRoot(dir),
+        includeImages: this.settings.indexScreenshots,
+      })
+      if (buried) {
+        return {
+          folder: null,
+          error: `Its clips sit more than ${MAX_MEDIA_DEPTH} subfolder deep (${relative(path, buried)}). Sift indexes a folder and one level of subfolders inside it, so add the folder just above your clips instead.`,
+        }
+      }
     }
     const folder: LibraryFolder = {
       id: clipId(path),

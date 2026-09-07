@@ -2,7 +2,15 @@ import { opendir } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
 import { mediaKindOf } from '@shared/types'
 
-const MAX_DEPTH = 8
+/**
+ * How many directory levels below a chosen folder may hold media. One level
+ * covers the usual `Recordings/<Game>/clip.mp4` layout; a folder that buries
+ * its clips deeper is refused when it is added, and the walk never descends
+ * past this either, so a folder cannot grow its way around that.
+ */
+export const MAX_MEDIA_DEPTH = 1
+/** How far past the limit the add-time check looks before giving the folder the benefit of the doubt. */
+const DEEP_PROBE_DEPTH = 8
 const SKIP_DIRS = new Set(['node_modules', 'system volume information', '$recycle.bin'])
 
 /**
@@ -39,7 +47,7 @@ export async function* walkMedia(
   depth = 0,
 ): AsyncGenerator<string> {
   const { signal, skip, includeImages = false } = opts
-  if (depth > MAX_DEPTH || signal?.aborted || skip?.(root)) return
+  if (depth > MAX_MEDIA_DEPTH || signal?.aborted || skip?.(root)) return
   let dir
   try {
     dir = await opendir(root)
@@ -57,4 +65,40 @@ export async function* walkMedia(
     }
   }
   for (const sub of subdirs) yield* walkMedia(sub, opts, depth + 1)
+}
+
+/**
+ * The first media file that sits deeper than `MAX_MEDIA_DEPTH` below `root`,
+ * or `null` if there is none. Used to refuse a folder before it is added, so
+ * it stops at the first offender rather than listing them all — and honours
+ * `skip`, or the clips folder inside a candidate root would trip it.
+ */
+export async function findMediaTooDeep(
+  root: string,
+  opts: WalkOptions = {},
+  depth = 0,
+): Promise<string | null> {
+  const { signal, skip, includeImages = false } = opts
+  if (depth > DEEP_PROBE_DEPTH || signal?.aborted || skip?.(root)) return null
+  let dir
+  try {
+    dir = await opendir(root)
+  } catch {
+    return null
+  }
+  const subdirs: string[] = []
+  for await (const entry of dir) {
+    if (signal?.aborted) return null
+    const full = join(root, entry.name)
+    if (entry.isDirectory()) {
+      if (!shouldSkipDir(entry.name)) subdirs.push(full)
+    } else if (depth > MAX_MEDIA_DEPTH && entry.isFile() && isMediaFile(full, includeImages)) {
+      return full
+    }
+  }
+  for (const sub of subdirs) {
+    const hit = await findMediaTooDeep(sub, opts, depth + 1)
+    if (hit) return hit
+  }
+  return null
 }

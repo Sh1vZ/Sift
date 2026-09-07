@@ -54,7 +54,7 @@ export function registerIpc(
 
   ipcMain.handle('library:add-folder', async () => {
     const path = await pickFolder(getWindow(), 'Choose a folder that contains your clips')
-    return path ? library.addFolder(path) : { folder: null }
+    return path ? await library.addFolder(path) : { folder: null }
   })
 
   ipcMain.handle('library:add-folder-path', (_e, p) => library.addFolder(str(p)))

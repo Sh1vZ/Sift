@@ -1,6 +1,6 @@
 import { basename } from 'node:path'
 import chokidar, { type FSWatcher } from 'chokidar'
-import { isMediaFile } from './scanner'
+import { MAX_MEDIA_DEPTH, isMediaFile } from './scanner'
 
 export interface WatchHandlers {
   onAdd: (path: string) => void
@@ -28,7 +28,9 @@ export function watchFolder(root: string, handlers: WatchHandlers, opts: WatchOp
   const wanted = (p: string): boolean => isMediaFile(p, opts.includeImages())
   const watcher = chokidar.watch(root, {
     ignoreInitial: true,
-    depth: 8,
+    // Matches the scan: a folder and one level of subfolders below it, so a
+    // clip dropped deeper later is no more indexed than one found there.
+    depth: MAX_MEDIA_DEPTH,
     persistent: true,
     awaitWriteFinish: { stabilityThreshold: 2500, pollInterval: 500 },
     ignored: (p, stats) => {
