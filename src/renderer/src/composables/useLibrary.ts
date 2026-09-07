@@ -11,7 +11,7 @@ import type {
 import { DEFAULT_SETTINGS } from '@shared/types'
 import { youtubeUrl } from '@shared/youtube'
 import { dateBucket } from '@/utils/format'
-import { confirm } from './useDialogs'
+import { alertError, confirm } from './useDialogs'
 import { toast } from './useToasts'
 
 const api = window.api
@@ -635,7 +635,13 @@ export async function updateSettings(patch: Partial<Settings>): Promise<void> {
 
 export async function addFolder(path?: string): Promise<LibraryFolder | null> {
   const res = path ? await api.library.addFolderPath(path) : await api.library.addFolder()
-  if (res.error) toast('error', 'Could not add folder', res.error)
+  if (res.error)
+    void alertError({
+      title: 'Could not add folder',
+      message:
+        'Nothing was indexed. Sift needs a folder it can read that is not already covered by another folder in the library.',
+      detail: res.error,
+    })
   else if (res.folder) toast('success', 'Folder added', `Scanning ${res.folder.name}…`)
   return res.folder
 }
@@ -685,14 +691,25 @@ async function confirmClipsMove(): Promise<boolean> {
 export async function chooseClipsDir(): Promise<void> {
   if (!(await confirmClipsMove())) return
   const res = await api.library.chooseClipsDir()
-  if (!res.ok) toast('error', 'Could not change the clips folder', res.error)
+  if (!res.ok)
+    void alertError({
+      title: 'Could not change the clips folder',
+      message:
+        'The folder was not taken, so exports still land in the old one. Pick a folder Sift can write to and that no other library folder already covers.',
+      detail: res.error,
+    })
   else if (res.folder) toast('success', 'Clips folder changed', res.folder.path)
 }
 
 export async function resetClipsDir(): Promise<void> {
   if (!(await confirmClipsMove())) return
   const res = await api.library.setClipsDir('')
-  if (!res.ok) toast('error', 'Could not reset the clips folder', res.error)
+  if (!res.ok)
+    void alertError({
+      title: 'Could not reset the clips folder',
+      message: 'Exports still land in the folder you picked before — the default was not restored.',
+      detail: res.error,
+    })
   else if (res.folder) toast('success', 'Clips folder reset', res.folder.path)
 }
 
@@ -738,7 +755,11 @@ export async function renameClip(clip: Clip, name: string): Promise<Clip | null>
   return withPending(clip.id, 'rename', 'Renaming…', async () => {
     const res = await api.clips.rename(clip.id, name)
     if (!res.ok || !res.clip) {
-      toast('error', 'Rename failed', res.error)
+      void alertError({
+        title: 'Rename failed',
+        message: `${clip.name}${clip.ext} is still on disk under its old name. It is usually open in another program, or the new name uses a character Windows will not take.`,
+        detail: res.error,
+      })
       return null
     }
     // Swap the record now so the UI never sees a gap before the events arrive.
@@ -757,7 +778,11 @@ export async function deleteClip(clip: Clip, permanent = false): Promise<boolean
     async () => {
       const res = await api.clips.delete(clip.id, permanent)
       if (!res.ok) {
-        toast('error', 'Delete failed', res.error)
+        void alertError({
+          title: 'Delete failed',
+          message: `${clip.name}${clip.ext} is still on disk and still in the library. A file being played, or one on a drive Sift cannot write to, is the usual reason.`,
+          detail: res.error,
+        })
         return false
       }
       clipsById.delete(clip.id)
@@ -876,7 +901,17 @@ export async function removeFromYouTube(clip: Clip): Promise<boolean> {
   return withPending(clip.id, 'remove-youtube', 'Removing from YouTube…', async () => {
     const res = await api.clips.removeFromYouTube(clip.id)
     if (!res.ok) {
-      toast('error', 'Could not remove the video', res.error)
+      void alertError({
+        title: 'Could not remove the video',
+        message:
+          'The video is still on your channel and its link still works. Sift may have lost the sign-in for the project that uploaded it.',
+        detail: res.error,
+        action: {
+          label: 'Open on YouTube',
+          icon: 'i-lucide-external-link',
+          onClick: () => void openYouTube(clip),
+        },
+      })
       return false
     }
     // The badge goes now; the clips:updated push confirms it a moment later.

@@ -7,6 +7,7 @@ import {
   type UploadRequest,
   type UploadState,
 } from '@shared/youtube'
+import { alertError } from './useDialogs'
 import { checkOnYouTube, copyYouTubeLink, getClip, now, openYouTube } from './useLibrary'
 import { closePlayer } from './usePlayer'
 import { openSettings } from './useSettings'
@@ -112,6 +113,20 @@ function videoActions(clipId: string): ToastAction[] | undefined {
     : undefined
 }
 
+/** The same jump, for an error dialog — which offers one follow-up, not two. */
+function videoAction(
+  clipId: string,
+): { label: string; icon: string; onClick: () => void } | undefined {
+  const clip = getClip(clipId)
+  return clip
+    ? {
+        label: 'Open on YouTube',
+        icon: 'i-lucide-external-link',
+        onClick: () => void openYouTube(clip),
+      }
+    : undefined
+}
+
 /** The upload's own footnotes, told once, when the bytes land. */
 function uploadNotes(j: UploadJob): void {
   if (j.privacyDowngraded) {
@@ -172,31 +187,35 @@ function apply(list: UploadJob[]): void {
       // A video YouTube took and then refused is a different problem from an
       // upload that never landed, and it has a page the user can go and look at.
       if (prev === 'processing') {
-        toast(
-          'error',
-          j.stage === 'rejected'
-            ? 'YouTube rejected this video'
-            : 'YouTube could not process this video',
-          j.error || 'YouTube did not say why.',
-          videoActions(j.clipId),
-        )
+        void alertError({
+          title:
+            j.stage === 'rejected'
+              ? 'YouTube rejected this video'
+              : 'YouTube could not process this video',
+          message: `${j.title} reached YouTube but will not play. The video is on your channel in a broken state — open it there to see what YouTube says, and take it down if you do not want it sitting on the channel.`,
+          detail: j.error || 'YouTube did not say why.',
+          action: videoAction(j.clipId),
+        })
         continue
       }
       const settingsProblem = /connect|quota|permission|client/i.test(j.error)
-      toast(
-        'error',
-        'Upload failed',
-        j.error || 'YouTube reported an error.',
-        settingsProblem
+      void alertError({
+        title: 'Upload failed',
+        message: settingsProblem
+          ? `${j.title} never reached YouTube. This one is about the project Sift uploads through, not the clip — the sign-in, the quota, or the client itself.`
+          : `${j.title} never reached YouTube. The clip is untouched on disk, so it can be sent again.`,
+        detail: j.error || 'YouTube reported an error.',
+        action: settingsProblem
           ? {
               label: 'Open YouTube settings',
+              icon: 'i-lucide-settings',
               onClick: () => {
                 closePlayer()
                 openSettings('youtube')
               },
             }
           : undefined,
-      )
+      })
     }
   }
   known = new Map(list.map((j) => [j.id, j.state]))

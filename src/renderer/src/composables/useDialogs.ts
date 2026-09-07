@@ -1,4 +1,4 @@
-import { ref } from 'vue'
+import { nextTick, ref } from 'vue'
 
 /** A third footer button beside Cancel and the confirm button. */
 interface ConfirmAction {
@@ -28,6 +28,22 @@ interface PromptOptions {
   confirmLabel?: string
 }
 
+/** The one follow-up an error dialog offers, e.g. "Open YouTube settings". */
+interface AlertAction {
+  label: string
+  icon?: string
+  onClick: () => void
+}
+
+interface AlertOptions {
+  title: string
+  /** What the failure means for the user and what to do about it — not the raw error. */
+  message: string
+  /** The failure exactly as main reported it, shown verbatim and selectable. */
+  detail?: string
+  action?: AlertAction
+}
+
 interface ConfirmState extends ConfirmOptions {
   kind: 'confirm'
   resolve: (choice: ConfirmChoice) => void
@@ -36,12 +52,56 @@ interface PromptState extends PromptOptions {
   kind: 'prompt'
   resolve: (value: string | null) => void
 }
+interface AlertState extends AlertOptions {
+  kind: 'alert'
+  resolve: () => void
+}
 
-export const dialog = ref<ConfirmState | PromptState | null>(null)
+export type DialogState = ConfirmState | PromptState | AlertState
+
+export const dialog = ref<DialogState | null>(null)
+
+/**
+ * One modal is on screen at a time; anything raised while it is up waits here
+ * rather than replacing it. An export that fails while a delete confirm is open
+ * must not swallow the answer the user was about to give.
+ */
+const waiting: DialogState[] = []
+
+function present(state: DialogState): void {
+  if (dialog.value) waiting.push(state)
+  else dialog.value = state
+}
+
+/** Latched: closing a modal can reach `takeDialog` twice (the host, then the
+ * `update:open` that follows), and two flushes would shift one dialog in and
+ * the next callback would clear it again without ever resolving it. */
+let flushing = false
+
+function flush(): void {
+  if (flushing || !waiting.length) return
+  flushing = true
+  void nextTick(() => {
+    flushing = false
+    dialog.value ??= waiting.shift() ?? null
+  })
+}
+
+/**
+ * Clears the open dialog and lets the next one through a tick later, so the
+ * modal animates out before the next animates in. The caller resolves what it
+ * takes — that is the only way a dialog's promise ever settles.
+ */
+export function takeDialog(): DialogState | null {
+  const d = dialog.value
+  dialog.value = null
+  flush()
+  return d
+}
 
 function openConfirm(opts: ConfirmOptions): Promise<ConfirmChoice> {
   return new Promise((resolve) => {
-    dialog.value = { kind: 'confirm', ...opts, resolve }
+    present({ kind: 'confirm', ...opts, resolve })
   })
 }
 
@@ -58,14 +118,33 @@ export function confirmWithAlt(
 
 export function prompt(opts: PromptOptions): Promise<string | null> {
   return new Promise((resolve) => {
-    dialog.value = { kind: 'prompt', ...opts, resolve }
+    present({ kind: 'prompt', ...opts, resolve })
+  })
+}
+
+const alertKey = (o: AlertOptions): string => o.title + ' :: ' + (o.detail ?? '')
+
+/**
+ * A failure the user has to read: work that was lost, a file left as it was, a
+ * sign-in that did not happen. Everything smaller stays a toast — see
+ * `useToasts`. Callers do not await this; the dialog is the notice, not a gate.
+ */
+export function alertError(opts: AlertOptions): Promise<void> {
+  // A burst of the same failure (a batch of exports, a render error that
+  // repeats every frame) is one problem, so it gets one dialog.
+  const key = alertKey(opts)
+  const showing = dialog.value?.kind === 'alert' && alertKey(dialog.value) === key
+  if (showing || waiting.some((d) => d.kind === 'alert' && alertKey(d) === key))
+    return Promise.resolve()
+  return new Promise((resolve) => {
+    present({ kind: 'alert', ...opts, resolve })
   })
 }
 
 export function closeDialog(): void {
-  const d = dialog.value
-  dialog.value = null
+  const d = takeDialog()
   if (!d) return
   if (d.kind === 'confirm') d.resolve('cancel')
-  else d.resolve(null)
+  else if (d.kind === 'prompt') d.resolve(null)
+  else d.resolve()
 }

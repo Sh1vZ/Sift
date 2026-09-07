@@ -9,7 +9,7 @@ import {
   type YouTubePrivacy,
   type YouTubeState,
 } from '@shared/youtube'
-import { confirm, prompt } from './useDialogs'
+import { alertError, confirm, prompt } from './useDialogs'
 import { now } from './useLibrary'
 import { toast } from './useToasts'
 
@@ -74,7 +74,12 @@ export async function initYouTube(): Promise<void> {
 export async function addAccountJson(text: string): Promise<boolean> {
   const res = await api.youtube.addAccountJson(text)
   if (!res.ok) {
-    toast('error', 'Could not add the project', res.error)
+    void alertError({
+      title: 'Could not add the project',
+      message:
+        'Nothing was saved, so there is no project to connect. The file has to be the client secret JSON Google Cloud downloads for an OAuth client of type Desktop app.',
+      detail: res.error,
+    })
     return false
   }
   toast(
@@ -92,7 +97,12 @@ export async function addAccount(
 ): Promise<boolean> {
   const res = await api.youtube.addAccount(clientId, clientSecret, label)
   if (!res.ok) {
-    toast('error', 'Could not add the project', res.error)
+    void alertError({
+      title: 'Could not add the project',
+      message:
+        'Nothing was saved, so there is no project to connect. Check that the ID and the secret were copied whole from an OAuth client of type Desktop app.',
+      detail: res.error,
+    })
     return false
   }
   toast(
@@ -133,7 +143,12 @@ export async function connectAccount(id: string): Promise<void> {
     const a = accountById(id)
     toast('success', 'YouTube connected', a?.channel?.title ?? a?.label)
   } else if (res.error && !/cancelled/i.test(res.error)) {
-    toast('error', 'Could not connect YouTube', res.error)
+    void alertError({
+      title: 'Could not connect YouTube',
+      message:
+        'Sift is not signed in to this project, so every upload through it will be refused. If its consent screen is still in testing, your Google account has to be listed on it as a test user.',
+      detail: res.error,
+    })
   }
 }
 

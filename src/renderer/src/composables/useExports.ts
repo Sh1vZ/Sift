@@ -1,5 +1,6 @@
 import { computed, ref } from 'vue'
 import type { ExportJob, ExportRequest, ExportState } from '@shared/types'
+import { alertError } from './useDialogs'
 import { getClip, goClips } from './useLibrary'
 import { closePlayer } from './usePlayer'
 import { openResult } from './useSearch'
@@ -52,7 +53,14 @@ function apply(list: ExportJob[]): void {
         },
       })
     } else if (j.state === 'failed') {
-      toast('error', 'Export failed', j.error || 'ffmpeg reported an error.')
+      // The cut was never written, and the user has usually walked away from
+      // the trim bar by now. A toast they can miss leaves them waiting on a
+      // file that is not coming.
+      void alertError({
+        title: 'Export failed',
+        message: `Nothing was written for ${j.name}${j.ext}. The recording it was cut from is untouched, so the trim can be made again.`,
+        detail: j.error || 'ffmpeg reported an error but gave no message.',
+      })
     }
   }
   known = new Map(list.map((j) => [j.id, j.state]))
@@ -68,7 +76,12 @@ export function initExports(initial: ExportJob[]): void {
 export async function exportClip(req: ExportRequest): Promise<ExportJob | null> {
   const res = await api.clips.export(req)
   if (!res.ok || !res.job) {
-    toast('error', 'Could not start the export', res.error)
+    void alertError({
+      title: 'Could not start the export',
+      message:
+        'The export never joined the queue, so nothing is being written. The trim is still on screen — close this and try again.',
+      detail: res.error,
+    })
     return null
   }
   return res.job
