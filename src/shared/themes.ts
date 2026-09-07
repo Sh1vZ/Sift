@@ -44,4 +44,10 @@ export const THEME_BRAND: Record<ThemeId, ThemeBrand> = {
     accent: '#fbbf24',
     onPrimary: '#ffffff',
   },
+  'oled-synthwave': {
+    primary: '#ec4899',
+    secondary: '#f9a8d4',
+    accent: '#22d3ee',
+    onPrimary: '#ffffff',
+  },
 }

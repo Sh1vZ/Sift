@@ -153,7 +153,8 @@
 html[data-theme='oled'],
 html[data-theme='oled-mint'],
 html[data-theme='oled-frost'],
-html[data-theme='oled-crimson'] {
+html[data-theme='oled-crimson'],
+html[data-theme='oled-synthwave'] {
   --app-wash: none;
   --bg-0: #000000;
   --bg-1: #000000;
@@ -545,6 +546,36 @@ html[data-theme='oled-crimson'] {
   --ui-color-primary-800: #991b1b;
   --ui-color-primary-900: #7f1d1d;
   --ui-color-primary-950: #450a0a;
+}
+
+/* OLED Synthwave: true black, hot pink identity, cyan punctuation. */
+html[data-theme='oled-synthwave'] {
+  --fg: #f3e8ff;
+  --fg-muted: #b49cc9;
+  --fg-dim: #9684ab;
+  --fg-inverse: #1a0b2e;
+  --primary: #ec4899;
+  --primary-hover: #f472b6;
+  --primary-soft: rgba(236, 72, 153, 0.16);
+  --secondary: #f9a8d4;
+  --accent: #22d3ee;
+  --accent-soft: rgba(34, 211, 238, 0.16);
+  --border-active: rgba(249, 168, 212, 0.45);
+  --ring: #f9a8d4;
+  --glow-primary: 0 0 0 1px rgba(249, 168, 212, 0.35), 0 12px 32px -8px rgba(236, 72, 153, 0.55);
+  --fg-toned: #cdb8e0;
+  --fg-strong: #faf5ff;
+  --ui-color-primary-50: #fdf2f8;
+  --ui-color-primary-100: #fce7f3;
+  --ui-color-primary-200: #fbcfe8;
+  --ui-color-primary-300: #f9a8d4;
+  --ui-color-primary-400: #f472b6;
+  --ui-color-primary-500: #ec4899;
+  --ui-color-primary-600: #db2777;
+  --ui-color-primary-700: #be185d;
+  --ui-color-primary-800: #9d174d;
+  --ui-color-primary-900: #831843;
+  --ui-color-primary-950: #500724;
 }
 
 /* Motion off: user setting or OS preference. Transitions collapse to instant. */

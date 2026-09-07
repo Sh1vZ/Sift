@@ -195,6 +195,18 @@ export const THEMES: ThemeDef[] = [
     },
     spotlight: 'rgba(252, 165, 165, 0.24)',
   },
+  {
+    id: 'oled-synthwave',
+    name: 'OLED Synthwave',
+    description: 'True black with a hot pink identity, cyan punctuation and a matching glow.',
+    oled: true,
+    colors: {
+      ...OLED_SURFACES,
+      fg: '#f3e8ff',
+      ...THEME_BRAND['oled-synthwave'],
+    },
+    spotlight: 'rgba(249, 168, 212, 0.26)',
+  },
 ]
 
 const DEFAULT_THEME = THEMES[0]

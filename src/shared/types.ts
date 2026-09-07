@@ -237,6 +237,7 @@ export const THEME_IDS = [
   'oled-mint',
   'oled-frost',
   'oled-crimson',
+  'oled-synthwave',
 ] as const
 export type ThemeId = (typeof THEME_IDS)[number]
 

@@ -26,8 +26,8 @@ Do not add `dark:` variants, `prefers-color-scheme` branches, or a light palette
 dead weight here.
 
 There **is** a small set of dark **themes** (`Settings.theme`, picked in Settings → Themes):
-`sift` (default), `ember`, `arctic`, `synthwave`, `verdant`, `crimson`, `solar`, and the
-true-black `oled`, `oled-mint`, `oled-frost`, `oled-crimson`. A theme is one `html[data-theme]`
+`sift` (default), `ember`, `synthwave`, `crimson`, `solar`, `nox`, `grim`, `space`, and the
+true-black `oled`, `oled-mint`, `oled-frost`, `oled-crimson`, `oled-synthwave`. A theme is one
 block in `tokens.css` that re-points only the surface, text and brand tokens (plus the
 `--ui-color-primary-*` shades so Nuxt UI follows). Typography, spacing, radius and motion never
 change with the theme. `composables/useTheme.ts` sets the attribute and carries a `THEMES`
