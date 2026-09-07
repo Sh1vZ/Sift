@@ -60,7 +60,6 @@ watch(
  */
 export function requestPreview(clip: Clip): void {
   if (clip.kind !== 'video' || clip.probeState !== 'ok' || clip.sprite) return
-  if (!settings.value.generateThumbnails) return
   void api.library.bumpClip(clip.id)
 }
 

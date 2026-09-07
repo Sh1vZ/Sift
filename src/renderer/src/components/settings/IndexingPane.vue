@@ -5,10 +5,7 @@ import SettingsPanel from './SettingsPanel.vue'
 import SettingsRow from './SettingsRow.vue'
 import { allClips, folders, scan, settings, updateSettings } from '@/composables/useLibrary'
 
-type ToggleKey = keyof Pick<
-  Settings,
-  'watchFolders' | 'indexScreenshots' | 'generateThumbnails' | 'importBoost'
->
+type ToggleKey = keyof Pick<Settings, 'watchFolders' | 'indexScreenshots'>
 
 const toggles: Array<{
   key: ToggleKey
@@ -32,22 +29,6 @@ const toggles: Array<{
     title: 'Index screenshots',
     description:
       'PNG, JPG, BMP and GIF captures beside your recordings, in the same grids. HDR screenshots (.jxr) are tone-mapped once and kept in the preview cache.',
-  },
-  {
-    key: 'generateThumbnails',
-    id: 'generate-previews',
-    icon: 'sparkles',
-    title: 'Generate previews',
-    description:
-      'Poster frames and hover-scrub strips, rendered once by ffmpeg at low CPU priority and kept in the preview cache. Every card gets its poster first; strips fill in behind, the ones on screen before the rest.',
-  },
-  {
-    key: 'importBoost',
-    id: 'import-boost',
-    icon: 'zap',
-    title: 'Fast imports',
-    description:
-      'When you add a folder or rescan, use whatever CPU your PC has spare — measured every second, so a game or an export running alongside pulls it back down. Recordings picked up in the background stick to the workers setting below.',
   },
 ]
 
@@ -106,7 +87,7 @@ const pending = computed(() => allClips.value.filter((c) => c.probeState === 'pe
         id="preview-workers"
         icon="cpu"
         title="Preview workers"
-        description="How many clips are processed at once for recordings picked up in the background. Keep it low while gaming; with Fast imports off, this is what an import uses too."
+        description="How many clips are processed at once for recordings picked up in the background. Keep it low while gaming — an import you are waiting on ignores this and uses whatever CPU is spare."
       >
         <template #trailing>
           <USelect

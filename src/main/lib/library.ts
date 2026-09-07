@@ -495,9 +495,7 @@ export class Library {
     }
     for (const clip of Object.values(this.store.data.clips)) {
       if (clip.probeState !== 'ok') continue
-      // Previews are optional; the render of an HDR screenshot is not — it is
-      // the only form of the file the viewer can show.
-      if (this.settings.generateThumbnails || isHdrImage(clip.ext)) this.enqueueWork(clip)
+      this.enqueueWork(clip)
     }
     this.startBurst()
     return { ok: true, files }
@@ -655,13 +653,9 @@ export class Library {
       }
     }
     // A burst in progress keeps its measured count; the new setting takes
-    // over when it ends. Switching the burst off mid-import ends it now.
+    // over when it ends.
     if (before.concurrency !== s.concurrency && !this.burst)
       this.media.setConcurrency(workerSetting(s.concurrency))
-    if (before.importBoost && !s.importBoost) this.endBurst()
-    if (!before.generateThumbnails && s.generateThumbnails) {
-      for (const clip of Object.values(this.store.data.clips)) this.enqueueWork(clip)
-    }
     // The walk decides what is in the index, so the stills come and go with a
     // rescan: dropped as unseen when switched off, found when switched on.
     if (before.indexScreenshots !== s.indexScreenshots) this.rescan()
@@ -1162,13 +1156,13 @@ export class Library {
     // The render is what the viewer shows; without it an HDR screenshot is nothing.
     if (clip.kind === 'image' && isHdrImage(clip.ext) && clip.render !== renderName(clip))
       return true
-    return this.settings.generateThumbnails && clip.thumb !== thumbName(clip)
+    return clip.thumb !== thumbName(clip)
   }
 
   /** Videos only: a still has nothing to scrub through. */
   private needsSprite(clip: Clip): boolean {
     if (clip.kind !== 'video' || clip.probeState !== 'ok' || clip.duration <= 0) return false
-    return this.settings.generateThumbnails && clip.sprite !== spriteName(clip)
+    return clip.sprite !== spriteName(clip)
   }
 
   /**
@@ -1215,7 +1209,7 @@ export class Library {
    * use the setting. Launch scans never start one: nobody is waiting on them.
    */
   private startBurst(): void {
-    if (!this.settings.importBoost || this.burst) return
+    if (this.burst) return
     this.burstSample = sampleCpu()
     this.burst = setInterval(() => this.tickBurst(), BURST_TICK_MS)
   }
@@ -1342,7 +1336,7 @@ export class Library {
       current = this.store.data.clips[clip.id]
       if (!current) return { id: clip.id }
     }
-    if (!this.settings.generateThumbnails || current.duration <= 0) return { id: clip.id }
+    if (current.duration <= 0) return { id: clip.id }
     if (current.thumb !== thumbName(current)) {
       // What it was showing until now goes once the replacement is on disk, so
       // the clip is never without a poster and the cache does not grow a second copy.
@@ -1404,7 +1398,6 @@ export class Library {
     // A render an older build made was replaced under a new name just now.
     if (clip.render && clip.render !== info.render)
       await removeArtifacts({ thumb: '', sprite: '', render: clip.render })
-    if (!this.settings.generateThumbnails) return { id: clip.id }
 
     const current = this.store.data.clips[clip.id]
     if (!current) return { id: clip.id }

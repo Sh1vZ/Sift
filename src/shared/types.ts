@@ -249,7 +249,6 @@ export const LAST_THEME_KEY = 'sift:theme'
 
 export interface Settings {
   watchFolders: boolean
-  generateThumbnails: boolean
   hoverPreview: boolean
   animations: boolean
   autoplayNext: boolean
@@ -280,15 +279,12 @@ export interface Settings {
   sort: SortBy
   groupBy: GroupBy
   theme: ThemeId
-  /** Parallel ffmpeg jobs. Kept low so the app never fights a game for CPU. */
-  concurrency: number
   /**
-   * An import the user is waiting on (a folder added, a rescan, a preview
-   * rebuild) runs on the CPU the machine has spare, measured every second,
-   * instead of on `concurrency` — more on an idle machine, fewer while a game
-   * is busy. Recordings picked up in the background still use `concurrency`.
+   * Parallel ffmpeg jobs for recordings picked up in the background. Kept low
+   * so the app never fights a game for CPU. An import the user is waiting on
+   * ignores it and runs on the CPU the machine has spare instead.
    */
-  importBoost: boolean
+  concurrency: number
   /** Closing the window hides it to the tray and leaves the library running. */
   minimizeToTray: boolean
   /** The sidebar shows as the icon-only rail instead of the labelled column. */
@@ -547,7 +543,6 @@ export function imageFormatLabel(ext: string, long = false): string {
 
 export const DEFAULT_SETTINGS: Settings = {
   watchFolders: true,
-  generateThumbnails: true,
   hoverPreview: true,
   animations: true,
   autoplayNext: false,
@@ -563,7 +558,6 @@ export const DEFAULT_SETTINGS: Settings = {
   groupBy: 'date',
   theme: 'sift',
   concurrency: 2,
-  importBoost: true,
   minimizeToTray: false,
   sidebarCollapsed: false,
   autoCheckUpdates: true,

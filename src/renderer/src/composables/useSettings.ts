@@ -203,12 +203,6 @@ export const SETTINGS_ROWS: SettingsRowIndex[] = [
     keywords: 'png jpg bmp gif jxr hdr images captures photos stills pictures',
   },
   {
-    id: 'generate-previews',
-    tab: 'indexing',
-    label: 'Generate previews',
-    keywords: 'thumbnails posters scrub strips ffmpeg',
-  },
-  {
     id: 'preview-workers',
     tab: 'indexing',
     label: 'Preview workers',
