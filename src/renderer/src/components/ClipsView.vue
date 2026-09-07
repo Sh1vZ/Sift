@@ -55,6 +55,7 @@ function placeholder(job: ExportJob): Clip {
     height: 0,
     fps: 0,
     vcodec: '',
+    hdr: false,
     hasAudio: !job.muted,
     audioTracks: [],
     thumb: job.sourceThumb,

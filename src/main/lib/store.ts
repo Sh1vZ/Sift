@@ -93,6 +93,15 @@ const MIGRATIONS: Array<(db: DatabaseSync) => void> = [
     db.exec("ALTER TABLE clips ADD COLUMN kind TEXT NOT NULL DEFAULT 'video'")
     db.exec("ALTER TABLE clips ADD COLUMN render TEXT NOT NULL DEFAULT ''")
   },
+  // v10 -> v11: clips know whether they are HDR, so their posters and strips
+  // can be tone-mapped instead of washed out. The probe is what reads it, so
+  // every video is probed again (cheap: one ffprobe each); the artifacts of
+  // the ones that turn out HDR then take a new name and are cut afresh, while
+  // the SDR ones keep what they have.
+  (db) => {
+    db.exec('ALTER TABLE clips ADD COLUMN hdr INTEGER NOT NULL DEFAULT 0')
+    db.exec("UPDATE clips SET probe_state = 'pending' WHERE kind = 'video'")
+  },
 ]
 const SCHEMA_VERSION = MIGRATIONS.length + 1
 
@@ -209,7 +218,8 @@ CREATE TABLE IF NOT EXISTS clips (
   youtube_watch_until_ms REAL NOT NULL DEFAULT 0,
   audio_tracks   TEXT NOT NULL DEFAULT '',
   kind           TEXT NOT NULL DEFAULT 'video',
-  render         TEXT NOT NULL DEFAULT ''
+  render         TEXT NOT NULL DEFAULT '',
+  hdr            INTEGER NOT NULL DEFAULT 0
 );
 ${YOUTUBE_ACCOUNTS_TABLE}
 ${GAME_ALIASES_TABLE}
@@ -292,6 +302,7 @@ interface ClipRow {
   audio_tracks: string
   kind: string
   render: string
+  hdr: number
 }
 
 /** A `youtube_accounts` row as stored. The `_enc` columns hold base64 ciphertext or ''. */
@@ -442,9 +453,9 @@ export class Store {
           duration, width, height, fps, vcodec, has_audio, thumb, sprite, sprite_frames, probe_state,
           source_id, trim_start, trim_end, muted, created_at_ms, youtube_id, favourite, seen_at_ms,
           source_game, youtube_account_id, youtube_stage, youtube_reason, youtube_checked_at_ms,
-          youtube_watch_until_ms, audio_tracks, kind, render)
+          youtube_watch_until_ms, audio_tracks, kind, render, hdr)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-          ?, ?, ?, ?, ?, ?, ?, ?)
+          ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
           path = excluded.path, name = excluded.name, title = excluded.title, ext = excluded.ext,
           folder_id = excluded.folder_id, game = excluded.game, size = excluded.size,
@@ -460,7 +471,8 @@ export class Store {
           youtube_reason = excluded.youtube_reason,
           youtube_checked_at_ms = excluded.youtube_checked_at_ms,
           youtube_watch_until_ms = excluded.youtube_watch_until_ms,
-          audio_tracks = excluded.audio_tracks, kind = excluded.kind, render = excluded.render`),
+          audio_tracks = excluded.audio_tracks, kind = excluded.kind, render = excluded.render,
+          hdr = excluded.hdr`),
       deleteClip: db.prepare('DELETE FROM clips WHERE id = ?'),
       setSetting: db.prepare(
         'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
@@ -772,6 +784,7 @@ export class Store {
       JSON.stringify(c.audioTracks ?? []),
       c.kind,
       c.render,
+      c.hdr ? 1 : 0,
     )
   }
 
@@ -855,6 +868,7 @@ function rowToClip(r: ClipRow): Clip {
     // written before the column had.
     kind: r.kind === 'image' ? 'image' : 'video',
     render: r.render,
+    hdr: Boolean(r.hdr),
     favourite: Boolean(r.favourite),
     seenAtMs: r.seen_at_ms,
   }

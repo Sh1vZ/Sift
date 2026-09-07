@@ -37,6 +37,13 @@ export interface Api {
      * the cards refill.
      */
     clearPreviews(): Promise<ActionResult & { files?: number }>
+    /**
+     * The clips whose cards are on screen. The preview queue serves them ahead
+     * of the backlog, so what the user is looking at fills first.
+     */
+    setVisibleClips(ids: string[]): Promise<void>
+    /** One clip wanted now — a card being hovered, a clip being opened: its preview job goes to the front. */
+    bumpClip(id: string): Promise<void>
     setSettings(patch: Partial<Settings>): Promise<Settings>
     /**
      * Renames games, or merges several into one, for display only — nothing on

@@ -1,6 +1,6 @@
 import { computed, ref, watch } from 'vue'
 import type { Clip } from '@shared/types'
-import { allClips, getClip, orderedClips, orderedExports } from './useLibrary'
+import { allClips, getClip, orderedClips, orderedExports, requestPreview } from './useLibrary'
 import type { Rect } from './useMotion'
 
 /** Which list prev/next walk: a game's grid, or the Clips view. */
@@ -12,6 +12,11 @@ export const source = ref<PlayerSource>('library')
 /** Set by `openClip(…, edit)` and consumed by the overlay once it has mounted. */
 export const pendingEdit = ref(false)
 export const isOpen = computed(() => current.value !== null)
+
+// The trim bar scrubs on the strip: an open clip without one yet is asked for next.
+watch(current, (c) => {
+  if (c) requestPreview(c)
+})
 
 const list = computed(() => (source.value === 'clips' ? orderedExports.value : orderedClips.value))
 const index = computed(() =>

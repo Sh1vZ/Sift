@@ -61,6 +61,12 @@ export interface Clip {
   height: number
   fps: number
   vcodec: string
+  /**
+   * The video carries an HDR transfer (PQ or HLG): ffmpeg's frames of it are
+   * tone-mapped before they become a poster or a strip, or the cards show a
+   * grey wash where the game was bright. Read by the probe, so false until then.
+   */
+  hdr: boolean
   hasAudio: boolean
   /** Every audio stream in the file. Empty until the clip has been probed. */
   audioTracks: AudioTrack[]
@@ -276,6 +282,13 @@ export interface Settings {
   theme: ThemeId
   /** Parallel ffmpeg jobs. Kept low so the app never fights a game for CPU. */
   concurrency: number
+  /**
+   * An import the user is waiting on (a folder added, a rescan, a preview
+   * rebuild) runs on the CPU the machine has spare, measured every second,
+   * instead of on `concurrency` — more on an idle machine, fewer while a game
+   * is busy. Recordings picked up in the background still use `concurrency`.
+   */
+  importBoost: boolean
   /** Closing the window hides it to the tray and leaves the library running. */
   minimizeToTray: boolean
   /** The sidebar shows as the icon-only rail instead of the labelled column. */
@@ -550,6 +563,7 @@ export const DEFAULT_SETTINGS: Settings = {
   groupBy: 'date',
   theme: 'sift',
   concurrency: 2,
+  importBoost: true,
   minimizeToTray: false,
   sidebarCollapsed: false,
   autoCheckUpdates: true,

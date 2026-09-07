@@ -29,6 +29,41 @@ export const ready = ref(false)
 export const folders = ref<LibraryFolder[]>([])
 export const settings = ref<Settings>({ ...DEFAULT_SETTINGS })
 export const scan = ref<ScanState>({ active: false, folder: '', found: 0, pending: 0, done: 0 })
+
+/**
+ * What the grid has on screen, for the preview queue in main: the visible
+ * cards' jobs go before the backlog, so what you are looking at fills first.
+ * Sent only when the set changed and only while the queue has work, so a
+ * scroll through a settled library costs no IPC at all; when work turns up
+ * later (a new scan, a new recording) the current set is sent then.
+ */
+let visibleIds: string[] = []
+let visibleKey = ''
+export function reportVisibleClips(ids: string[]): void {
+  const key = ids.join(',')
+  if (key === visibleKey) return
+  visibleKey = key
+  visibleIds = ids
+  if (scan.value.pending) void api.library.setVisibleClips(ids)
+}
+watch(
+  () => scan.value.pending > 0,
+  (busy) => {
+    if (busy && visibleIds.length) void api.library.setVisibleClips(visibleIds)
+  },
+)
+
+/**
+ * A card being hovered, or a clip being opened, before its scrub strip exists:
+ * asks main to cut that one next. A no-op for anything that has one, is not a
+ * video, or is not probed yet — its poster job already comes first.
+ */
+export function requestPreview(clip: Clip): void {
+  if (clip.kind !== 'video' || clip.probeState !== 'ok' || clip.sprite) return
+  if (!settings.value.generateThumbnails) return
+  void api.library.bumpClip(clip.id)
+}
+
 export const appVersion = ref('')
 export const suggestedFolders = ref<string[]>([])
 export const defaultClipsDir = ref('')

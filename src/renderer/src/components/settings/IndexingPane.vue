@@ -5,7 +5,10 @@ import SettingsPanel from './SettingsPanel.vue'
 import SettingsRow from './SettingsRow.vue'
 import { allClips, folders, scan, settings, updateSettings } from '@/composables/useLibrary'
 
-type ToggleKey = keyof Pick<Settings, 'watchFolders' | 'indexScreenshots' | 'generateThumbnails'>
+type ToggleKey = keyof Pick<
+  Settings,
+  'watchFolders' | 'indexScreenshots' | 'generateThumbnails' | 'importBoost'
+>
 
 const toggles: Array<{
   key: ToggleKey
@@ -36,7 +39,15 @@ const toggles: Array<{
     icon: 'sparkles',
     title: 'Generate previews',
     description:
-      'Poster frames and hover-scrub strips, rendered once by ffmpeg at low CPU priority and kept in the preview cache.',
+      'Poster frames and hover-scrub strips, rendered once by ffmpeg at low CPU priority and kept in the preview cache. Every card gets its poster first; strips fill in behind, the ones on screen before the rest.',
+  },
+  {
+    key: 'importBoost',
+    id: 'import-boost',
+    icon: 'zap',
+    title: 'Fast imports',
+    description:
+      'When you add a folder or rescan, use whatever CPU your PC has spare — measured every second, so a game or an export running alongside pulls it back down. Recordings picked up in the background stick to the workers setting below.',
   },
 ]
 
@@ -95,7 +106,7 @@ const pending = computed(() => allClips.value.filter((c) => c.probeState === 'pe
         id="preview-workers"
         icon="cpu"
         title="Preview workers"
-        description="How many clips are processed at once. Keep it low while gaming; raise it to chew through a big backlog faster."
+        description="How many clips are processed at once for recordings picked up in the background. Keep it low while gaming; with Fast imports off, this is what an import uses too."
       >
         <template #trailing>
           <USelect

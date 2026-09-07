@@ -61,6 +61,7 @@ const clip = (id: string): Clip => ({
   height: 0,
   fps: 0,
   vcodec: '',
+  hdr: false,
   hasAudio: false,
   audioTracks: [],
   thumb: '',
@@ -273,7 +274,8 @@ async function migrationCase(): Promise<void> {
     ].every((c) => names.includes(c)),
     'migration added the YouTube processing columns',
   )
-  check(version === '10', 'schema version advanced to 10')
+  check(version === '11', 'schema version advanced to 11')
+  check(names.includes('hdr'), 'migration added the hdr column')
   check(names.includes('audio_tracks'), 'migration added the audio_tracks column')
   check(
     names.includes('kind') && names.includes('render'),
@@ -283,9 +285,13 @@ async function migrationCase(): Promise<void> {
     store.data.clips.oc?.kind === 'video' && store.data.clips.oc?.render === '',
     'rows from before screenshots existed read as videos with no render',
   )
+  // v9 re-probed only the clips with audio; v11 re-probes every video for its
+  // transfer, so both old rows come back pending and read as SDR until then.
   check(
-    store.data.clips.oa?.probeState === 'pending' && store.data.clips.oc?.probeState === 'ok',
-    'clips with audio are re-probed for their tracks, silent ones are left alone',
+    store.data.clips.oa?.probeState === 'pending' &&
+      store.data.clips.oc?.probeState === 'pending' &&
+      store.data.clips.oc?.hdr === false,
+    'every video is re-probed for HDR and reads as SDR until then',
   )
   check(
     Array.isArray(store.data.clips.oc?.audioTracks) &&

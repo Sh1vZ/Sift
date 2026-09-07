@@ -6,7 +6,7 @@ import type { UploadJob } from '@shared/youtube'
 import type { ClipMenuItem } from '@/composables/useClipMenu'
 import FavouriteButton from './FavouriteButton.vue'
 import Icon from './Icon.vue'
-import { now, settings, type PendingAction } from '@/composables/useLibrary'
+import { now, requestPreview, settings, type PendingAction } from '@/composables/useLibrary'
 import { progressText } from '@/composables/useUploads'
 import {
   clamp,
@@ -193,6 +193,15 @@ function onMove(e: MouseEvent): void {
   frame.value = Math.floor(pct * frames.value)
 }
 
+/** Asked once per card: a strip that keeps failing is not re-cut on every pass of the mouse. */
+let askedForStrip = false
+function enter(): void {
+  hovering.value = true
+  if (askedForStrip || props.job || !settings.value.hoverPreview) return
+  askedForStrip = true
+  requestPreview(props.clip)
+}
+
 function leave(): void {
   hovering.value = false
   frame.value = 0
@@ -220,7 +229,7 @@ const seen = computed(() => Boolean(props.clip.seenAtMs) && !veil.value)
     @click="open"
     @keydown.enter.prevent="open"
     @keydown.space.prevent="open"
-    @mouseenter="hovering = true"
+    @mouseenter="enter"
     @mouseleave="leave"
     @mousemove="onMove"
   >

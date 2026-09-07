@@ -1,34 +1,61 @@
 import { spawn, type ChildProcess } from 'node:child_process'
 import { access, readdir, rename as fsRename, unlink } from 'node:fs/promises'
-import { cpus, constants as osConstants, setPriority } from 'node:os'
+import { constants as osConstants, setPriority } from 'node:os'
 import { basename, dirname, extname, join } from 'node:path'
 import { Worker } from 'node:worker_threads'
-import type { AudioTrack, Clip, ClipPatch } from '@shared/types'
+import type { AudioTrack, Clip } from '@shared/types'
 import { jxrTuning } from './jxr'
 import jxrWorkerPath from './jxr.worker?modulePath'
 import { FFMPEG, FFPROBE, audioDir, cacheDir } from './paths'
 
-export const SPRITE_FRAMES = 10
+/**
+ * Frames in a hover-scrub strip. Each is a keyframe decode, so this is the
+ * strip's cost almost to the millisecond: five is one frame per 24–60 s of a
+ * ShadowPlay clip, and half the import time ten cost. The count is part of
+ * the strip's cache name, so changing it retires the strips already cut.
+ */
+export const SPRITE_FRAMES = 5
 const THUMB_WIDTH = 480
+/**
+ * Every strip frame is exactly this, a 16:9 centre crop of the picture — the
+ * same crop the card gives the poster. The card slides the strip by whole
+ * frames as a percentage of its width, which is only exact when frame and
+ * card share an aspect: a 21:9 recording left uncropped made every slot
+ * straddle two frames.
+ */
 const SPRITE_FRAME_WIDTH = 320
+const SPRITE_FRAME_HEIGHT = 180
 const JOB_TIMEOUT_MS = 60_000
 /**
  * `area` is the cheapest swscale mode that still anti-aliases a 7x downscale;
  * `fast_bilinear` is ~10% quicker but speckles the poster.
  */
 const SCALE_FLAGS = 'area'
-/** Seeks landing within one GOP of the poster time reuse that frame instead of a second decode. */
-const POSTER_REUSE_WINDOW_S = 1
 /**
- * The clip's own first frame: the card's poster, the still the player stands in
- * with while it opens, and the frame playback starts on are then all the same
- * picture, so none of the three hands over to another with a visible change.
+ * Filters default to a thread per core, which on a thumbnail-sized frame
+ * costs more in spin-up than it saves, and would make one of our jobs look
+ * like a whole machine's worth of load to the import burst (lib/burst.ts),
+ * which counts each job as one thread. One thread for the decoder, one for
+ * the filters: measured 4–15% faster per job on top of being predictable.
  */
-const POSTER_TIME = 0
+const ONE_THREAD_FILTERS = ['-filter_threads', '1', '-filter_complex_threads', '1']
+/**
+ * HDR frames (PQ or HLG) tone-mapped to BT.709 for a JPEG. Applied after the
+ * downscale, so the curve runs over a few hundred pixels a side rather than
+ * the full frame: ~30 ms on top of the decode. Without it the cards show the
+ * raw PQ signal as if it were SDR — a grey wash where the game was bright.
+ */
+const TONE_MAP =
+  'zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=hable:desat=0,' +
+  'zscale=t=bt709:m=bt709:r=tv,format=yuv420p'
+/** The transfer characteristics ffprobe reports for an HDR stream: PQ, and HLG. */
+const HDR_TRANSFERS = new Set(['smpte2084', 'arib-std-b67'])
 /**
  * Bumped whenever the frames these files hold change meaning. The name is what
  * makes a cached artifact a hit, so a library cut by an older build regenerates
  * once on launch rather than keeping posters this build would not have made.
+ * An HDR clip's names carry an `h` besides, so learning that a clip is HDR
+ * (the probe reads it) retires the un-mapped frames cut before it was known.
  */
 const ARTIFACT_VERSION = 2
 /** Past this, a stream start difference is a misread file rather than a real offset. */
@@ -48,12 +75,12 @@ export interface ProbeResult {
   height: number
   fps: number
   vcodec: string
+  hdr: boolean
   hasAudio: boolean
   audioTracks: AudioTrack[]
 }
 
-export interface Artifacts {
-  thumb: string
+export interface SpriteStrip {
   sprite: string
   spriteFrames: number
 }
@@ -209,6 +236,7 @@ interface FfprobeStream {
   height?: number
   avg_frame_rate?: string
   r_frame_rate?: string
+  color_transfer?: string
   duration?: string
   start_time?: string
   channels?: number
@@ -293,7 +321,7 @@ export async function probe(filePath: string): Promise<ProbeResult> {
     // narrowed the same way: audio track names and which one plays by default
     // are worth the bytes, the rest of what ffprobe would emit is not.
     '-show_entries',
-    'format=duration:stream=index,codec_type,codec_name,width,height,avg_frame_rate,r_frame_rate,duration,start_time,channels:stream_tags=language,title:stream_disposition=default',
+    'format=duration:stream=index,codec_type,codec_name,width,height,avg_frame_rate,r_frame_rate,color_transfer,duration,start_time,channels:stream_tags=language,title:stream_disposition=default',
     filePath,
   ])
   if (code !== 0) throw new Error(`ffprobe exited with ${code}`)
@@ -308,6 +336,7 @@ export async function probe(filePath: string): Promise<ProbeResult> {
     height: video?.height ?? 0,
     fps: parseFps(video?.avg_frame_rate) || parseFps(video?.r_frame_rate),
     vcodec: video?.codec_name ?? '',
+    hdr: HDR_TRANSFERS.has(video?.color_transfer ?? ''),
     hasAudio: tracks.length > 0,
     audioTracks: tracks,
   }
@@ -359,25 +388,24 @@ export async function keyframeBefore(filePath: string, at: number): Promise<numb
   return best < 0 ? null : best
 }
 
-/** Cache names include the mtime so a re-recorded file never shows a stale poster. */
-export function thumbName(clip: Clip): string {
-  return `${clip.id}-${Math.round(clip.mtimeMs)}-v${ARTIFACT_VERSION}.jpg`
+/**
+ * Cache names include the mtime so a re-recorded file never shows a stale
+ * poster, and the HDR marker so a clip found to be HDR never keeps the
+ * un-mapped frames cut before the probe said so.
+ */
+function frameStem(clip: Clip): string {
+  return `${clip.id}-${Math.round(clip.mtimeMs)}-v${ARTIFACT_VERSION}${clip.hdr ? 'h' : ''}`
 }
+export function thumbName(clip: Clip): string {
+  return `${frameStem(clip)}.jpg`
+}
+/** The strip's geometry is in its name, so a change to any of it retires the strips already cut. */
 export function spriteName(clip: Clip): string {
-  return `${clip.id}-${Math.round(clip.mtimeMs)}-v${ARTIFACT_VERSION}.sprite.jpg`
+  return `${frameStem(clip)}.sprite-${SPRITE_FRAMES}x${SPRITE_FRAME_WIDTH}x${SPRITE_FRAME_HEIGHT}.jpg`
 }
 /** The SDR copy of an HDR screenshot. A jpg in the cache, so `clip://thumb` can serve it. */
 export function renderName(clip: Clip): string {
   return `${clip.id}-${Math.round(clip.mtimeMs)}-v${ARTIFACT_VERSION}.render.jpg`
-}
-
-/** Cached under a name this build would not write: the frames in it are not the ones it wants. */
-export function artifactsStale(clip: Clip): boolean {
-  return Boolean(
-    (clip.thumb && clip.thumb !== thumbName(clip)) ||
-    (clip.sprite && clip.sprite !== spriteName(clip)) ||
-    (clip.render && clip.render !== renderName(clip)),
-  )
 }
 
 async function exists(p: string): Promise<boolean> {
@@ -419,73 +447,102 @@ function seekInput(path: string, at: number): string[] {
   ]
 }
 
-function scaleTo(width: number, from: string, to: string): string {
-  return `[${from}]scale=${width}:-2:flags=${SCALE_FLAGS}[${to}]`
+/** Downscale, then for an HDR frame the tone map — in that order, so the curve runs over the small picture. */
+function frameFilter(width: number, hdr: boolean): string {
+  const scale = `scale=${width}:-2:flags=${SCALE_FLAGS}`
+  return hdr ? `${scale},${TONE_MAP}` : scale
 }
 
 /**
- * Poster + hover-scrub strip from a single ffmpeg process. Seeks are
- * keyframe-only and stitched with `hstack`; the poster is split off the
- * matching sprite seek when one is close enough, so the common case is
- * exactly `SPRITE_FRAMES` decodes and one spawn per clip. Whichever
- * artifact already exists on disk is skipped.
+ * A strip frame: scaled to cover `SPRITE_FRAME_WIDTH` x `SPRITE_FRAME_HEIGHT`
+ * and centre-cropped to exactly that (CSS `object-fit: cover`, done here so
+ * the card's whole-frame slide is exact), then the tone map if HDR.
  */
-export async function makeArtifacts(clip: Clip, duration: number): Promise<Artifacts> {
+function stripFilter(hdr: boolean): string {
+  const cover =
+    `scale=${SPRITE_FRAME_WIDTH}:${SPRITE_FRAME_HEIGHT}:force_original_aspect_ratio=increase` +
+    `:force_divisible_by=2:flags=${SCALE_FLAGS},crop=${SPRITE_FRAME_WIDTH}:${SPRITE_FRAME_HEIGHT}`
+  return hdr ? `${cover},${TONE_MAP}` : cover
+}
+
+/**
+ * The card's poster: the clip's own first frame, so the poster, the still the
+ * player stands in with while it opens, and the frame playback starts on are
+ * all the same picture and none hands over to another with a visible change.
+ * No seek at all — the first packet is a keyframe — so it costs one decode:
+ * a card has its picture in ~150 ms, strip or no strip. Skipped when already
+ * on disk.
+ */
+export async function makePoster(clip: Clip): Promise<{ thumb: string }> {
   const thumb = thumbName(clip)
-  const sprite = spriteName(clip)
   const thumbPath = join(cacheDir(), thumb)
+  if (await exists(thumbPath)) return { thumb }
+  const { code } = await run(FFMPEG, [
+    '-y',
+    '-v',
+    'error',
+    ...ONE_THREAD_FILTERS,
+    '-threads',
+    '1',
+    '-skip_frame',
+    'nokey',
+    '-skip_loop_filter',
+    'all',
+    '-i',
+    clip.path,
+    '-vf',
+    frameFilter(THUMB_WIDTH, clip.hdr),
+    '-frames:v',
+    '1',
+    '-q:v',
+    '4',
+    thumbPath,
+  ])
+  if (code !== 0) {
+    // Never leave a half-written JPEG behind to be mistaken for a cache hit.
+    await unlink(thumbPath).catch(() => undefined)
+    throw new Error(`ffmpeg poster exited with ${code}`)
+  }
+  return { thumb }
+}
+
+/**
+ * The hover-scrub strip: `SPRITE_FRAMES` keyframe-only seeks in one ffmpeg
+ * process, stitched with `hstack` — one decoded I-frame per frame of the strip
+ * and one spawn per clip. A job of its own, run after every poster: it is nine
+ * tenths of a clip's preview cost, and nothing on screen waits for it. Skipped
+ * when already on disk.
+ */
+export async function makeSprite(clip: Clip, duration: number): Promise<SpriteStrip> {
+  const sprite = spriteName(clip)
   const spritePath = join(cacheDir(), sprite)
   const frames = spriteFrameCount(duration)
-  const needThumb = !(await exists(thumbPath))
-  const needSprite = !(await exists(spritePath))
-  if (!needThumb && !needSprite) return { thumb, sprite, spriteFrames: frames }
+  if (await exists(spritePath)) return { sprite, spriteFrames: frames }
 
   // The strip opens on the first frame and steps through the clip from there.
   // Dividing by `frames` rather than `frames - 1` keeps the last seek short of
   // the end, where there is no frame left to land on.
-  const times: number[] = []
-  if (needSprite) for (let i = 0; i < frames; i++) times.push((duration * i) / frames)
-  let posterIdx = -1
-  if (needThumb) {
-    posterIdx = times.findIndex((t) => Math.abs(t - POSTER_TIME) < POSTER_REUSE_WINDOW_S)
-    if (posterIdx < 0) posterIdx = times.push(POSTER_TIME) - 1
-  }
-
-  const args = ['-y', '-v', 'error']
-  for (const t of times) args.push(...seekInput(clip.path, t))
-
+  const args = ['-y', '-v', 'error', ...ONE_THREAD_FILTERS]
   const graph: string[] = []
   let stacked = ''
-  for (let i = 0; i < times.length; i++) {
-    const inSprite = needSprite && i < frames
-    if (i === posterIdx && inSprite) {
-      graph.push(
-        `[${i}:v]split[p][s]`,
-        scaleTo(THUMB_WIDTH, 'p', 'poster'),
-        scaleTo(SPRITE_FRAME_WIDTH, 's', `f${i}`),
-      )
-    } else if (i === posterIdx) {
-      graph.push(scaleTo(THUMB_WIDTH, `${i}:v`, 'poster'))
-    } else {
-      graph.push(scaleTo(SPRITE_FRAME_WIDTH, `${i}:v`, `f${i}`))
-    }
-    if (inSprite) stacked += `[f${i}]`
+  for (let i = 0; i < frames; i++) {
+    args.push(...seekInput(clip.path, (duration * i) / frames))
+    // Cropped and tone-mapped per frame, straight off the decoder: `hstack`
+    // drops the colour tags, and zscale refuses a frame whose transfer it
+    // cannot see.
+    graph.push(`[${i}:v]${stripFilter(clip.hdr)}[f${i}]`)
+    stacked += `[f${i}]`
   }
-  if (needSprite) graph.push(`${stacked}hstack=inputs=${frames}[sprite]`)
+  graph.push(`${stacked}hstack=inputs=${frames}[sprite]`)
   args.push('-filter_complex', graph.join(';'))
-  if (needThumb)
-    args.push('-map', '[poster]', '-frames:v', '1', '-threads', '1', '-q:v', '4', thumbPath)
-  if (needSprite)
-    args.push('-map', '[sprite]', '-frames:v', '1', '-threads', '1', '-q:v', '5', spritePath)
+  args.push('-map', '[sprite]', '-frames:v', '1', '-threads', '1', '-q:v', '5', spritePath)
 
   const { code } = await run(FFMPEG, args)
   if (code !== 0) {
-    // Never leave a half-written JPEG behind to be mistaken for a cache hit.
-    if (needThumb) await unlink(thumbPath).catch(() => undefined)
-    if (needSprite) await unlink(spritePath).catch(() => undefined)
-    throw new Error(`ffmpeg artifacts exited with ${code}`)
+    await unlink(spritePath).catch(() => undefined)
+    throw new Error(`ffmpeg sprite exited with ${code}`)
   }
-  return { thumb, sprite, spriteFrames: frames }
+  return { sprite, spriteFrames: frames }
 }
 
 /**
@@ -513,6 +570,7 @@ export async function makeImageThumb(clip: Clip, source = clip.path): Promise<{ 
     '-y',
     '-v',
     'error',
+    ...ONE_THREAD_FILTERS,
     '-threads',
     '1',
     '-i',
@@ -712,80 +770,4 @@ export async function removeArtifacts(
 
 export function ffmpegAvailable(): boolean {
   return Boolean(FFMPEG && FFPROBE)
-}
-
-type JobRunner = (clip: Clip) => Promise<ClipPatch>
-
-/**
- * Bounded-concurrency queue. Concurrency stays low and every child runs at
- * below-normal priority, so a running game or the player never has to fight
- * the indexer for CPU.
- */
-export class MediaQueue {
-  private queue: Clip[] = []
-  private queued = new Set<string>()
-  private running = 0
-  private stopped = false
-  concurrency: number
-  onProgress: (pending: number) => void = () => undefined
-
-  constructor(
-    private readonly runner: JobRunner,
-    private readonly onDone: (patch: ClipPatch) => void,
-    concurrency?: number,
-  ) {
-    this.concurrency = concurrency ?? Math.max(1, Math.min(2, Math.floor(cpus().length / 4)))
-  }
-
-  get pending(): number {
-    return this.queue.length + this.running
-  }
-
-  has(id: string): boolean {
-    return this.queued.has(id)
-  }
-
-  enqueue(clip: Clip, front = false): void {
-    if (this.queued.has(clip.id)) return
-    this.queued.add(clip.id)
-    if (front) this.queue.unshift(clip)
-    else this.queue.push(clip)
-    this.pump()
-  }
-
-  remove(id: string): void {
-    if (!this.queued.has(id)) return
-    this.queue = this.queue.filter((c) => c.id !== id)
-    this.queued.delete(id)
-  }
-
-  /** Drops the backlog and kills in-flight children; their results are discarded, not recorded as failures. */
-  stop(): void {
-    this.stopped = true
-    this.queue = []
-    this.queued.clear()
-    killActiveJobs()
-  }
-
-  private pump(): void {
-    while (!this.stopped && this.running < this.concurrency && this.queue.length) {
-      const clip = this.queue.shift()!
-      this.running++
-      this.onProgress(this.pending)
-      this.runner(clip)
-        .then((patch) => {
-          if (!this.stopped) this.onDone(patch)
-        })
-        .catch(() => {
-          if (!this.stopped) this.onDone({ id: clip.id, probeState: 'failed' })
-        })
-        .finally(() => {
-          this.queued.delete(clip.id)
-          this.running--
-          this.onProgress(this.pending)
-          // Yield between jobs so IPC and the UI stay responsive.
-          setImmediate(() => this.pump())
-        })
-    }
-  }
 }

@@ -23,6 +23,7 @@ import type {
 } from '@shared/types'
 import { isHdrImage, mediaKindOf } from '@shared/types'
 import { ActivityLog } from './activity'
+import { burstWorkers, busyThreads, sampleCpu, type CpuSample } from './burst'
 import { fullChangelog, releaseNotesFor } from './changelog'
 import { copyFileToClipboard } from './clipboard'
 import { cleanTitle, clipId, deriveGame, parseRecordedAt, prettifyGame } from './clips'
@@ -39,14 +40,14 @@ import {
   validateExportRequest,
 } from './exports'
 import {
-  MediaQueue,
-  artifactsStale,
   extractAudioTrack,
   ffmpegAvailable,
   keyframeBefore,
-  makeArtifacts,
+  killActiveJobs,
   makeImageThumb,
   makeJxrRender,
+  makePoster,
+  makeSprite,
   probe,
   probeImage,
   removeArtifacts,
@@ -57,6 +58,7 @@ import {
   thumbName,
 } from './media'
 import { FFMPEG, cacheDir, libraryDb, userDataDir } from './paths'
+import { MediaQueue, type MediaJob } from './queue'
 import { walkMedia } from './scanner'
 import { collectStats } from './stats'
 import { Store } from './store'
@@ -66,6 +68,10 @@ export type Emit = <K extends EventName>(name: K, payload: EventMap[K]) => void
 
 const FLUSH_MS = 150
 const ADD_BATCH = 40
+/** How often an import re-measures the CPU it may use. */
+const BURST_TICK_MS = 1000
+/** The workers setting's range; the select offers 1–4. */
+const workerSetting = (n: number): number => Math.max(1, Math.min(4, n))
 /** Decoders are not free, and each 10-bit frame costs the splash ~300 ms of compile: enough for a ShadowPlay library's HDR classes and one more. */
 const WARMUP_CLIPS = 3
 /** An export that prints nothing for this long is wedged, not slow. */
@@ -132,11 +138,16 @@ export class Library {
   private audioJobs = new Map<string, Promise<ActionResult & { file?: string }>>()
   private exportAbort: AbortController | null = null
   private exportsTimer: NodeJS.Timeout | null = null
+  /** The sampler behind an import the user is waiting on; null between imports. See `startBurst`. */
+  private burst: NodeJS.Timeout | null = null
+  private burstSample: CpuSample | null = null
+  /** Folder walks queued or running: a burst must outlive the walk that is still finding its files. */
+  private scansQueued = 0
 
   constructor(private readonly emit: Emit) {
     this.activity = new ActivityLog(this.store, emit)
     this.media = new MediaQueue(
-      (clip) => this.processClip(clip),
+      (job) => this.processJob(job),
       (patch) => this.applyPatch(patch),
     )
     this.media.onProgress = (pending) => {
@@ -147,7 +158,7 @@ export class Library {
 
   async init(): Promise<void> {
     await this.store.load()
-    this.media.concurrency = this.settings.concurrency
+    this.media.setConcurrency(workerSetting(this.settings.concurrency))
     this.ensureClipsFolder()
     for (const folder of this.store.data.folders) {
       folder.available = existsSync(folder.path)
@@ -164,7 +175,11 @@ export class Library {
     this.exportAbort?.abort()
     await this.exportChain.catch(() => undefined)
     this.activity.shutdown()
+    this.endBurst()
+    // The queue drops its backlog; the children it started are killed here
+    // rather than orphaned, along with any JPEG XR decode thread.
     this.media.stop()
+    killActiveJobs()
     for (const w of this.watchers.values()) await w.close().catch(() => undefined)
     this.watchers.clear()
     await this.store.close()
@@ -404,6 +419,7 @@ export class Library {
     if (folder.available) {
       this.startWatcher(folder)
       this.queueScan(folder)
+      this.startBurst()
     }
     return { folder }
   }
@@ -438,6 +454,7 @@ export class Library {
       if (folder.available) this.queueScan(folder)
     }
     this.emitFolders()
+    this.startBurst()
     return { ok: true }
   }
 
@@ -463,8 +480,9 @@ export class Library {
       if (clip.probeState !== 'ok') continue
       // Previews are optional; the render of an HDR screenshot is not — it is
       // the only form of the file the viewer can show.
-      if (this.settings.generateThumbnails || isHdrImage(clip.ext)) this.media.enqueue(clip)
+      if (this.settings.generateThumbnails || isHdrImage(clip.ext)) this.enqueueWork(clip)
     }
+    this.startBurst()
     return { ok: true, files }
   }
 
@@ -619,13 +637,13 @@ export class Library {
         else void this.stopWatcher(folder.id)
       }
     }
-    if (before.concurrency !== s.concurrency) {
-      this.media.concurrency = Math.max(1, Math.min(4, s.concurrency))
-    }
+    // A burst in progress keeps its measured count; the new setting takes
+    // over when it ends. Switching the burst off mid-import ends it now.
+    if (before.concurrency !== s.concurrency && !this.burst)
+      this.media.setConcurrency(workerSetting(s.concurrency))
+    if (before.importBoost && !s.importBoost) this.endBurst()
     if (!before.generateThumbnails && s.generateThumbnails) {
-      for (const clip of Object.values(this.store.data.clips)) {
-        if (clip.probeState === 'ok' && !clip.thumb) this.media.enqueue(clip)
-      }
+      for (const clip of Object.values(this.store.data.clips)) this.enqueueWork(clip)
     }
     // The walk decides what is in the index, so the stills come and go with a
     // rescan: dropped as unseen when switched off, found when switched on.
@@ -695,7 +713,7 @@ export class Library {
     this.scheduleFlush()
     // Asked the same way the scan asks, so a still — which never has a strip —
     // is not sent back to the queue on every rename.
-    if (this.needsWork(next)) this.media.enqueue(next, true)
+    this.enqueueWork(next, true)
     // History about the old id follows the clip to its new one.
     this.store.rekeyActivityClip(clip.id, next.id, target)
     this.recordClipAction('rename', next, { detail: `was ${clip.name}${clip.ext}` })
@@ -935,6 +953,8 @@ export class Library {
         height: source.height,
         fps: source.fps,
         vcodec: source.vcodec,
+        // A stream copy keeps the source's transfer; the probe confirms it.
+        hdr: source.hdr,
         hasAudio: source.hasAudio && !job.muted && job.tracks?.length !== 0,
         // Left for the probe: the export may have dropped tracks, so the
         // source's list is not this file's list.
@@ -968,8 +988,7 @@ export class Library {
       // follow name this clip, and the renderer must already have it.
       this.flushEvents()
       // The user is waiting for this poster: ahead of the backlog.
-      this.media.remove(clip.id)
-      this.media.enqueue(clip, true)
+      this.enqueueWork(clip, true)
       if (!previous) {
         folder.clipCount++
         this.store.upsertFolder(folder)
@@ -1023,7 +1042,11 @@ export class Library {
   // --------------------------------------------------------------- scanning
 
   private queueScan(folder: LibraryFolder): void {
-    this.scanChain = this.scanChain.then(() => this.scanFolder(folder)).catch(() => undefined)
+    this.scansQueued++
+    this.scanChain = this.scanChain
+      .then(() => this.scanFolder(folder))
+      .catch(() => undefined)
+      .finally(() => this.scansQueued--)
   }
 
   private async scanFolder(folder: LibraryFolder): Promise<void> {
@@ -1052,7 +1075,7 @@ export class Library {
       }
       const existing = this.store.data.clips[id]
       if (existing?.size === st.size && Math.abs(existing.mtimeMs - st.mtimeMs) < 1000) {
-        if (this.needsWork(existing)) this.media.enqueue(existing)
+        this.enqueueWork(existing)
         continue
       }
       this.upsertClip(folder, file, st, existing)
@@ -1110,18 +1133,95 @@ export class Library {
     return folder.kind === 'library' && this.settings.indexScreenshots
   }
 
-  private needsWork(clip: Clip): boolean {
+  /**
+   * The poster stage covers the probe too: a clip not yet probed goes there
+   * whatever else it lacks. Artifacts an older build cut hold different frames
+   * than this one asks for, so they are as good as missing — the difference
+   * being that the clip keeps showing them until the replacements land.
+   */
+  private needsPoster(clip: Clip): boolean {
     if (clip.probeState === 'pending') return true
     if (clip.probeState === 'failed') return false
-    if (clip.kind === 'image') {
-      // The render is what the viewer shows; without it an HDR screenshot is nothing.
-      if (isHdrImage(clip.ext) && !clip.render) return true
-      return this.settings.generateThumbnails && (!clip.thumb || artifactsStale(clip))
+    // The render is what the viewer shows; without it an HDR screenshot is nothing.
+    if (clip.kind === 'image' && isHdrImage(clip.ext) && clip.render !== renderName(clip))
+      return true
+    return this.settings.generateThumbnails && clip.thumb !== thumbName(clip)
+  }
+
+  /** Videos only: a still has nothing to scrub through. */
+  private needsSprite(clip: Clip): boolean {
+    if (clip.kind !== 'video' || clip.probeState !== 'ok' || clip.duration <= 0) return false
+    return this.settings.generateThumbnails && clip.sprite !== spriteName(clip)
+  }
+
+  /**
+   * Queues whatever the clip still needs, the poster (with the probe) ahead of
+   * the strip — see lib/queue.ts. A poster job queues the strip itself once it
+   * is done. `front` is for a file that just appeared or was renamed: ahead of
+   * the backlog, whatever its recording time says.
+   */
+  private enqueueWork(clip: Clip, front = false): void {
+    const opts = { rank: clip.recordedAtMs, front }
+    if (this.needsPoster(clip)) this.media.enqueue(clip, 'poster', opts)
+    else if (this.needsSprite(clip)) this.media.enqueue(clip, 'sprite', opts)
+  }
+
+  /**
+   * The cards on screen, from the grid. Their jobs go before the backlog, so
+   * what the user is looking at fills first however large the library is.
+   */
+  setVisibleClips(ids: string[]): void {
+    this.media.setHot(ids)
+  }
+
+  /**
+   * A card being hovered, or a clip being opened, wants its strip now: a
+   * queued job moves to the front of its lane, and a clip nothing is queued
+   * for is asked again — so a strip that failed once gets another go when
+   * somebody is waiting on it.
+   */
+  bumpClip(id: string): void {
+    const clip = this.store.data.clips[id]
+    if (!clip) return
+    if (this.media.has(id)) this.media.bump(id)
+    else this.enqueueWork(clip, true)
+  }
+
+  // ------------------------------------------------------------------ burst
+
+  /**
+   * An import the user is waiting on — a folder just added, a rescan, a
+   * preview rebuild — runs on the CPU the machine has spare rather than on the
+   * workers setting: sampled every second, more on an idle machine, fewer
+   * while a game or an export is busy (see lib/burst.ts). Over once the walk
+   * and the backlog are both done; recordings the watcher picks up afterwards
+   * use the setting. Launch scans never start one: nobody is waiting on them.
+   */
+  private startBurst(): void {
+    if (!this.settings.importBoost || this.burst) return
+    this.burstSample = sampleCpu()
+    this.burst = setInterval(() => this.tickBurst(), BURST_TICK_MS)
+  }
+
+  private tickBurst(): void {
+    if (!this.media.pending && !this.scansQueued) {
+      this.endBurst()
+      return
     }
-    // Artifacts an older build cut hold different frames than this one asks for,
-    // so they are as good as missing — the difference being that the clip keeps
-    // showing them until the replacements land.
-    return this.settings.generateThumbnails && (!clip.thumb || !clip.sprite || artifactsStale(clip))
+    const next = sampleCpu()
+    const busy = this.burstSample ? busyThreads(this.burstSample, next) : 0
+    this.burstSample = next
+    this.media.setConcurrency(
+      burstWorkers({ threads: next.threads, busy, running: this.media.running, floor: 1 }),
+    )
+  }
+
+  private endBurst(): void {
+    if (!this.burst) return
+    clearInterval(this.burst)
+    this.burst = null
+    this.burstSample = null
+    this.media.setConcurrency(workerSetting(this.settings.concurrency))
   }
 
   private upsertClip(folder: LibraryFolder, file: string, st: Stats, previous?: Clip): Clip {
@@ -1155,6 +1255,7 @@ export class Library {
       height: 0,
       fps: 0,
       vcodec: '',
+      hdr: false,
       hasAudio: false,
       audioTracks: [],
       thumb: '',
@@ -1186,7 +1287,7 @@ export class Library {
     this.store.data.clips[clip.id] = clip
     this.store.upsertClip(clip)
     this.added.set(clip.id, clip)
-    this.media.enqueue(clip)
+    this.enqueueWork(clip)
     return clip
   }
 
@@ -1204,33 +1305,55 @@ export class Library {
 
   // ------------------------------------------------------------- media jobs
 
-  private async processClip(clip: Clip): Promise<ClipPatch> {
-    if (clip.kind === 'image') return this.processImage(clip)
-    if (!ffmpegAvailable()) return { id: clip.id, probeState: 'failed' }
-    const info = await probe(clip.path)
-    this.applyPatch({ id: clip.id, ...info, probeState: 'ok' })
-    if (!this.settings.generateThumbnails || info.duration <= 0) return { id: clip.id }
+  private processJob(job: MediaJob): Promise<ClipPatch> {
+    if (job.clip.kind === 'image') return this.processImage(job.clip)
+    return job.stage === 'poster' ? this.processPoster(job.clip) : this.processSprite(job.clip)
+  }
 
-    // Poster and scrub strip come out of one ffmpeg run; anything already
-    // cached on disk is skipped inside makeArtifacts.
-    const current = this.store.data.clips[clip.id]
+  /**
+   * A video's first turn: the probe, then its poster — one decoded frame, so
+   * the card has a picture well within a second of the scan finding the file.
+   * The strip is queued from here, behind every other clip's poster.
+   */
+  private async processPoster(clip: Clip): Promise<ClipPatch> {
+    if (!ffmpegAvailable()) return { id: clip.id, probeState: 'failed' }
+    let current = this.store.data.clips[clip.id]
     if (!current) return { id: clip.id }
-    if (!current.thumb || !current.sprite || artifactsStale(current)) {
-      // What it was showing until now: whichever of the two the run replaced
-      // under a new name goes once the replacement is on disk, so the clip is
-      // never without a poster and the cache does not grow a second copy. A
-      // name the run reused is left alone — that file is still the live one.
-      const was = { thumb: current.thumb, sprite: current.sprite }
+    if (current.probeState === 'pending') {
+      const info = await probe(clip.path)
+      this.applyPatch({ id: clip.id, ...info, probeState: 'ok' })
+      current = this.store.data.clips[clip.id]
+      if (!current) return { id: clip.id }
+    }
+    if (!this.settings.generateThumbnails || current.duration <= 0) return { id: clip.id }
+    if (current.thumb !== thumbName(current)) {
+      // What it was showing until now goes once the replacement is on disk, so
+      // the clip is never without a poster and the cache does not grow a second copy.
+      const was = current.thumb
       try {
-        const made = await makeArtifacts(current, info.duration)
-        this.applyPatch({ id: clip.id, ...made })
-        await removeArtifacts({
-          thumb: was.thumb === made.thumb ? '' : was.thumb,
-          sprite: was.sprite === made.sprite ? '' : was.sprite,
-        })
+        const made = await makePoster(current)
+        this.applyPatch({ id: clip.id, thumb: made.thumb })
+        if (was && was !== made.thumb) await removeArtifacts({ thumb: was, sprite: '' })
       } catch {
-        /* the card falls back to a placeholder and hover preview stays off */
+        /* the card falls back to a placeholder */
       }
+    }
+    if (this.needsSprite(current))
+      this.media.enqueue(current, 'sprite', { rank: current.recordedAtMs })
+    return { id: clip.id }
+  }
+
+  /** A video's second turn: the hover-scrub strip, nine tenths of its preview cost. */
+  private async processSprite(clip: Clip): Promise<ClipPatch> {
+    const current = this.store.data.clips[clip.id]
+    if (!current || !this.needsSprite(current)) return { id: clip.id }
+    const was = current.sprite
+    try {
+      const made = await makeSprite(current, current.duration)
+      this.applyPatch({ id: clip.id, ...made })
+      if (was && was !== made.sprite) await removeArtifacts({ thumb: '', sprite: was })
+    } catch {
+      /* the poster stays; the hover preview stays off */
     }
     return { id: clip.id }
   }
@@ -1340,8 +1463,7 @@ export class Library {
       this.store.upsertFolder(folder)
       this.emitFolders()
       // A clip you just saved should get its thumbnail before the backlog.
-      this.media.remove(clip.id)
-      this.media.enqueue(clip, true)
+      this.enqueueWork(clip, true)
     }
     this.scheduleFlush()
   }
