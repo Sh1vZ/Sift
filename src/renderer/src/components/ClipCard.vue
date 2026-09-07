@@ -21,6 +21,8 @@ const props = withDefaults(
     clip: Clip
     /** `export` cards say which game they came from and when they were exported. */
     variant?: 'recording' | 'export'
+    /** Name the game even on a recording card — for a grid that crosses games. */
+    showGame?: boolean
     /** An export still in flight: the card is a progress placeholder, not something you can open. */
     job?: ExportJob
     /** A YouTube upload of this clip: a progress veil over a card that stays a real, openable clip. */
@@ -30,7 +32,14 @@ const props = withDefaults(
     /** The card's actions, the same list its right-click menu shows. */
     menu?: ClipMenuItem[][]
   }>(),
-  { variant: 'recording', job: undefined, upload: undefined, pending: undefined, menu: () => [] },
+  {
+    variant: 'recording',
+    showGame: false,
+    job: undefined,
+    upload: undefined,
+    pending: undefined,
+    menu: () => [],
+  },
 )
 const emit = defineEmits<{
   open: [clip: Clip, rect: DOMRect]
@@ -386,7 +395,7 @@ const seen = computed(() => Boolean(props.clip.seenAtMs) && !veil.value)
         <div class="text">
           <h3 class="title truncate" :title="clip.name + clip.ext">{{ clip.title }}</h3>
           <p class="sub truncate">
-            <template v-if="variant === 'export'">
+            <template v-if="showGame || variant === 'export'">
               <span class="game truncate">{{ clip.game }}</span>
               <span class="dot">·</span>
             </template>

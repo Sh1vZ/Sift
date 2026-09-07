@@ -1,10 +1,17 @@
 import { computed, ref, watch } from 'vue'
 import type { Clip } from '@shared/types'
-import { allClips, getClip, orderedClips, orderedExports, requestPreview } from './useLibrary'
+import {
+  allClips,
+  getClip,
+  orderedClips,
+  orderedExports,
+  orderedFavourites,
+  requestPreview,
+} from './useLibrary'
 import type { Rect } from './useMotion'
 
-/** Which list prev/next walk: a game's grid, or the Clips view. */
-export type PlayerSource = 'library' | 'clips'
+/** Which list prev/next walk: a game's grid, the Clips view, or Favourites. */
+export type PlayerSource = 'library' | 'clips' | 'favourites'
 
 export const current = ref<Clip | null>(null)
 export const originRect = ref<Rect | null>(null)
@@ -18,7 +25,16 @@ watch(current, (c) => {
   if (c) requestPreview(c)
 })
 
-const list = computed(() => (source.value === 'clips' ? orderedExports.value : orderedClips.value))
+const list = computed(() => {
+  switch (source.value) {
+    case 'clips':
+      return orderedExports.value
+    case 'favourites':
+      return orderedFavourites.value
+    default:
+      return orderedClips.value
+  }
+})
 const index = computed(() =>
   current.value ? list.value.findIndex((c) => c.id === current.value!.id) : -1,
 )

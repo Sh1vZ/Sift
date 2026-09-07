@@ -3,24 +3,43 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, toRef, watch } fro
 import type { Clip, ExportJob } from '@shared/types'
 import ClipCard from './ClipCard.vue'
 import { GRID_PAD_X, useVirtualGrid } from '@/composables/useVirtualGrid'
-import { pendingByClip, reportVisibleClips, settings, type Section } from '@/composables/useLibrary'
+import {
+  pendingByClip,
+  reportVisibleClips,
+  scopeOf,
+  settings,
+  type Section,
+} from '@/composables/useLibrary'
 import { clipMenuItems } from '@/composables/useClipMenu'
 import { cancelExport, dismissExport } from '@/composables/useExports'
 import { cancelUpload, uploadByClip } from '@/composables/useUploads'
 import { staggerIn, type Rect } from '@/composables/useMotion'
-import { current, openClip, source } from '@/composables/usePlayer'
+import {
+  current,
+  openClip,
+  source as playerSource,
+  type PlayerSource,
+} from '@/composables/usePlayer'
 
 const props = withDefaults(
   defineProps<{
     sections: Section[]
     /** Anything that should restart the grid from the top with a fresh stagger. */
     resetKey: string
-    /** `export` grids carry the Clips view's menu and card treatment. */
-    variant?: 'recording' | 'export'
+    /**
+     * `export` grids carry the Clips view's menu and card treatment. `auto` picks
+     * per card, for a grid holding both — each clip keeps the treatment it has
+     * on its own screen.
+     */
+    variant?: 'recording' | 'export' | 'auto'
+    /** Which list the player walks from here. Defaults to the one this variant stands for. */
+    source?: PlayerSource
+    /** Name the game on every card, not just on export cards — for grids that cross games. */
+    showGame?: boolean
     /** Export jobs, keyed by id, for the `job:<id>` placeholder cards the Clips view mixes in. */
     jobsById?: Record<string, ExportJob>
   }>(),
-  { variant: 'recording', jobsById: () => ({}) },
+  { variant: 'recording', source: undefined, showGame: false, jobsById: () => ({}) },
 )
 
 const JOB_PREFIX = 'job:'
@@ -34,7 +53,13 @@ const { layout, visibleRows, scrollToTop, scrollToClip } = useVirtualGrid(
 )
 
 const pad = `${GRID_PAD_X}px`
-const from = computed(() => (props.variant === 'export' ? 'clips' : 'library'))
+const from = computed<PlayerSource>(
+  () => props.source ?? (props.variant === 'export' ? 'clips' : 'library'),
+)
+
+/** A card's treatment: fixed by the grid, or the one the clip's own screen gives it. */
+const variantOf = (clip: Clip): 'recording' | 'export' =>
+  props.variant === 'auto' ? (scopeOf(clip) === 'clips' ? 'export' : 'recording') : props.variant
 
 async function animateIn(): Promise<void> {
   await nextTick()
@@ -55,7 +80,7 @@ onMounted(() => void animateIn())
 // the card into view underneath, so closing lands on it and you are where you
 // left off rather than back at the top.
 watch(current, (c) => {
-  if (c && source.value === from.value) scrollToClip(c.id)
+  if (c && playerSource.value === from.value) scrollToClip(c.id)
 })
 
 // What is on screen goes to the front of the preview queue. Debounced past the
@@ -101,7 +126,7 @@ function rectOf(clip: Clip): Rect | null {
 
 /** A card's actions: the same list behind its right-click and its ⋯ button. */
 const menuItems = (clip: Clip) =>
-  clipMenuItems(clip, { variant: props.variant, job: jobOf(clip), rectOf })
+  clipMenuItems(clip, { variant: variantOf(clip), from: from.value, job: jobOf(clip), rectOf })
 </script>
 
 <template>
@@ -134,7 +159,8 @@ const menuItems = (clip: Clip) =>
           >
             <ClipCard
               :clip="clip"
-              :variant="variant"
+              :variant="variantOf(clip)"
+              :show-game="showGame"
               :job="jobOf(clip)"
               :menu="menuItems(clip)"
               :upload="uploadByClip[clip.id]"

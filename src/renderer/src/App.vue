@@ -4,6 +4,7 @@ import TitleBar from './components/TitleBar.vue'
 import Sidebar from './components/Sidebar.vue'
 import LibraryView from './components/LibraryView.vue'
 import ClipsView from './components/ClipsView.vue'
+import FavouritesView from './components/FavouritesView.vue'
 import SettingsView from './components/SettingsView.vue'
 import ActivityView from './components/ActivityView.vue'
 import PlayerOverlay from './components/PlayerOverlay.vue'
@@ -78,6 +79,7 @@ onBeforeUnmount(() => {
             <Transition name="view" mode="out-in">
               <LibraryView v-if="view === 'library'" key="library" />
               <ClipsView v-else-if="view === 'clips'" key="clips" />
+              <FavouritesView v-else-if="view === 'favourites'" key="favourites" />
               <ActivityView v-else-if="view === 'activity'" key="activity" />
               <SettingsView v-else key="settings" />
             </Transition>

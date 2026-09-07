@@ -75,7 +75,7 @@ export const initialExports = ref<ExportJob[]>([])
 /** Same arrangement for the Activity history: seeded here, owned by `useActivityHistory`. */
 export const initialActivity = ref<ActivityRecord[]>([])
 export const selectedGame = ref<string | null>(null)
-export type View = 'library' | 'clips' | 'settings' | 'activity'
+export type View = 'library' | 'clips' | 'favourites' | 'settings' | 'activity'
 export const view = ref<View>('library')
 
 /** Ticks once a minute so "2 minutes ago" labels stay honest. */
@@ -136,6 +136,12 @@ export const exportedClips = computed<Clip[]>(() => {
 export function scopeOf(clip: Clip): 'library' | 'clips' {
   return exportFolderIds.value.has(clip.folderId) ? 'clips' : 'library'
 }
+
+/**
+ * Everything hearted, recordings and exported clips together — the one place a
+ * favourite is reachable without knowing which grid it was marked in.
+ */
+export const favourites = computed<Clip[]>(() => allClips.value.filter((c) => c.favourite))
 
 export interface GameSummary {
   name: string
@@ -234,8 +240,8 @@ export const MEDIA_FILTERS: Array<{ value: MediaFilter; label: string; icon: str
   { value: 'image', label: 'Screenshots only', icon: 'i-lucide-image' },
 ]
 
-/** Which grid a filter belongs to: a game's recordings, or the Clips view. */
-export type FilterScope = 'library' | 'clips'
+/** Which grid a filter belongs to: a game's recordings, the Clips view, or Favourites. */
+export type FilterScope = 'library' | 'clips' | 'favourites'
 
 export interface ViewFilters {
   /** Title filter typed in the toolbar; reset whenever its screen is entered. */
@@ -263,9 +269,10 @@ const blankFilters = (): ViewFilters => ({
  */
 export const libraryFilters = reactive<ViewFilters>(blankFilters())
 export const clipsFilters = reactive<ViewFilters>(blankFilters())
+export const favouritesFilters = reactive<ViewFilters>(blankFilters())
 
 export const filtersFor = (scope: FilterScope): ViewFilters =>
-  scope === 'clips' ? clipsFilters : libraryFilters
+  scope === 'clips' ? clipsFilters : scope === 'favourites' ? favouritesFilters : libraryFilters
 
 /** A toggle, the sharing select or the media kind — not the name filter — is hiding clips. */
 export const isNarrowed = (f: ViewFilters): boolean =>
@@ -281,6 +288,9 @@ export function clearFilters(scope: FilterScope): void {
 
 /** The Clips view's order. The in-game order is a persisted setting; this one resets with the app. */
 export const exportSort = ref<SortBy>('newest')
+
+/** The Favourites order — view state like the Clips one, not a setting. */
+export const favouriteSort = ref<SortBy>('newest')
 
 /** Letters and digits only, so "lords of the fallen" finds "LordsOfTheFallen_2026". */
 export const squash = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]+/g, '')
@@ -316,6 +326,11 @@ export const gameHasImages = computed<boolean>(() => {
   const game = selectedGame.value
   return game !== null && recordings.value.some((c) => c.game === game && c.kind === 'image')
 })
+
+/** The same question for the Favourites grid, which mixes every game's media. */
+export const favouritesHaveImages = computed<boolean>(() =>
+  favourites.value.some((c) => c.kind === 'image'),
+)
 
 export interface Section {
   key: string
@@ -393,6 +408,38 @@ export const clipSections = computed<Section[]>(() => {
 
 export const orderedExports = computed<Clip[]>(() => clipSections.value.flatMap((s) => s.clips))
 
+/** "Newest" on a grid holding both: when a clip was cut, when a recording was made. */
+const favouriteTime = (c: Clip): number => (scopeOf(c) === 'clips' ? exportedAt(c) : c.recordedAtMs)
+
+/**
+ * The Favourites view: one flat run, no headers. Grouping it by game or by date
+ * would rebuild the two screens this one exists to cut across.
+ */
+export const favouriteSections = computed<Section[]>(() => {
+  const f = favouritesFilters
+  const q = f.query.trim().toLowerCase()
+  const qs = squash(q)
+  const list = favourites.value.filter((c) => matches(c, f, q, qs))
+  if (!list.length) return []
+  return [
+    { key: 'all', title: null, clips: list.sort(compare(favouriteSort.value, favouriteTime)) },
+  ]
+})
+
+export const orderedFavourites = computed<Clip[]>(() =>
+  favouriteSections.value.flatMap((s) => s.clips),
+)
+
+export const favouriteStats = computed(() => {
+  let duration = 0
+  let size = 0
+  for (const c of favourites.value) {
+    duration += c.duration
+    size += c.size
+  }
+  return { count: favourites.value.length, duration, size }
+})
+
 export const clipsStats = computed(() => {
   let duration = 0
   let size = 0
@@ -408,10 +455,12 @@ export function getClip(id: string): Clip | undefined {
 }
 
 /** Which screen the main area shows: the games browser is home, a game drills into its clips. */
-export const screen = computed<'games' | 'game' | 'clips' | 'settings' | 'activity'>(() => {
-  if (view.value !== 'library') return view.value
-  return selectedGame.value ? 'game' : 'games'
-})
+export const screen = computed<'games' | 'game' | 'clips' | 'favourites' | 'settings' | 'activity'>(
+  () => {
+    if (view.value !== 'library') return view.value
+    return selectedGame.value ? 'game' : 'games'
+  },
+)
 
 export function goGames(): void {
   selectedGame.value = null
@@ -437,6 +486,11 @@ export function newestClipOf(game: string): Clip | undefined {
 export function goClips(): void {
   clipsFilters.query = ''
   view.value = 'clips'
+}
+
+export function goFavourites(): void {
+  favouritesFilters.query = ''
+  view.value = 'favourites'
 }
 
 // ------------------------------------------------------------------- back

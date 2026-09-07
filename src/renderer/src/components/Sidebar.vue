@@ -4,7 +4,16 @@ import ShinyText from './bits/ShinyText.vue'
 import ActivityPanel from './ActivityPanel.vue'
 import { motionEnabled } from '@/composables/useMotion'
 import { activeTheme } from '@/composables/useTheme'
-import { exportedClips, games, goClips, goGames, screen, view } from '@/composables/useLibrary'
+import {
+  exportedClips,
+  favourites,
+  games,
+  goClips,
+  goFavourites,
+  goGames,
+  screen,
+  view,
+} from '@/composables/useLibrary'
 import { activityBusy, activityCount, activityLabel, activityOpen } from '@/composables/useActivity'
 import { openSettings, settingsTab } from '@/composables/useSettings'
 import { openShortcuts } from '@/composables/useShortcuts'
@@ -48,6 +57,14 @@ const libraryItems = computed<NavItem[]>(() => [
     badge: count(exportedClips.value.length),
     tooltip: { text: `Clips · ${exportedClips.value.length}` },
     onSelect: () => goClips(),
+  },
+  {
+    label: 'Favourites',
+    icon: 'i-lucide-heart',
+    active: screen.value === 'favourites',
+    badge: count(favourites.value.length),
+    tooltip: { text: `Favourites · ${favourites.value.length}` },
+    onSelect: () => goFavourites(),
   },
 ])
 

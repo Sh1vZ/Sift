@@ -36,6 +36,8 @@ const crumbs = computed<Crumb[]>(() => {
       return [{ label: 'Games', onSelect: goGames }, { label: selectedGame.value ?? '' }]
     case 'clips':
       return [{ label: 'Clips' }]
+    case 'favourites':
+      return [{ label: 'Favourites' }]
     case 'activity':
       return [{ label: 'Activity' }]
     default:

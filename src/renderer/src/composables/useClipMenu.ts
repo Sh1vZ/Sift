@@ -17,7 +17,7 @@ import {
   revealClip,
 } from './useLibrary'
 import type { Rect } from './useMotion'
-import { openClip, openSource } from './usePlayer'
+import { openClip, openSource, type PlayerSource } from './usePlayer'
 import { toast } from './useToasts'
 import { cancelUpload, openUploadDialog, uploadByClip } from './useUploads'
 
@@ -38,6 +38,8 @@ export interface ClipMenuItem {
 export interface ClipMenuOptions {
   /** `export` cards get the Clips view's extra entries (source recording, go to game). */
   variant: 'recording' | 'export'
+  /** Which list the player should walk when this opens it. Defaults to the variant's own grid. */
+  from?: PlayerSource
   /** An export placeholder card: the menu is only Cancel or Dismiss. */
   job?: ExportJob
   /** Where the open animation starts from; grids pass the card's thumb rect. */
@@ -105,7 +107,7 @@ export function clipMenuItems(clip: Clip, opts: ClipMenuOptions): ClipMenuItem[]
       ],
     ]
   }
-  const from = opts.variant === 'export' ? 'clips' : 'library'
+  const from = opts.from ?? (opts.variant === 'export' ? 'clips' : 'library')
   const rect = (): Rect | null => opts.rectOf?.(clip) ?? null
   // A screenshot is looked at, not played, and has nothing to trim.
   const image = clip.kind === 'image'

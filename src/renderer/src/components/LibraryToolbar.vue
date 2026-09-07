@@ -4,6 +4,8 @@ import type { DropdownMenuItem } from '@nuxt/ui'
 import type { GridSize, GroupBy, SortBy } from '@shared/types'
 import {
   exportSort,
+  favouriteSort,
+  favouritesHaveImages,
   filtersFor,
   gameHasImages,
   gridGroupBy,
@@ -26,7 +28,7 @@ const props = defineProps<{ scope: FilterScope }>()
 
 const filters = computed(() => filtersFor(props.scope))
 
-const sortOptions: Array<{ value: SortBy; label: string }> = [
+const allSortOptions: Array<{ value: SortBy; label: string }> = [
   { value: 'newest', label: 'Newest first' },
   { value: 'oldest', label: 'Oldest first' },
   { value: 'name', label: 'Name' },
@@ -35,11 +37,23 @@ const sortOptions: Array<{ value: SortBy; label: string }> = [
   { value: 'favourite', label: 'Favourites first' },
 ]
 
-/** The in-game order is a persisted setting; the Clips order resets with the app. */
+/** Pinning favourites to the top is no order at all on a grid that is only favourites. */
+const sortOptions = computed(() =>
+  props.scope === 'favourites'
+    ? allSortOptions.filter((o) => o.value !== 'favourite')
+    : allSortOptions,
+)
+
+/** The in-game order is a persisted setting; the Clips and Favourites orders reset with the app. */
 const sortModel = computed({
-  get: () => (props.scope === 'clips' ? exportSort.value : settings.value.sort),
+  get: () => {
+    if (props.scope === 'clips') return exportSort.value
+    if (props.scope === 'favourites') return favouriteSort.value
+    return settings.value.sort
+  },
   set: (v: SortBy) => {
     if (props.scope === 'clips') exportSort.value = v
+    else if (props.scope === 'favourites') favouriteSort.value = v
     else void updateSettings({ sort: v })
   },
 })
@@ -110,6 +124,18 @@ const viewChanges = computed(
     Number(settings.value.gridSize !== 'large'),
 )
 
+/**
+ * The kind control earns its place wherever there is a choice to make: a game
+ * with screenshots, or a Favourites grid holding both. A filter already set is
+ * never hidden from the person who set it.
+ */
+const showKindFilter = computed(
+  () =>
+    filters.value.kind !== 'all' ||
+    (props.scope === 'library' && gameHasImages.value) ||
+    (props.scope === 'favourites' && favouritesHaveImages.value),
+)
+
 // ------------------------------------------------------------ name filter
 
 const filterInput = ref<{ inputRef: HTMLInputElement | null } | null>(null)
@@ -156,7 +182,9 @@ defineExpose({ focus })
       </template>
     </UInput>
 
+    <!-- Left out on the Favourites screen: the screen is that filter. -->
     <UButton
+      v-if="scope !== 'favourites'"
       label="Favourites"
       icon="i-lucide-heart"
       :color="filters.favourites ? 'primary' : 'neutral'"
@@ -174,13 +202,8 @@ defineExpose({ focus })
     />
 
     <!-- Only where there is a choice to make: a game with no screenshots keeps
-         the row it always had, and a filter already set is never hidden from
-         the person who set it. -->
-    <UFieldGroup
-      v-if="scope === 'library' && (gameHasImages || filters.kind !== 'all')"
-      role="group"
-      aria-label="Show videos, screenshots or both"
-    >
+         the row it always had. See showKindFilter. -->
+    <UFieldGroup v-if="showKindFilter" role="group" aria-label="Show videos, screenshots or both">
       <UTooltip v-for="m in MEDIA_FILTERS" :key="m.value" :text="m.label">
         <UButton
           :icon="m.icon"
