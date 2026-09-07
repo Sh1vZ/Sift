@@ -26,9 +26,10 @@ Do not add `dark:` variants, `prefers-color-scheme` branches, or a light palette
 dead weight here.
 
 There **is** a small set of dark **themes** (`Settings.theme`, picked in Settings → Themes):
-`sift` (default), `ember`, `synthwave`, `crimson`, `solar`, `nox`, `grim`, `space`, and the
-true-black `oled`, `oled-mint`, `oled-frost`, `oled-crimson`, `oled-synthwave`. A theme is one
-block in `tokens.css` that re-points only the surface, text and brand tokens (plus the
+`sift` (default), `ember`, `synthwave`, `crimson`, `solar`, `nox`, `grim`, `space`, `cyberpunk`,
+`noir`, `venom`, `mint`, and the true-black `oled`, `oled-mint`, `oled-frost`, `oled-crimson`,
+`oled-synthwave`, `oled-cyberpunk`, `oled-noir`, `oled-venom`. A theme is one block in
+`tokens.css` that re-points only the surface, text and brand tokens (plus the
 `--ui-color-primary-*` shades so Nuxt UI follows). Typography, spacing, radius and motion never
 change with the theme. `composables/useTheme.ts` sets the attribute and carries a `THEMES`
 table whose hexes mirror the CSS for previews and for Vue Bits props that take a colour
@@ -36,8 +37,8 @@ string. **This is why raw brand hexes are banned in components**: anything that 
 purple in the default theme must read `var(--primary)` / `var(--secondary)` / `var(--accent)`
 (use `color-mix(in srgb, var(--primary) 45%, transparent)` for alpha variants), or take its
 colour from `activeTheme.colors`. Text or glyphs on a `--primary` fill use `--on-primary`, not
-`#fff` — the golden `solar` theme flips it dark. The token values quoted below are the default
-theme's.
+`#fff` — the light-identity themes (`solar`, `grim`, `cyberpunk`, `noir`, `venom`) flip it dark.
+The token values quoted below are the default theme's.
 
 Icons named in `.ts` files (the settings rail table) are only bundled because
 `electron.vite.config.ts` widens the Nuxt UI icon scan to include `.ts`; keep that glob.

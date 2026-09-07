@@ -233,11 +233,18 @@ export const THEME_IDS = [
   'nox',
   'grim',
   'space',
+  'cyberpunk',
+  'noir',
+  'venom',
+  'mint',
   'oled',
   'oled-mint',
   'oled-frost',
   'oled-crimson',
   'oled-synthwave',
+  'oled-cyberpunk',
+  'oled-noir',
+  'oled-venom',
 ] as const
 export type ThemeId = (typeof THEME_IDS)[number]
 

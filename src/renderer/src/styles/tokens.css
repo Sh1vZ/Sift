@@ -154,7 +154,10 @@ html[data-theme='oled'],
 html[data-theme='oled-mint'],
 html[data-theme='oled-frost'],
 html[data-theme='oled-crimson'],
-html[data-theme='oled-synthwave'] {
+html[data-theme='oled-synthwave'],
+html[data-theme='oled-cyberpunk'],
+html[data-theme='oled-noir'],
+html[data-theme='oled-venom'] {
   --app-wash: none;
   --bg-0: #000000;
   --bg-1: #000000;
@@ -458,6 +461,175 @@ html[data-theme='space'] {
   --ui-color-primary-950: #16224a;
 }
 
+/* Cyberpunk: cold teal-black ground, acid yellow identity, electric cyan
+   punctuation. Like Solar, the yellow is too light for white glyphs, so text
+   on a primary fill goes dark here. */
+html[data-theme='cyberpunk'] {
+  --bg-0: #04090b;
+  --bg-1: #071013;
+  --bg-2: #0c181c;
+  --bg-3: #112026;
+  --bg-4: #182b32;
+  --fg: #e8f6f7;
+  --fg-muted: #9db4b8;
+  --fg-dim: #7f979c;
+  --fg-inverse: #121307;
+  --on-primary: #121307;
+  --primary: #fcee0a;
+  --primary-hover: #fdf23f;
+  --primary-soft: rgba(252, 238, 10, 0.16);
+  --secondary: #fef66e;
+  --accent: #00f0ff;
+  --accent-soft: rgba(0, 240, 255, 0.16);
+  --border-active: rgba(254, 246, 110, 0.45);
+  --ring: #fef66e;
+  --glow-primary: 0 0 0 1px rgba(254, 246, 110, 0.35), 0 12px 32px -8px rgba(252, 238, 10, 0.55);
+  --app-wash:
+    radial-gradient(1200px 600px at 80% -10%, rgba(252, 238, 10, 0.1), transparent 60%),
+    radial-gradient(800px 500px at -10% 110%, rgba(0, 240, 255, 0.07), transparent 60%);
+  --fg-toned: #c3d7da;
+  --fg-strong: #f6fdfd;
+  --ui-color-primary-50: #fefee7;
+  --ui-color-primary-100: #fdfcc2;
+  --ui-color-primary-200: #fdf98a;
+  --ui-color-primary-300: #fef66e;
+  --ui-color-primary-400: #fdf23f;
+  --ui-color-primary-500: #fcee0a;
+  --ui-color-primary-600: #dccf00;
+  --ui-color-primary-700: #aca200;
+  --ui-color-primary-800: #807900;
+  --ui-color-primary-900: #5f5a00;
+  --ui-color-primary-950: #353200;
+}
+
+/* Noir: neutral graphite ground, silver identity, scarlet punctuation. The
+   identity is near-white, so text on a primary fill goes dark, and the Nuxt UI
+   ramp is shifted so its 500 step is the silver rather than a mid grey.
+   Borders and shadows follow the OLED treatment: a ground this dark swallows
+   the default hairlines. */
+html[data-theme='noir'] {
+  --bg-0: #050505;
+  --bg-1: #0a0a0a;
+  --bg-2: #111111;
+  --bg-3: #181818;
+  --bg-4: #212121;
+  --fg: #ededed;
+  --fg-muted: #a6a6a6;
+  --fg-dim: #8c8c8c;
+  --fg-inverse: #0a0a0a;
+  --on-primary: #0a0a0a;
+  --primary: #e5e5e5;
+  --primary-hover: #f5f5f5;
+  --primary-soft: rgba(229, 229, 229, 0.16);
+  --secondary: #ffffff;
+  --accent: #ff3355;
+  --accent-soft: rgba(255, 51, 85, 0.16);
+  --border: rgba(255, 255, 255, 0.1);
+  --border-hover: rgba(255, 255, 255, 0.18);
+  --border-active: rgba(255, 255, 255, 0.45);
+  --ring: #ffffff;
+  --glow-primary: 0 0 0 1px rgba(255, 255, 255, 0.35), 0 12px 32px -8px rgba(229, 229, 229, 0.45);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.7);
+  --shadow-md: 0 8px 24px -6px rgba(0, 0, 0, 0.85);
+  --shadow-lg: 0 24px 60px -12px rgba(0, 0, 0, 0.95);
+  --app-wash:
+    radial-gradient(1200px 600px at 80% -10%, rgba(255, 255, 255, 0.06), transparent 60%),
+    radial-gradient(800px 500px at -10% 110%, rgba(255, 51, 85, 0.05), transparent 60%);
+  --fg-toned: #c9c9c9;
+  --fg-strong: #fafafa;
+  --ui-color-primary-50: #ffffff;
+  --ui-color-primary-100: #fafafa;
+  --ui-color-primary-200: #f5f5f5;
+  --ui-color-primary-300: #f0f0f0;
+  --ui-color-primary-400: #ebebeb;
+  --ui-color-primary-500: #e5e5e5;
+  --ui-color-primary-600: #d4d4d4;
+  --ui-color-primary-700: #a3a3a3;
+  --ui-color-primary-800: #737373;
+  --ui-color-primary-900: #525252;
+  --ui-color-primary-950: #262626;
+}
+
+/* Venom: olive-black ground, lime identity, fuchsia punctuation. Lime is too
+   light for white glyphs, so text on a primary fill goes dark here. */
+html[data-theme='venom'] {
+  --bg-0: #070903;
+  --bg-1: #0b0e06;
+  --bg-2: #11150a;
+  --bg-3: #181d0f;
+  --bg-4: #212816;
+  --fg: #eef4e4;
+  --fg-muted: #a7b198;
+  --fg-dim: #8d977e;
+  --fg-inverse: #0f1403;
+  --on-primary: #0f1403;
+  --primary: #84cc16;
+  --primary-hover: #a3e635;
+  --primary-soft: rgba(132, 204, 22, 0.16);
+  --secondary: #bef264;
+  --accent: #e879f9;
+  --accent-soft: rgba(232, 121, 249, 0.16);
+  --border-active: rgba(190, 242, 100, 0.45);
+  --ring: #bef264;
+  --glow-primary: 0 0 0 1px rgba(190, 242, 100, 0.35), 0 12px 32px -8px rgba(132, 204, 22, 0.55);
+  --app-wash:
+    radial-gradient(1200px 600px at 80% -10%, rgba(132, 204, 22, 0.12), transparent 60%),
+    radial-gradient(800px 500px at -10% 110%, rgba(232, 121, 249, 0.06), transparent 60%);
+  --fg-toned: #c8d2ba;
+  --fg-strong: #f8fcf2;
+  --ui-color-primary-50: #f7fee7;
+  --ui-color-primary-100: #ecfccb;
+  --ui-color-primary-200: #d9f99d;
+  --ui-color-primary-300: #bef264;
+  --ui-color-primary-400: #a3e635;
+  --ui-color-primary-500: #84cc16;
+  --ui-color-primary-600: #65a30d;
+  --ui-color-primary-700: #4d7c0f;
+  --ui-color-primary-800: #3f6212;
+  --ui-color-primary-900: #365314;
+  --ui-color-primary-950: #1a2e05;
+}
+
+/* Mint: dark sea-green ground, emerald identity, pink punctuation. The
+   standard-surface twin of OLED Mint: same brand tokens, with the ramp
+   climbing through a desaturated green so it never reads as Grim's forest. */
+html[data-theme='mint'] {
+  --bg-0: #061009;
+  --bg-1: #0a1610;
+  --bg-2: #0f1d16;
+  --bg-3: #15261d;
+  --bg-4: #1b3025;
+  --fg: #e6f0ea;
+  --fg-muted: #9fbcad;
+  --fg-dim: #82a090;
+  --fg-inverse: #06110c;
+  --primary: #10b981;
+  --primary-hover: #34d399;
+  --primary-soft: rgba(16, 185, 129, 0.16);
+  --secondary: #6ee7b7;
+  --accent: #f472b6;
+  --accent-soft: rgba(244, 114, 182, 0.16);
+  --border-active: rgba(110, 231, 183, 0.45);
+  --ring: #6ee7b7;
+  --glow-primary: 0 0 0 1px rgba(110, 231, 183, 0.35), 0 12px 32px -8px rgba(16, 185, 129, 0.55);
+  --app-wash:
+    radial-gradient(1200px 600px at 80% -10%, rgba(16, 185, 129, 0.12), transparent 60%),
+    radial-gradient(800px 500px at -10% 110%, rgba(244, 114, 182, 0.06), transparent 60%);
+  --fg-toned: #c2d6ca;
+  --fg-strong: #f3faf6;
+  --ui-color-primary-50: #ecfdf5;
+  --ui-color-primary-100: #d1fae5;
+  --ui-color-primary-200: #a7f3d0;
+  --ui-color-primary-300: #6ee7b7;
+  --ui-color-primary-400: #34d399;
+  --ui-color-primary-500: #10b981;
+  --ui-color-primary-600: #059669;
+  --ui-color-primary-700: #047857;
+  --ui-color-primary-800: #065f46;
+  --ui-color-primary-900: #064e3b;
+  --ui-color-primary-950: #022c22;
+}
+
 /* OLED Mint: true black, emerald identity, pink punctuation. */
 html[data-theme='oled-mint'] {
   --fg: #e6f0ea;
@@ -576,6 +748,102 @@ html[data-theme='oled-synthwave'] {
   --ui-color-primary-800: #9d174d;
   --ui-color-primary-900: #831843;
   --ui-color-primary-950: #500724;
+}
+
+/* OLED Cyberpunk: true black, acid yellow identity, electric cyan punctuation.
+   Dark glyphs on the primary fill, as in Cyberpunk. */
+html[data-theme='oled-cyberpunk'] {
+  --fg: #e8f6f7;
+  --fg-muted: #9db4b8;
+  --fg-dim: #7f979c;
+  --fg-inverse: #121307;
+  --on-primary: #121307;
+  --primary: #fcee0a;
+  --primary-hover: #fdf23f;
+  --primary-soft: rgba(252, 238, 10, 0.16);
+  --secondary: #fef66e;
+  --accent: #00f0ff;
+  --accent-soft: rgba(0, 240, 255, 0.16);
+  --border-active: rgba(254, 246, 110, 0.45);
+  --ring: #fef66e;
+  --glow-primary: 0 0 0 1px rgba(254, 246, 110, 0.35), 0 12px 32px -8px rgba(252, 238, 10, 0.55);
+  --fg-toned: #c3d7da;
+  --fg-strong: #f6fdfd;
+  --ui-color-primary-50: #fefee7;
+  --ui-color-primary-100: #fdfcc2;
+  --ui-color-primary-200: #fdf98a;
+  --ui-color-primary-300: #fef66e;
+  --ui-color-primary-400: #fdf23f;
+  --ui-color-primary-500: #fcee0a;
+  --ui-color-primary-600: #dccf00;
+  --ui-color-primary-700: #aca200;
+  --ui-color-primary-800: #807900;
+  --ui-color-primary-900: #5f5a00;
+  --ui-color-primary-950: #353200;
+}
+
+/* OLED Noir: true black, silver identity, scarlet punctuation. Dark glyphs on
+   the primary fill and the shifted Nuxt UI ramp, as in Noir. */
+html[data-theme='oled-noir'] {
+  --fg: #ededed;
+  --fg-muted: #a6a6a6;
+  --fg-dim: #8c8c8c;
+  --fg-inverse: #0a0a0a;
+  --on-primary: #0a0a0a;
+  --primary: #e5e5e5;
+  --primary-hover: #f5f5f5;
+  --primary-soft: rgba(229, 229, 229, 0.16);
+  --secondary: #ffffff;
+  --accent: #ff3355;
+  --accent-soft: rgba(255, 51, 85, 0.16);
+  --border-active: rgba(255, 255, 255, 0.45);
+  --ring: #ffffff;
+  --glow-primary: 0 0 0 1px rgba(255, 255, 255, 0.35), 0 12px 32px -8px rgba(229, 229, 229, 0.45);
+  --fg-toned: #c9c9c9;
+  --fg-strong: #fafafa;
+  --ui-color-primary-50: #ffffff;
+  --ui-color-primary-100: #fafafa;
+  --ui-color-primary-200: #f5f5f5;
+  --ui-color-primary-300: #f0f0f0;
+  --ui-color-primary-400: #ebebeb;
+  --ui-color-primary-500: #e5e5e5;
+  --ui-color-primary-600: #d4d4d4;
+  --ui-color-primary-700: #a3a3a3;
+  --ui-color-primary-800: #737373;
+  --ui-color-primary-900: #525252;
+  --ui-color-primary-950: #262626;
+}
+
+/* OLED Venom: true black, lime identity, fuchsia punctuation. Dark glyphs on
+   the primary fill, as in Venom. */
+html[data-theme='oled-venom'] {
+  --fg: #eef4e4;
+  --fg-muted: #a7b198;
+  --fg-dim: #8d977e;
+  --fg-inverse: #0f1403;
+  --on-primary: #0f1403;
+  --primary: #84cc16;
+  --primary-hover: #a3e635;
+  --primary-soft: rgba(132, 204, 22, 0.16);
+  --secondary: #bef264;
+  --accent: #e879f9;
+  --accent-soft: rgba(232, 121, 249, 0.16);
+  --border-active: rgba(190, 242, 100, 0.45);
+  --ring: #bef264;
+  --glow-primary: 0 0 0 1px rgba(190, 242, 100, 0.35), 0 12px 32px -8px rgba(132, 204, 22, 0.55);
+  --fg-toned: #c8d2ba;
+  --fg-strong: #f8fcf2;
+  --ui-color-primary-50: #f7fee7;
+  --ui-color-primary-100: #ecfccb;
+  --ui-color-primary-200: #d9f99d;
+  --ui-color-primary-300: #bef264;
+  --ui-color-primary-400: #a3e635;
+  --ui-color-primary-500: #84cc16;
+  --ui-color-primary-600: #65a30d;
+  --ui-color-primary-700: #4d7c0f;
+  --ui-color-primary-800: #3f6212;
+  --ui-color-primary-900: #365314;
+  --ui-color-primary-950: #1a2e05;
 }
 
 /* Motion off: user setting or OS preference. Transitions collapse to instant. */

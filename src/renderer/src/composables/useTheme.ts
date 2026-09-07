@@ -147,6 +147,63 @@ export const THEMES: ThemeDef[] = [
     spotlight: 'rgba(157, 177, 255, 0.26)',
   },
   {
+    id: 'cyberpunk',
+    name: 'Cyberpunk',
+    description:
+      'Cold teal-black ground with an acid yellow identity and electric cyan punctuation.',
+    oled: false,
+    colors: {
+      bg0: '#04090b',
+      bg1: '#071013',
+      bg3: '#112026',
+      fg: '#e8f6f7',
+      ...THEME_BRAND.cyberpunk,
+    },
+    spotlight: 'rgba(254, 246, 110, 0.22)',
+  },
+  {
+    id: 'noir',
+    name: 'Noir',
+    description: 'Neutral graphite ground with a silver identity and scarlet punctuation.',
+    oled: false,
+    colors: {
+      bg0: '#050505',
+      bg1: '#0a0a0a',
+      bg3: '#181818',
+      fg: '#ededed',
+      ...THEME_BRAND.noir,
+    },
+    spotlight: 'rgba(255, 255, 255, 0.18)',
+  },
+  {
+    id: 'venom',
+    name: 'Venom',
+    description: 'Olive-black ground with a lime identity and fuchsia punctuation.',
+    oled: false,
+    colors: {
+      bg0: '#070903',
+      bg1: '#0b0e06',
+      bg3: '#181d0f',
+      fg: '#eef4e4',
+      ...THEME_BRAND.venom,
+    },
+    spotlight: 'rgba(190, 242, 100, 0.22)',
+  },
+  {
+    id: 'mint',
+    name: 'Mint',
+    description: 'Dark sea-green ground with an emerald identity and pink punctuation.',
+    oled: false,
+    colors: {
+      bg0: '#061009',
+      bg1: '#0a1610',
+      bg3: '#15261d',
+      fg: '#e6f0ea',
+      ...THEME_BRAND.mint,
+    },
+    spotlight: 'rgba(110, 231, 183, 0.24)',
+  },
+  {
     id: 'oled',
     name: 'OLED',
     description:
@@ -206,6 +263,43 @@ export const THEMES: ThemeDef[] = [
       ...THEME_BRAND['oled-synthwave'],
     },
     spotlight: 'rgba(249, 168, 212, 0.26)',
+  },
+  {
+    id: 'oled-cyberpunk',
+    name: 'OLED Cyberpunk',
+    description:
+      'True black with an acid yellow identity, electric cyan punctuation and a matching glow.',
+    oled: true,
+    colors: {
+      ...OLED_SURFACES,
+      fg: '#e8f6f7',
+      ...THEME_BRAND['oled-cyberpunk'],
+    },
+    spotlight: 'rgba(254, 246, 110, 0.22)',
+  },
+  {
+    id: 'oled-noir',
+    name: 'OLED Noir',
+    description: 'True black with a silver identity, scarlet punctuation and a matching glow.',
+    oled: true,
+    colors: {
+      ...OLED_SURFACES,
+      fg: '#ededed',
+      ...THEME_BRAND['oled-noir'],
+    },
+    spotlight: 'rgba(255, 255, 255, 0.18)',
+  },
+  {
+    id: 'oled-venom',
+    name: 'OLED Venom',
+    description: 'True black with a lime identity, fuchsia punctuation and a matching glow.',
+    oled: true,
+    colors: {
+      ...OLED_SURFACES,
+      fg: '#eef4e4',
+      ...THEME_BRAND['oled-venom'],
+    },
+    spotlight: 'rgba(190, 242, 100, 0.22)',
   },
 ]
 

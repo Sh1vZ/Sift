@@ -25,6 +25,10 @@ export const THEME_BRAND: Record<ThemeId, ThemeBrand> = {
   nox: { primary: '#b01ea4', secondary: '#ee9ae7', accent: '#fbbf24', onPrimary: '#ffffff' },
   grim: { primary: '#9ec5ab', secondary: '#c6dfd1', accent: '#e0705c', onPrimary: '#011502' },
   space: { primary: '#4361ee', secondary: '#9db1ff', accent: '#ffc94a', onPrimary: '#ffffff' },
+  cyberpunk: { primary: '#fcee0a', secondary: '#fef66e', accent: '#00f0ff', onPrimary: '#121307' },
+  noir: { primary: '#e5e5e5', secondary: '#ffffff', accent: '#ff3355', onPrimary: '#0a0a0a' },
+  venom: { primary: '#84cc16', secondary: '#bef264', accent: '#e879f9', onPrimary: '#0f1403' },
+  mint: { primary: '#10b981', secondary: '#6ee7b7', accent: '#f472b6', onPrimary: '#ffffff' },
   oled: { primary: '#7c3aed', secondary: '#a78bfa', accent: '#f43f5e', onPrimary: '#ffffff' },
   'oled-mint': {
     primary: '#10b981',
@@ -49,5 +53,23 @@ export const THEME_BRAND: Record<ThemeId, ThemeBrand> = {
     secondary: '#f9a8d4',
     accent: '#22d3ee',
     onPrimary: '#ffffff',
+  },
+  'oled-cyberpunk': {
+    primary: '#fcee0a',
+    secondary: '#fef66e',
+    accent: '#00f0ff',
+    onPrimary: '#121307',
+  },
+  'oled-noir': {
+    primary: '#e5e5e5',
+    secondary: '#ffffff',
+    accent: '#ff3355',
+    onPrimary: '#0a0a0a',
+  },
+  'oled-venom': {
+    primary: '#84cc16',
+    secondary: '#bef264',
+    accent: '#e879f9',
+    onPrimary: '#0f1403',
   },
 }
