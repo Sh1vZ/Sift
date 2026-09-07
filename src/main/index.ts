@@ -3,7 +3,7 @@ import { setFlagsFromString } from 'node:v8'
 import { runInNewContext } from 'node:vm'
 import { electronApp, optimizer } from '@electron-toolkit/utils'
 import { registerIpc } from './ipc'
-import { perfLog, userDataOverride } from './lib/env'
+import { isDevProfile, perfLog, profileDir } from './lib/env'
 import { Library } from './lib/library'
 import { appIconPath, ensureDirs } from './lib/paths'
 import { installProtocol, registerScheme } from './lib/protocol'
@@ -13,9 +13,16 @@ import { createUpdater, type Updater } from './lib/updater'
 import { createMainWindow, placementOf, type WindowPlacement } from './lib/window'
 import { createYouTube, type YouTube } from './lib/youtube'
 
-// Optional isolated profile (separate library, cache and single-instance lock) —
-// handy for testing a build next to a running instance. See src/main/lib/env.ts.
-if (userDataOverride) app.setPath('userData', userDataOverride)
+// The profile this run owns: the installed build's, an explicitly named one, or
+// — for `npm run dev` — a suffixed one of its own, so a dev session never shares
+// the installed build's library, cache or single-instance lock and the two can
+// run side by side. Set before anything reads the path. See src/main/lib/env.ts.
+const profile = profileDir()
+app.setPath('userData', profile)
+// Chromium's own state (localStorage, the disk cache, cookies) defaults to
+// userData but is a path in its own right; named here so it cannot be left
+// behind in the installed build's profile.
+app.setPath('sessionData', profile)
 
 // Lets Chromium use the GPU's HEVC decoder for ShadowPlay recordings that use it.
 app.commandLine.appendSwitch('enable-features', 'PlatformHEVCDecoderSupport')
@@ -292,7 +299,10 @@ if (!app.requestSingleInstanceLock()) {
   }
 
   void app.whenReady().then(async () => {
-    electronApp.setAppUserModelId('com.sift.app')
+    // A dev run is its own app to the shell too, or Windows would group its
+    // window under the installed Sift's taskbar button and hand it that app's
+    // notification identity.
+    electronApp.setAppUserModelId(isDevProfile ? 'com.sift.app.dev' : 'com.sift.app')
     ensureDirs()
 
     // Up first, so there is something on screen for the rest of this function.

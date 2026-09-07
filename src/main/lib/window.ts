@@ -2,7 +2,7 @@ import { BrowserWindow, screen, shell } from 'electron'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { is } from '@electron-toolkit/utils'
-import { openDevTools, userDataOverride } from './env'
+import { isDevProfile, openDevTools } from './env'
 import { appIconPath } from './paths'
 
 function preloadPath(): string {
@@ -73,7 +73,7 @@ export function createMainWindow({
     frame: false,
     autoHideMenuBar: true,
     backgroundColor: '#0f0f23',
-    title: userDataOverride ? 'Sift (dev profile)' : 'Sift',
+    title: isDevProfile ? 'Sift (dev profile)' : 'Sift',
     webPreferences: {
       preload: preloadPath(),
       contextIsolation: true,
@@ -94,7 +94,7 @@ export function createMainWindow({
     if (openDevTools) win.webContents.openDevTools({ mode: 'detach' })
   })
   // Keep the profile marker in the title bar instead of letting the page title replace it.
-  if (userDataOverride) win.on('page-title-updated', (e) => e.preventDefault())
+  if (isDevProfile) win.on('page-title-updated', (e) => e.preventDefault())
   win.on('maximize', () => win.webContents.send('window:maximized', true))
   win.on('unmaximize', () => win.webContents.send('window:maximized', false))
 

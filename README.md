@@ -5,7 +5,7 @@ A local-first clip library for NVIDIA ShadowPlay (and any other recorder) — El
 - **Index in place.** Point it at the folder your recorder saves to. Nothing is copied or moved.
 - **Games first.** ShadowPlay writes `Videos\<Game>\clip.mp4`; each sub-folder becomes a game. The home screen is a searchable games browser (newest clip as cover, clip count, total length/size); open a game to get its clips grouped by date or flat.
 - **Watch folders.** New recordings appear seconds after they finish writing.
-- **Previews.** Poster frames plus hover-to-scrub strips, rendered once by a bundled ffmpeg at below-normal CPU priority and cached in `%APPDATA%\sift\thumbs`.
+- **Previews.** Poster frames plus hover-to-scrub strips, rendered once by a bundled ffmpeg at below-normal CPU priority and cached in the profile directory (see [Run](#run)).
 - **Screenshots.** PNG, JPG, BMP and GIF captures sit in the same grids as the recordings — same dates, same favourites and seen state, same right-click menu — with an All / Videos / Screenshots switch in the toolbar of any game that has both. ShadowPlay's HDR screenshots (`.jxr`) are decoded once with Microsoft's reference JPEG XR decoder (jxrlib, as WebAssembly, off the main thread), tone-mapped to SDR and cached beside the posters, since neither Chromium nor ffmpeg can read them. Off under Settings → Indexing if you only want the clips.
 - **Player.** Custom controls, keyboard shortcuts, prev/next through the grid, autoplay-next, loop, speed, fullscreen. A screenshot opens in the same overlay as a viewer: fit to the screen, wheel to zoom around the pointer, drag to pan, double-click for actual size.
 - **Manage.** A details pane beside the video carries the clip's figures, and rows that take you places — the folder on disk, the recording an export was cut from, the YouTube page. The file name at the top is a field: type and leave it to rename. Delete goes to the Recycle Bin, or permanently from the confirm dialog. Every action is also on each card's right-click menu and on the player's **⋯** menu, so nothing needs the pane open.
@@ -23,16 +23,18 @@ npm install
 npm run dev
 ```
 
+`npm run dev` runs on its own profile: library, preview cache, settings, YouTube tokens and window state all live in `%APPDATA%\sift (dev)`, apart from an installed build's `%APPDATA%\Sift`. The two can therefore run side by side, and a dev session cannot disturb the library you actually use. Point either one somewhere else with the variables below.
+
 ## Configuration
 
 Optional. Copy `.env.example` to `.env` (git-ignored) and set what you need; restart `npm run dev` afterwards because electron-vite inlines the values at start-up.
 
 | Variable | Where it's read | Effect |
 | --- | --- | --- |
-| `MAIN_VITE_USER_DATA_DIR` | `.env`, dev builds only | Run against an isolated profile (own `library.db`, thumbnail cache, single-instance lock) — test a build next to a running install without touching its library |
+| `MAIN_VITE_USER_DATA_DIR` | `.env`, dev builds only | Name the profile dir instead of using `%APPDATA%\sift (dev)` — for a second dev profile, or a throwaway one |
 | `MAIN_VITE_OPEN_DEVTOOLS` | `.env`, dev builds only | `true` opens detached DevTools when the window appears |
 | `MAIN_VITE_UPDATER_DEV` | `.env`, dev builds only | `true` runs the auto-updater against a `dev-app-update.yml` feed instead of leaving it inert |
-| `SIFT_USER_DATA` | shell environment, any build | Same profile override, but honoured by packaged builds too (`$env:SIFT_USER_DATA = "D:\sift-test"; npm run dev`) |
+| `SIFT_USER_DATA` | shell environment, any build | The same override, honoured by packaged builds too — how you point an installed Sift at a scratch library (`$env:SIFT_USER_DATA = "D:\sift-test"`) |
 
 Only `MAIN_VITE_*` / `PRELOAD_VITE_*` / `RENDERER_VITE_*` / `VITE_*` names reach the bundles; anything else in `.env` is ignored. `src/main/env.d.ts` types the ones the main process reads.
 

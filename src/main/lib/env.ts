@@ -10,10 +10,34 @@ import { app } from 'electron'
  *   developer's local paths into an installer.
  */
 
-/** Isolated profile dir (separate library.db, thumbnail cache, single-instance lock). Empty = default profile. */
+/** Isolated profile dir named explicitly. Empty = the profile `profileDir` picks. */
 export const userDataOverride: string =
   process.env.SIFT_USER_DATA ||
   (!app.isPackaged ? (import.meta.env.MAIN_VITE_USER_DATA_DIR ?? '') : '')
+
+/**
+ * Suffix that keeps `npm run dev` out of the installed build's profile.
+ *
+ * Electron derives the default profile dir from the app name, and the two names
+ * differ only in case — package.json's `sift` in development, electron-builder's
+ * `Sift` once packaged — which Windows does not treat as two directories. So a
+ * dev session used to open the installed build's library.db, preview cache,
+ * YouTube tokens and window state, and held its single-instance lock.
+ */
+const DEV_PROFILE_SUFFIX = ' (dev)'
+
+/** True while the app is running on a profile that is not the installed build's. */
+export const isDevProfile: boolean = Boolean(userDataOverride) || !app.isPackaged
+
+/**
+ * Where this run keeps its library, cache and window state. Call once, before
+ * anything reads `app.getPath('userData')` — main/index.ts sets it at module load.
+ */
+export function profileDir(): string {
+  if (userDataOverride) return userDataOverride
+  const base = app.getPath('userData')
+  return app.isPackaged ? base : base + DEV_PROFILE_SUFFIX
+}
 
 /**
  * Log per-process CPU and working set every few seconds. A `SIFT_*` knob on
