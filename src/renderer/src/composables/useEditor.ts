@@ -1,9 +1,11 @@
-import { computed, ref } from 'vue'
+import { computed, ref, shallowRef } from 'vue'
 import type { Clip, ExportJob } from '@shared/types'
 import { clamp } from '@/utils/format'
 import { audibleTracks, tracks as mixerTracks } from './useAudioMixer'
 import { exportClip } from './useExports'
 import { toast } from './useToasts'
+
+const api = window.api
 
 /** Shortest cut the editor accepts, in seconds. Mirrors the check in main. */
 export const MIN_SELECTION_S = 0.25
@@ -53,6 +55,40 @@ export const exportProblem = computed(() => {
   return ''
 })
 
+/**
+ * The trim bar's filmstrip for the clip in the player: keyframes from across
+ * the whole clip, cut by main the first time the clip is opened and cached
+ * from then on. Asked for as the player opens rather than when the trim bar
+ * does, so it is usually cut by the time the bar is on screen; and the bar
+ * shows it whole once it is, never half-drawn.
+ */
+export interface Filmstrip {
+  id: string
+  /** Frames in the strip; 0 until it is cut. */
+  count: number
+  /** URL of the strip; '' while it is still being cut. */
+  strip: string
+}
+export const filmstrip = shallowRef<Filmstrip | null>(null)
+/** Which ask the answer belongs to: an ask cancelled by a later one must not clear the later one's state. */
+let filmAsk = 0
+
+/** Asks main for the clip's strip, unless it is already here or on its way. */
+export function prepareFilmstrip(clip: Clip): void {
+  if (clip.kind !== 'video' || filmstrip.value?.id === clip.id) return
+  const ask = ++filmAsk
+  filmstrip.value = { id: clip.id, count: 0, strip: '' }
+  void api.clips.filmstrip(clip.id).then((res) => {
+    if (ask !== filmAsk) return
+    if (res.ok && res.film) {
+      filmstrip.value = { id: clip.id, count: res.frames ?? 0, strip: api.thumbUrl(res.film) }
+    } else {
+      // The bar keeps to the sprite; the next open of this clip asks again.
+      filmstrip.value = null
+    }
+  })
+}
+
 export function enterEdit(clip: Clip): void {
   duration = clip.duration
   inSec.value = 0
@@ -60,6 +96,7 @@ export function enterEdit(clip: Clip): void {
   exportMuted.value = false
   exportName.value = `${clip.title} - Clip`
   editing.value = true
+  prepareFilmstrip(clip)
 }
 
 export function exitEdit(): void {

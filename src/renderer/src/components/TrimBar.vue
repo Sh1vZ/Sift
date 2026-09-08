@@ -1,26 +1,33 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import type { Filmstrip } from '@/composables/useEditor'
 import { clamp, formatDuration, formatTimecode, fractionAcross } from '@/utils/format'
 
 /**
  * The player's timeline in edit mode: a ruler with timecodes over a filmstrip
  * of the clip, bracket handles at the in/out points, and a playhead running
- * through both. The filmstrip is the hover-scrub sprite the indexer already
- * rendered, so no extra ffmpeg work happens when you start trimming.
+ * through both. The filmstrip is cut for the clip as the player opens (see
+ * `filmstrip` in useEditor); until it is whole, the hover-scrub sprite the
+ * indexer already rendered stands in, and the strip then fades in over it in
+ * one go rather than filling in frame by frame.
  */
 const props = defineProps<{
   duration: number
   inSec: number
   outSec: number
   time: number
-  /** `clip://thumb/...` URL of the sprite strip; empty when previews are off or still rendering. */
+  /** `clip://thumb/...` URL of the hover-scrub sprite; empty when previews are off or still rendering. */
   sprite: string
-  frames: number
+  spriteFrames: number
+  /** The clip's filmstrip, cut or still being cut; null when none was asked for, or the cut failed. */
+  filmstrip: Filmstrip | null
 }>()
 const emit = defineEmits<{
   'update:in': [seconds: number]
   'update:out': [seconds: number]
   seek: [seconds: number]
+  /** The hand going down on a bracket or the strip, and lifting off: the player holds still in between. */
+  drag: [active: boolean]
 }>()
 
 type Target = 'in' | 'out' | 'head'
@@ -30,6 +37,9 @@ const MAJORS = 10
 const MINORS = 4
 
 const track = ref<HTMLElement | null>(null)
+/** Sprite frames are cropped to 320x180 (see `makeSprite`), whatever shape the clip is. */
+const FRAME_ASPECT = 16 / 9
+const trackSize = ref({ width: 0, height: 0 })
 const dragging = ref<Target | null>(null)
 const hoverPct = ref<number | null>(null)
 const headHover = ref(false)
@@ -51,17 +61,47 @@ const ticks = computed(() => {
   return out
 })
 
-/** One cell per sprite frame; each shows its slice of the strip, cropped to the cell. */
-const cells = computed(() => {
-  const n = Math.max(1, props.frames)
-  return Array.from({ length: n }, (_, i) => ({
-    key: i,
-    style: {
-      backgroundImage: `url("${props.sprite}")`,
-      backgroundSize: `${n * 100}% 100%`,
-      backgroundPosition: n > 1 ? `${(i / (n - 1)) * 100}% 0` : '0 0',
-    },
-  }))
+/** Frame `j` of an `n`-frame strip, sized so the one frame fills the cell. */
+function slice(url: string, n: number, j: number): Record<string, string> {
+  return {
+    backgroundImage: `url("${url}")`,
+    backgroundSize: `${n * 100}% 100%`,
+    backgroundPosition: n > 1 ? `${(j / (n - 1)) * 100}% 0` : '0 0',
+  }
+}
+
+/** Cells across the track, each the shape of a frame at the strip's height, so nothing is stretched. */
+const cellCount = computed(() => {
+  const { width, height } = trackSize.value
+  return height > 0 ? Math.max(1, Math.round(width / (height * FRAME_ASPECT))) : 1
+})
+
+/** A cell per slot, each showing the frame of the `n`-frame strip at `url` captured nearest its midpoint. */
+function layout(url: string, n: number): Array<{ key: number; style: Record<string, string> }> {
+  const count = cellCount.value
+  return Array.from({ length: count }, (_, i) => {
+    // Frame j of n opens at j/n of the clip, so the cell's midpoint picks its frame.
+    const j = Math.min(n - 1, Math.floor(((i + 0.5) / count) * n))
+    return { key: i, style: slice(url, n, j) }
+  })
+}
+
+/**
+ * Two layers of cells. The sprite's frames — five, repeated, but on screen
+ * the moment the bar is — are what it opens on, and what it keeps if there
+ * is no strip. The strip's frames go on top once the strip is whole, fading
+ * in over the same cells: one crossfade, from coarse to exact, rather than a
+ * fill-in; and none at all when the strip was already cut, since the layer
+ * is then there from the first frame.
+ */
+const spriteCells = computed(() =>
+  props.sprite && props.spriteFrames > 0
+    ? layout(props.sprite, props.spriteFrames)
+    : Array.from({ length: cellCount.value }, (_, i) => ({ key: i, style: null })),
+)
+const filmCells = computed(() => {
+  const film = props.filmstrip
+  return film?.strip && film.count > 0 ? layout(film.strip, film.count) : null
 })
 
 function secondsAt(e: PointerEvent): number {
@@ -77,6 +117,7 @@ function apply(target: Target, seconds: number): void {
 function onTrackDown(e: PointerEvent): void {
   dragging.value = 'head'
   ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+  emit('drag', true)
   apply('head', secondsAt(e))
 }
 
@@ -84,6 +125,7 @@ function onHandleDown(target: Target, e: PointerEvent): void {
   e.stopPropagation()
   dragging.value = target
   ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+  emit('drag', true)
 }
 
 function onMove(e: PointerEvent): void {
@@ -92,7 +134,9 @@ function onMove(e: PointerEvent): void {
 }
 
 function onUp(): void {
+  if (!dragging.value) return
   dragging.value = null
+  emit('drag', false)
 }
 
 function onLeave(): void {
@@ -137,6 +181,17 @@ const tipPct = computed(() => {
   if (onHead.value) return headPct.value
   return hoverPct.value === null ? 0 : hoverPct.value * 100
 })
+
+let observer: ResizeObserver | null = null
+onMounted(() => {
+  if (!track.value) return
+  observer = new ResizeObserver(([entry]) => {
+    const { width, height } = entry.contentRect
+    trackSize.value = { width, height }
+  })
+  observer.observe(track.value)
+})
+onBeforeUnmount(() => observer?.disconnect())
 </script>
 
 <template>
@@ -169,10 +224,20 @@ const tipPct = computed(() => {
       </div>
 
       <div ref="track" class="strip" @pointerdown="onTrackDown">
-        <div v-if="sprite" class="film">
-          <span v-for="c in cells" :key="c.key" class="cell" :style="c.style" />
+        <div class="film">
+          <span
+            v-for="c in spriteCells"
+            :key="c.key"
+            class="cell"
+            :class="{ empty: !c.style }"
+            :style="c.style ?? undefined"
+          />
         </div>
-        <div v-else class="film blank" />
+        <Transition name="film">
+          <div v-if="filmCells" class="film">
+            <span v-for="c in filmCells" :key="c.key" class="cell" :style="c.style" />
+          </div>
+        </Transition>
 
         <div class="dim" :style="{ left: 0, width: `${inPct}%` }" />
         <div class="dim" :style="{ left: `${outPct}%`, right: 0 }" />
@@ -310,22 +375,27 @@ const tipPct = computed(() => {
   display: flex;
   border-radius: 6px;
   overflow: hidden;
+  background: var(--bg-3);
 }
-.film.blank {
-  background:
-    repeating-linear-gradient(
-      90deg,
-      transparent 0 calc(10% - 1px),
-      rgba(255, 255, 255, 0.08) calc(10% - 1px) 10%
-    ),
-    var(--bg-3);
+/* The strip arriving over the sprite: one crossfade, cell for cell. */
+.film-enter-active {
+  transition: opacity var(--dur-slow) var(--ease-out);
+}
+.film-enter-from {
+  opacity: 0;
 }
 .cell {
   flex: 1 1 0;
   min-width: 0;
   background-repeat: no-repeat;
-  /* Each cell is one sprite frame, cropped by the cell's own width. */
+  /* Each cell is one frame, sized to the cell so it shows at its own shape;
+     the cells share the track evenly, so at most half a cell's width of
+     rounding is spread across all of them. */
   background-clip: border-box;
+}
+/* A frame still to land, or no previews at all: the strip's own ruling. */
+.cell.empty {
+  box-shadow: inset -1px 0 rgba(255, 255, 255, 0.08);
 }
 /* What the export drops: darkened so the kept range reads as the bright part. */
 .dim {

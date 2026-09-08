@@ -90,6 +90,14 @@ export interface Api {
      * Refused for the default track: the <video> element already plays it.
      */
     audioTrack(id: string, index: number): Promise<ActionResult & { file?: string }>
+    /**
+     * The trim bar's filmstrip: keyframes from across the whole clip, cut when
+     * asked for rather than at index time, and cached after that. Resolves
+     * with the strip file (for `thumbUrl`) once every frame is on disk — at
+     * once for a strip already cut. Asking for another clip's strip cancels
+     * a cut in progress.
+     */
+    filmstrip(id: string): Promise<ActionResult & { film?: string; frames?: number }>
   }
   exports: {
     cancel(id: string): Promise<ActionResult>

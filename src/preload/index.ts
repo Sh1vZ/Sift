@@ -36,6 +36,7 @@ const api: Api = {
       ipcRenderer.invoke('clip:set-favourite', id, favourite === true),
     setSeen: (id, seen) => ipcRenderer.invoke('clip:set-seen', id, seen === true),
     audioTrack: (id, index) => ipcRenderer.invoke('clip:audio-track', id, index),
+    filmstrip: (id) => ipcRenderer.invoke('clip:filmstrip', id),
   },
   exports: {
     cancel: (id) => ipcRenderer.invoke('export:cancel', id),

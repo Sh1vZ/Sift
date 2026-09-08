@@ -25,6 +25,26 @@ const THUMB_WIDTH = 480
  */
 const SPRITE_FRAME_WIDTH = 320
 const SPRITE_FRAME_HEIGHT = 180
+/**
+ * Frames in a trim filmstrip, by clip length. ShadowPlay puts a keyframe every
+ * half second and a seek lands on the keyframe at or before its target, so
+ * slots closer together than that show the same frame twice: a short clip
+ * gets a slot per half second, a long one the cap. Thirty-two is a frame per
+ * cell of the trim bar on an ultrawide, and ~2 s of cutting for an HDR clip
+ * on two workers at ~100 ms a frame; an SDR clip is a third of that, mostly
+ * the seeks.
+ */
+const FILM_FRAMES_MAX = 32
+const FILM_FRAMES_MIN = 8
+const FILM_FRAME_GAP_S = 0.5
+/**
+ * Seeks per ffmpeg process, and processes at once. Batches are kept small so
+ * a cancelled cut wastes little and two workers share a strip evenly; two of
+ * them halve an HDR strip's wait while looking like no more than a couple of
+ * threads to a running game.
+ */
+const FILM_BATCH = 4
+const FILM_WORKERS = 2
 const JOB_TIMEOUT_MS = 60_000
 /**
  * `area` is the cheapest swscale mode that still anti-aliases a 7x downscale;
@@ -109,8 +129,8 @@ const workers = new Set<Worker>()
 function run(
   bin: string,
   args: string[],
-  /** `input` is written to the child's stdin and closed, for ffmpeg's `pipe:0`. */
-  opts: { input?: Uint8Array } = {},
+  /** `input` is written to the child's stdin and closed, for ffmpeg's `pipe:0`; `signal` kills the child. */
+  opts: { input?: Uint8Array; signal?: AbortSignal } = {},
 ): Promise<{ code: number; stdout: string; stderrTail: string }> {
   return new Promise((resolve, reject) => {
     const child = spawn(bin, args, {
@@ -119,6 +139,11 @@ function run(
     })
     active.add(child)
     lowerPriority(child.pid)
+    const onAbort = (): void => {
+      child.kill()
+    }
+    opts.signal?.addEventListener('abort', onAbort, { once: true })
+    if (opts.signal?.aborted) child.kill()
     if (opts.input && child.stdin) {
       // A child that quits early closes the pipe under the write; its exit code
       // tells that story, so the write error itself is not one.
@@ -135,11 +160,13 @@ function run(
     })
     child.on('error', (err) => {
       clearTimeout(timer)
+      opts.signal?.removeEventListener('abort', onAbort)
       active.delete(child)
       reject(err)
     })
     child.on('close', (code) => {
       clearTimeout(timer)
+      opts.signal?.removeEventListener('abort', onAbort)
       active.delete(child)
       resolve({ code: code ?? -1, stdout, stderrTail: stderrTail.trim() })
     })
@@ -403,6 +430,11 @@ export function thumbName(clip: Clip): string {
 export function spriteName(clip: Clip): string {
   return `${frameStem(clip)}.sprite-${SPRITE_FRAMES}x${SPRITE_FRAME_WIDTH}x${SPRITE_FRAME_HEIGHT}.jpg`
 }
+/** The trim bar's filmstrip. Frame count and geometry are in the name, as the sprite's are. */
+export function filmName(clip: Clip): string {
+  const n = filmFrameCount(clip.duration)
+  return `${frameStem(clip)}.film-${n}x${SPRITE_FRAME_WIDTH}x${SPRITE_FRAME_HEIGHT}.jpg`
+}
 /** The SDR copy of an HDR screenshot. A jpg in the cache, so `clip://thumb` can serve it. */
 export function renderName(clip: Clip): string {
   return `${clip.id}-${Math.round(clip.mtimeMs)}-v${ARTIFACT_VERSION}.render.jpg`
@@ -419,6 +451,11 @@ async function exists(p: string): Promise<boolean> {
 
 export function spriteFrameCount(duration: number): number {
   return Math.max(4, Math.min(SPRITE_FRAMES, Math.floor(duration)))
+}
+
+export function filmFrameCount(duration: number): number {
+  const slots = Math.floor(duration / FILM_FRAME_GAP_S)
+  return Math.max(FILM_FRAMES_MIN, Math.min(FILM_FRAMES_MAX, slots))
 }
 
 /**
@@ -543,6 +580,117 @@ export async function makeSprite(clip: Clip, duration: number): Promise<SpriteSt
     throw new Error(`ffmpeg sprite exited with ${code}`)
   }
   return { sprite, spriteFrames: frames }
+}
+
+export interface Film {
+  film: string
+  frames: number
+}
+
+/**
+ * The trim bar's filmstrip: `filmFrameCount` keyframe seeks spread over the
+ * clip, `FILM_BATCH` to an ffmpeg process and `FILM_WORKERS` processes at a
+ * time, each frame to its own file, then stacked into one strip under the
+ * cache name. Cut when the player opens a clip, never by the indexer, so a
+ * clip that is never opened never pays for it; and cached, so the next ask
+ * is a stat. `signal` kills the processes running and removes what they wrote.
+ *
+ * Seeks rather than one pass over the file, because a pass decodes every
+ * keyframe on its way — 240 in a two-minute ShadowPlay clip: 3 s for SDR and
+ * 13 s for HDR, measured — where seeks decode only the frames the strip
+ * shows. Keyframes only, because an exact time means decoding the GOP up to
+ * it, thirty frames for one; the strip's slots are half a second apart at
+ * the closest, which is a GOP, so nothing is lost.
+ */
+export async function makeFilm(clip: Clip, signal: AbortSignal): Promise<Film> {
+  const film = filmName(clip)
+  const filmPath = join(cacheDir(), film)
+  const frames = filmFrameCount(clip.duration)
+  if (await exists(filmPath)) return { film, frames }
+
+  // `~`-prefixed like every half-made file in the cache: never served, never a hit.
+  const stem = film.slice(0, -'.jpg'.length)
+  const framePath = (i: number): string => join(cacheDir(), `~${stem}.${i}.jpg`)
+  const batches: number[][] = []
+  for (let at = 0; at < frames; at += FILM_BATCH) {
+    batches.push(Array.from({ length: Math.min(FILM_BATCH, frames - at) }, (_, k) => at + k))
+  }
+
+  // The strip is all of its frames or nothing: one failure stops the others.
+  const stop = new AbortController()
+  const onAbort = (): void => stop.abort()
+  signal.addEventListener('abort', onAbort, { once: true })
+  let next = 0
+  /** Takes batches until they run out or one fails; resolves with the failure, if it was the one to hit it. */
+  const worker = async (): Promise<Error | null> => {
+    while (next < batches.length && !stop.signal.aborted) {
+      const batch = batches[next++]
+      try {
+        await cutBatch(clip, batch, frames, framePath, stop.signal)
+      } catch (err) {
+        stop.abort()
+        return err as Error
+      }
+    }
+    return null
+  }
+  try {
+    const workers = Math.min(FILM_WORKERS, batches.length)
+    const failure = (await Promise.all(Array.from({ length: workers }, worker))).find((e) => e)
+    if (signal.aborted) throw new Error('Filmstrip cancelled')
+    if (failure) throw failure
+    await stackFilm(batches.flat().map(framePath), filmPath, signal)
+    return { film, frames }
+  } finally {
+    signal.removeEventListener('abort', onAbort)
+    for (let i = 0; i < frames; i++) await unlink(framePath(i)).catch(() => undefined)
+  }
+}
+
+/** One ffmpeg process: a keyframe seek per frame of the batch, each frame to its own file. */
+async function cutBatch(
+  clip: Clip,
+  batch: number[],
+  frames: number,
+  framePath: (i: number) => string,
+  signal: AbortSignal,
+): Promise<void> {
+  const args = ['-y', '-v', 'error', ...ONE_THREAD_FILTERS]
+  // As the sprite: slot i opens at i/n of the clip, on the keyframe at or before it.
+  for (const i of batch) args.push(...seekInput(clip.path, (clip.duration * i) / frames))
+  batch.forEach((i, k) => {
+    const filter = stripFilter(clip.hdr)
+    args.push('-map', `${k}:v`, '-vf', filter, '-frames:v', '1', '-q:v', '5', framePath(i))
+  })
+  const { code } = await run(FFMPEG, args, { signal })
+  if (code !== 0) {
+    for (const i of batch) await unlink(framePath(i)).catch(() => undefined)
+    throw new Error(`ffmpeg filmstrip exited with ${code}`)
+  }
+}
+
+/**
+ * The cut frames side by side in one JPEG, written under a temp name and
+ * renamed once ffmpeg has exited cleanly: a half-written strip under the real
+ * name would be a cache hit forever.
+ */
+async function stackFilm(
+  framePaths: string[],
+  filmPath: string,
+  signal: AbortSignal,
+): Promise<void> {
+  const temp = join(dirname(filmPath), `~${basename(filmPath)}`)
+  const args = ['-y', '-v', 'error', ...ONE_THREAD_FILTERS]
+  for (const p of framePaths) args.push('-i', p)
+  const inputs = framePaths.map((_, i) => `[${i}:v]`).join('')
+  args.push('-filter_complex', `${inputs}hstack=inputs=${framePaths.length}[strip]`)
+  args.push('-map', '[strip]', '-frames:v', '1', '-q:v', '4', temp)
+  const { code } = await run(FFMPEG, args, { signal })
+  if (code !== 0) {
+    await unlink(temp).catch(() => undefined)
+    throw new Error(`ffmpeg filmstrip stack exited with ${code}`)
+  }
+  await fsRename(temp, filmPath)
 }
 
 /**
@@ -760,9 +908,9 @@ export async function removeAudioTracks(clipId: string): Promise<void> {
 }
 
 export async function removeArtifacts(
-  clip: Pick<Clip, 'thumb' | 'sprite'> & { render?: string },
+  clip: Pick<Clip, 'thumb' | 'sprite'> & { render?: string; film?: string },
 ): Promise<void> {
-  for (const f of [clip.thumb, clip.sprite, clip.render ?? '']) {
+  for (const f of [clip.thumb, clip.sprite, clip.render ?? '', clip.film ?? '']) {
     if (!f) continue
     await unlink(join(cacheDir(), f)).catch(() => undefined)
   }

@@ -63,8 +63,10 @@ import {
   exportMuted,
   exportName,
   exportProblem,
+  filmstrip,
   inSec,
   outSec,
+  prepareFilmstrip,
   resetRange,
   selectionLength,
   setIn,
@@ -349,7 +351,11 @@ function stepClip(direction: -1 | 1): void {
 }
 
 watch(editing, (on) => {
-  if (!on) blockedHint = false
+  if (!on) {
+    blockedHint = false
+    // Leaving mid-drag (Escape) takes the bar with it, so the hand never lifts here.
+    onTrimDrag(false)
+  }
   poke()
 })
 
@@ -391,7 +397,7 @@ function seekTo(seconds: number): void {
   // the player comes through here — the trim preview's loop included.
   syncAll()
 }
-const seekBy = (delta: number): void => seekTo(time.value + delta)
+const seekBy = (delta: number): void => scrubTo(time.value + delta)
 
 /** One frame at the clip's rate, paused so the frame you land on stays put. */
 function stepFrame(direction: -1 | 1): void {
@@ -576,28 +582,80 @@ function onPause(): void {
   stopTicking()
 }
 /**
+ * The spinner is for a real stall, not for a seek's own decode. A seek on a
+ * 4K clip is a decoder flush and up to a GOP of frames, 50–300 ms, and a veil
+ * flashed over every click read as buffering. So a stall has to last this
+ * long before it shows, and it never shows under a drag: the last frame stays
+ * put while the hand is on the bar.
+ */
+const STALL_SHOW_MS = 300
+let stallTimer = 0
+function stalled(): void {
+  if (stallTimer) return
+  stallTimer = window.setTimeout(() => {
+    stallTimer = 0
+    if (!seeking.value) buffering.value = true
+  }, STALL_SHOW_MS)
+}
+function settled(): void {
+  window.clearTimeout(stallTimer)
+  stallTimer = 0
+  buffering.value = false
+}
+/**
  * A stall on the video decoder does not stall the extracted tracks — they would
  * run on ahead for as long as the source takes to catch up.
  */
 function onWaiting(): void {
-  buffering.value = true
   pauseAll()
+  stalled()
 }
 function onPlaying(): void {
-  buffering.value = false
+  settled()
   syncAll()
 }
 
 // ------------------------------------------------------------- seek bar
 
+/**
+ * Seeks that come in a stream — a drag on either bar, a held arrow key: one
+ * is in flight at a time, and the next goes to wherever the hand is by then.
+ * Every pointer move as a seek of its own queued them faster than a 4K clip
+ * decodes (a flush and up to a GOP of frames each), so the picture trailed
+ * the hand by all of them, under a spinner. The bar's playhead follows the
+ * hand at once either way; the last position asked for is always reached.
+ */
+let scrubTarget: number | null = null
+function scrubTo(seconds: number): void {
+  const v = video.value
+  if (!v) return
+  if (!v.seeking) {
+    scrubTarget = null
+    seekTo(seconds)
+    return
+  }
+  const t = clamp(seconds, 0, duration.value || 0)
+  scrubTarget = t
+  time.value = t
+}
+function onSeeked(): void {
+  settled()
+  syncAll()
+  if (scrubTarget !== null) {
+    const t = scrubTarget
+    scrubTarget = null
+    seekTo(t)
+  }
+}
+
 function onSeekDown(e: PointerEvent): void {
   seeking.value = true
   ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
-  seekTo(fractionAcross(seekEl.value!, e.clientX) * duration.value)
+  scrubTo(fractionAcross(seekEl.value!, e.clientX) * duration.value)
 }
 function onSeekMove(e: PointerEvent): void {
   hoverPct.value = fractionAcross(seekEl.value!, e.clientX)
-  if (seeking.value) seekTo(hoverPct.value * duration.value)
+  if (seeking.value) scrubTo(hoverPct.value * duration.value)
 }
 function onSeekUp(): void {
   seeking.value = false
@@ -613,6 +671,25 @@ function toggleEdit(): void {
   if (editing.value) exitEdit()
   else if (canEdit.value) enterEdit(clip.value)
   poke()
+}
+
+/**
+ * The video holds still while a bracket or the playhead is dragged, so the
+ * frame under the hand is the one being chosen rather than one that has
+ * already moved on, and picks up again where the hand let go — only if it
+ * was playing when the hand went down.
+ */
+let resumeAfterTrimDrag = false
+function onTrimDrag(active: boolean): void {
+  const v = video.value
+  if (!v) return
+  if (active) {
+    resumeAfterTrimDrag = !v.paused
+    v.pause()
+  } else if (resumeAfterTrimDrag) {
+    resumeAfterTrimDrag = false
+    void v.play().catch(() => undefined)
+  }
 }
 
 async function exportNow(): Promise<void> {
@@ -902,6 +979,8 @@ watch(
     releaseAll()
     loadTracks(clip.value)
     void ensureTracks(clip.value)
+    // Now rather than when the trim bar opens: the cut is usually done by then.
+    prepareFilmstrip(clip.value)
     exitEdit()
     time.value = 0
     lastTime = 0
@@ -909,7 +988,8 @@ watch(
     buffered.value = 0
     ended.value = false
     failed.value = false
-    buffering.value = false
+    settled()
+    scrubTarget = null
     // The poster covers the swap so stepping through clips does not flash black.
     frameReady.value = false
     cancelDwell()
@@ -960,7 +1040,7 @@ watch(windowVisible, async (vis) => {
   v.load() // and this is what actually releases the decoder and the buffers
   releaseAll() // same for every extra track, which Vue has just unbound too
   buffered.value = 0
-  buffering.value = false
+  settled()
 })
 
 onMounted(async () => {
@@ -974,6 +1054,7 @@ onMounted(async () => {
   setVideo(video.value)
   loadTracks(clip.value)
   void ensureTracks(clip.value)
+  prepareFilmstrip(clip.value)
   await nextTick()
   // The media is attached from here, so a flip that cannot run (reduced motion,
   // no origin card) has to release it in the same tick rather than never.
@@ -990,6 +1071,7 @@ onBeforeUnmount(() => {
   observer?.disconnect()
   window.clearTimeout(hideTimer)
   window.clearTimeout(volumeTimer)
+  window.clearTimeout(stallTimer)
   cancelDwell()
   video.value?.pause()
   video.value?.removeAttribute('src')
@@ -1118,8 +1200,9 @@ onBeforeUnmount(() => {
             @pause="onPause"
             @waiting="onWaiting"
             @playing="onPlaying"
-            @canplay="buffering = false"
-            @seeked="syncAll"
+            @canplay="settled"
+            @seeking="stalled"
+            @seeked="onSeeked"
             @ended="onEnded"
             @error="onError"
           />
@@ -1356,10 +1439,12 @@ onBeforeUnmount(() => {
             :out-sec="outSec"
             :time="time"
             :sprite="clip.sprite ? api.thumbUrl(clip.sprite) : ''"
-            :frames="clip.spriteFrames"
+            :sprite-frames="clip.spriteFrames"
+            :filmstrip="filmstrip"
             @update:in="setIn"
             @update:out="setOut"
-            @seek="seekTo"
+            @seek="scrubTo"
+            @drag="onTrimDrag"
           />
           <div
             v-else

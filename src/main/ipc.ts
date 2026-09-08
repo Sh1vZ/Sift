@@ -141,6 +141,7 @@ export function registerIpc(
   ipcMain.handle('clip:audio-track', (_e, id, index) =>
     library.audioTrack(str(id), Math.trunc(num(index))),
   )
+  ipcMain.handle('clip:filmstrip', (_e, id) => library.filmstrip(str(id)))
 
   ipcMain.handle('clip:open-youtube', (_e, id) => youtube.openVideo(str(id)))
   ipcMain.handle('clip:copy-youtube-link', (_e, id) => youtube.copyLink(str(id)))

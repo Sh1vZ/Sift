@@ -42,8 +42,10 @@ import {
 import {
   extractAudioTrack,
   ffmpegAvailable,
+  filmName,
   keyframeBefore,
   killActiveJobs,
+  makeFilm,
   makeImageThumb,
   makeJxrRender,
   makePoster,
@@ -65,6 +67,7 @@ import { Store } from './store'
 import { watchFolder } from './watcher'
 
 export type Emit = <K extends EventName>(name: K, payload: EventMap[K]) => void
+type FilmResult = ActionResult & { film?: string; frames?: number }
 
 const FLUSH_MS = 150
 const ADD_BATCH = 40
@@ -136,6 +139,8 @@ export class Library {
    * without this two ffmpegs would race onto one output path.
    */
   private audioJobs = new Map<string, Promise<ActionResult & { file?: string }>>()
+  /** The filmstrip being cut, if one is: one at a time, and the latest ask wins. */
+  private film: { id: string; abort: AbortController; job: Promise<FilmResult> } | null = null
   private exportAbort: AbortController | null = null
   private exportsTimer: NodeJS.Timeout | null = null
   /** The sampler behind an import the user is waiting on; null between imports. See `startBurst`. */
@@ -173,6 +178,7 @@ export class Library {
   async shutdown(): Promise<void> {
     // The running export removes its own temp file on abort; wait for that.
     this.exportAbort?.abort()
+    this.film?.abort.abort()
     await this.exportChain.catch(() => undefined)
     this.activity.shutdown()
     this.endBurst()
@@ -221,6 +227,38 @@ export class Library {
       .catch((err: Error) => ({ ok: false, error: err.message }))
       .finally(() => this.audioJobs.delete(key))
     this.audioJobs.set(key, job)
+    return job
+  }
+
+  /**
+   * The trim bar's filmstrip, cut when the player opens a clip rather than by
+   * the indexer: the scan costs nothing more for it, and a clip that is never
+   * opened never pays. Cached on disk once cut, so the next open has it at once.
+   *
+   * One at a time, and the latest ask wins: whoever asked for another clip's
+   * strip has moved on, so the cut in progress is killed rather than left to
+   * finish behind the new one.
+   */
+  filmstrip(id: string): Promise<FilmResult> {
+    const clip = this.store.data.clips[id]
+    if (!clip) return Promise.resolve({ ok: false, error: 'Clip not found.' })
+    if (clip.kind !== 'video' || clip.duration <= 0)
+      return Promise.resolve({ ok: false, error: 'Nothing to cut frames from.' })
+    if (!ffmpegAvailable()) return Promise.resolve({ ok: false, error: 'ffmpeg is not available.' })
+    if (this.film?.id === id) return this.film.job
+
+    this.film?.abort.abort()
+    const abort = new AbortController()
+    const job: Promise<FilmResult> = makeFilm(clip, abort.signal)
+      .then((made) => ({ ok: true, ...made }))
+      .catch((err: Error) => ({
+        ok: false,
+        error: abort.signal.aborted ? 'Cancelled.' : err.message,
+      }))
+      .finally(() => {
+        if (this.film?.abort === abort) this.film = null
+      })
+    this.film = { id, abort, job }
     return job
   }
 
@@ -490,7 +528,7 @@ export class Library {
       if (clip.thumb) files++
       if (clip.sprite) files++
       if (clip.render) files++
-      await removeArtifacts(clip)
+      await removeArtifacts({ ...clip, film: filmName(clip) })
       this.applyPatch({ id: clip.id, thumb: '', sprite: '', spriteFrames: 0, render: '' })
     }
     for (const clip of Object.values(this.store.data.clips)) {
@@ -991,7 +1029,7 @@ export class Library {
         seenAtMs: 0,
       }
       const previous = this.store.data.clips[clip.id]
-      if (previous) void removeArtifacts(previous)
+      if (previous) void removeArtifacts({ ...previous, film: filmName(previous) })
       this.store.data.clips[clip.id] = clip
       this.store.upsertClip(clip)
       this.added.set(clip.id, clip)
@@ -1237,7 +1275,7 @@ export class Library {
 
   private upsertClip(folder: LibraryFolder, file: string, st: Stats, previous?: Clip): Clip {
     if (previous) {
-      void removeArtifacts(previous)
+      void removeArtifacts({ ...previous, film: filmName(previous) })
       // The file changed under us, so extractions cut from the old bytes are
       // wrong even where the name would still match.
       void removeAudioTracks(previous.id)
@@ -1306,7 +1344,7 @@ export class Library {
     delete this.store.data.clips[clip.id]
     this.store.deleteClip(clip.id)
     this.media.remove(clip.id)
-    void removeArtifacts(clip)
+    void removeArtifacts({ ...clip, film: filmName(clip) })
     void removeAudioTracks(clip.id)
     this.added.delete(clip.id)
     this.updated.delete(clip.id)
