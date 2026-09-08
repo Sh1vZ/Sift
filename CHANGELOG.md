@@ -7,6 +7,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 uses [semantic versioning](https://semver.org/spec/v2.0.0.html) — beta builds carry a
 `-beta.N` suffix and update from the beta channel.
 
+## [1.0.0-beta.11] - 2026-09-08
+
+### Changed
+
+- The trim timeline shows a filmstrip cut from the clip itself, instead of repeating
+  the five frames of the hover-scrub strip. It is cut as the clip opens and kept, so
+  it fades in once and is there straight away next time.
+
 ## [1.0.0-beta.10] - 2026-09-07
 
 ### Added
