@@ -1,4 +1,4 @@
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import type { Clip } from '@shared/types'
 import {
   allClips,
@@ -7,6 +7,7 @@ import {
   orderedExports,
   orderedFavourites,
   requestPreview,
+  screen,
 } from './useLibrary'
 import type { Rect } from './useMotion'
 
@@ -19,6 +20,16 @@ export const source = ref<PlayerSource>('library')
 /** Set by `openClip(…, edit)` and consumed by the overlay once it has mounted. */
 export const pendingEdit = ref(false)
 export const isOpen = computed(() => current.value !== null)
+/** True while the document is fullscreen: App hides the title bar and sidebar so the page is the whole window. */
+export const fullscreen = ref(Boolean(document.fullscreenElement))
+/**
+ * Bumped to leave the page the way its Back button does, flip and all — the
+ * title bar's crumb for the screen beneath uses it. PlayerView watches it.
+ */
+export const closeRequests = ref(0)
+export function requestClose(): void {
+  closeRequests.value++
+}
 
 // The trim bar scrubs on the strip: an open clip without one yet is asked for next.
 watch(current, (c) => {
@@ -41,12 +52,16 @@ const index = computed(() =>
 export const hasPrev = computed(() => index.value > 0)
 export const hasNext = computed(() => index.value >= 0 && index.value < list.value.length - 1)
 
+/** Every open, counted: how the screen watcher below tells a navigation from a reopen. */
+let opens = 0
+
 export function openClip(
   clip: Clip,
   rect: Rect | null = null,
   from: PlayerSource = 'library',
   edit = false,
 ): void {
+  opens++
   originRect.value = rect
   source.value = from
   pendingEdit.value = edit
@@ -67,6 +82,21 @@ export function closePlayer(): void {
   current.value = null
   pendingEdit.value = false
 }
+
+/**
+ * The page belongs to the screen it was opened over: navigating away beneath
+ * it — a crumb, the sidebar, Settings from the tray — takes it down. Judged a
+ * tick later because opening a search result navigates first and opens
+ * second; by then `opens` has moved on and the page stays up, swapping the
+ * clip in place instead of closing and reopening.
+ */
+watch(screen, () => {
+  if (!current.value) return
+  const seen = opens
+  void nextTick(() => {
+    if (current.value && opens === seen) closePlayer()
+  })
+})
 
 export function nextClip(): void {
   if (hasNext.value) current.value = list.value[index.value + 1]

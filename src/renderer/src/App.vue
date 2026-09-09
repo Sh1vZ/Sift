@@ -7,7 +7,7 @@ import ClipsView from './components/ClipsView.vue'
 import FavouritesView from './components/FavouritesView.vue'
 import SettingsView from './components/SettingsView.vue'
 import ActivityView from './components/ActivityView.vue'
-import PlayerOverlay from './components/PlayerOverlay.vue'
+import PlayerView from './components/PlayerView.vue'
 import DialogHost from './components/DialogHost.vue'
 import ToastBridge from './components/ToastBridge.vue'
 import WhatsNewDialog from './components/WhatsNewDialog.vue'
@@ -20,7 +20,7 @@ import { initExports } from '@/composables/useExports'
 import { initUpdates } from '@/composables/useUpdates'
 import { initUploads } from '@/composables/useUploads'
 import { initYouTube } from '@/composables/useYouTube'
-import { isOpen } from '@/composables/usePlayer'
+import { fullscreen, isOpen } from '@/composables/usePlayer'
 import { openSettings } from '@/composables/useSettings'
 import { installShortcuts } from '@/composables/useShortcuts'
 import { installDropGuard } from '@/composables/useDropFolders'
@@ -71,23 +71,29 @@ onBeforeUnmount(() => {
     :tooltip="{ delayDuration: 250 }"
   >
     <div class="app">
-      <TitleBar />
+      <!-- Fullscreen is the player's: the chrome steps out so the main area,
+           and the page in it, is the whole screen. -->
+      <TitleBar v-show="!fullscreen" />
       <Transition name="fade">
-        <div v-if="ready" class="body" :inert="isOpen">
-          <Sidebar />
+        <div v-if="ready" class="body">
+          <Sidebar v-show="!fullscreen" />
           <main class="main">
-            <Transition name="view" mode="out-in">
-              <LibraryView v-if="view === 'library'" key="library" />
-              <ClipsView v-else-if="view === 'clips'" key="clips" />
-              <FavouritesView v-else-if="view === 'favourites'" key="favourites" />
-              <ActivityView v-else-if="view === 'activity'" key="activity" />
-              <SettingsView v-else key="settings" />
+            <!-- The screen stays mounted under an open clip, inert, so the
+                 close flip has its card to land on and the scroll is kept. -->
+            <div class="screen" :inert="isOpen">
+              <Transition name="view" mode="out-in">
+                <LibraryView v-if="view === 'library'" key="library" />
+                <ClipsView v-else-if="view === 'clips'" key="clips" />
+                <FavouritesView v-else-if="view === 'favourites'" key="favourites" />
+                <ActivityView v-else-if="view === 'activity'" key="activity" />
+                <SettingsView v-else key="settings" />
+              </Transition>
+            </div>
+            <Transition name="fade">
+              <PlayerView v-if="isOpen" />
             </Transition>
           </main>
         </div>
-      </Transition>
-      <Transition name="fade">
-        <PlayerOverlay v-if="isOpen" />
       </Transition>
       <DialogHost />
       <WhatsNewDialog />
@@ -118,5 +124,13 @@ onBeforeUnmount(() => {
   min-width: 0;
   display: flex;
   flex-direction: column;
+  /* Named so the player page can size its pane to the width it actually has. */
+  container: main / inline-size;
+}
+.screen {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
 }
 </style>

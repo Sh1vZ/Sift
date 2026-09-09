@@ -14,6 +14,7 @@ import {
   screen,
   view,
 } from '@/composables/useLibrary'
+import { closePlayer } from '@/composables/usePlayer'
 import { activityBusy, activityCount, activityLabel, activityOpen } from '@/composables/useActivity'
 import { openSettings, settingsTab } from '@/composables/useSettings'
 import { openShortcuts } from '@/composables/useShortcuts'
@@ -41,6 +42,14 @@ interface NavItem {
 const count = (n: number): NavItem['badge'] =>
   n ? { label: n, size: 'md', color: 'neutral', variant: 'subtle', class: 'mono' } : undefined
 
+/** Navigation lands on the screen it names: an open clip's page comes down first, even over that screen. */
+function leave(go: () => void): () => void {
+  return () => {
+    closePlayer()
+    go()
+  }
+}
+
 const libraryItems = computed<NavItem[]>(() => [
   {
     label: 'Games',
@@ -48,7 +57,7 @@ const libraryItems = computed<NavItem[]>(() => [
     active: screen.value === 'games' || screen.value === 'game',
     badge: count(games.value.length),
     tooltip: { text: `Games · ${games.value.length}` },
-    onSelect: () => goGames(),
+    onSelect: leave(goGames),
   },
   {
     label: 'Clips',
@@ -56,7 +65,7 @@ const libraryItems = computed<NavItem[]>(() => [
     active: screen.value === 'clips',
     badge: count(exportedClips.value.length),
     tooltip: { text: `Clips · ${exportedClips.value.length}` },
-    onSelect: () => goClips(),
+    onSelect: leave(goClips),
   },
   {
     label: 'Favourites',
@@ -64,7 +73,7 @@ const libraryItems = computed<NavItem[]>(() => [
     active: screen.value === 'favourites',
     badge: count(favourites.value.length),
     tooltip: { text: `Favourites · ${favourites.value.length}` },
-    onSelect: () => goFavourites(),
+    onSelect: leave(goFavourites),
   },
 ])
 

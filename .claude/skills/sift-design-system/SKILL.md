@@ -341,7 +341,8 @@ wrapped in a `UContextMenu`. See `sift-engineering`.
   UI toaster by `ToastBridge.vue`. Position and duration are configured once on `<UApp>`. Kind is
   carried by an icon **and** a colour. Never call `useToast()` outside the bridge, and never
   build one-off notification UI.
-- **Player** — `PlayerOverlay.vue`, full-bleed `--bg-0`, chrome fades on idle. Transport controls
+- **Player** — `PlayerView.vue`, a page in the main area beside the sidebar (fullscreen hides
+  the chrome), `--scrim` ground, chrome fades on idle. Transport controls
   are `UButton` inside `UTooltip` with `:kbds` showing the shortcut. Every key in the README's
   table must keep working, and controls must stay reachable by keyboard while chrome is hidden.
 - **Title bar** — `UBreadcrumb` trail, `UBadge` scan status, `UButton` window controls. See §8 of

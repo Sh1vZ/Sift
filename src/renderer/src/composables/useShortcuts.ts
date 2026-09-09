@@ -10,8 +10,8 @@ import { uploadDialog } from './useUploads'
 
 /**
  * App-wide keys. The player owns the keyboard while it is up (its own handler
- * covers playback), so outside `?`, Ctrl+K and Ctrl+B this only acts on the
- * library screens. Installed in the capture phase from App.vue: it runs before
+ * covers playback), so outside `?`, Ctrl+K, Ctrl+B and Ctrl+, this only acts
+ * on the library screens. Installed in the capture phase from App.vue: it runs before
  * every bubble listener the views register, and stops the event only when it
  * handled it.
  */
@@ -77,7 +77,7 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
       { chords: [['F']], label: 'Fullscreen' },
       { chords: [['I']], label: 'Details pane' },
       { chords: [['E']], label: 'Trim & export' },
-      { chords: [['escape']], label: 'Back' },
+      { chords: [['escape'], ['backspace']], label: 'Back' },
     ],
   },
   {
@@ -93,7 +93,7 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
       { chords: [['S']], label: 'Favourite' },
       { chords: [['F']], label: 'Fullscreen' },
       { chords: [['I']], label: 'Details pane' },
-      { chords: [['escape']], label: 'Back' },
+      { chords: [['escape'], ['backspace']], label: 'Back' },
     ],
   },
   {
@@ -154,8 +154,9 @@ function onKey(e: KeyboardEvent): void {
   if (inField(e) || inOverlay(e)) return
   let handled = true
   if (e.key === '?') openShortcuts()
-  else if (playerOpen.value) handled = false
+  // Reachable from an open clip's page, as the sidebar beside it is.
   else if (e.ctrlKey && e.key === ',') openSettings(settingsTab.value)
+  else if (playerOpen.value) handled = false
   else if ((e.ctrlKey && e.key.toLowerCase() === 'f') || e.key === '/') {
     if (focusSearch.value) focusSearch.value()
     else handled = false

@@ -44,7 +44,9 @@ import { shortcutsOpen } from '@/composables/useShortcuts'
 import { searchOpen } from '@/composables/useSearch'
 import {
   closePlayer,
+  closeRequests,
   current,
+  fullscreen,
   hasNext,
   hasPrev,
   neighbor,
@@ -192,7 +194,6 @@ const volume = ref(settings.value.volume)
 const muted = ref(settings.value.muted)
 const rate = ref(1)
 const loop = ref(false)
-const fullscreen = ref(Boolean(document.fullscreenElement))
 const controls = ref(true)
 const seeking = ref(false)
 const hoverPct = ref<number | null>(null)
@@ -762,6 +763,13 @@ function remove(): void {
 
 // ------------------------------------------------------------- keyboard
 
+/** Esc, Backspace and Alt+←: out of fullscreen, then out of edit mode, then off the page. */
+function back(): void {
+  if (document.fullscreenElement) void document.exitFullscreen()
+  else if (editing.value) exitEdit()
+  else close()
+}
+
 /**
  * The viewer's keys. Playback keys mean nothing to a picture and fall through
  * unhandled; the arrows pan a zoomed picture and step clips at fit, which is
@@ -773,8 +781,8 @@ function onImageKey(e: KeyboardEvent): void {
   let handled = true
   switch (e.key) {
     case 'Escape':
-      if (document.fullscreenElement) void document.exitFullscreen()
-      else close()
+    case 'Backspace':
+      back()
       break
     case 's':
       void toggleFavourite(clip.value)
@@ -809,7 +817,8 @@ function onImageKey(e: KeyboardEvent): void {
       stageApi?.toggleFit()
       break
     case 'ArrowLeft':
-      if (stageApi?.isFit) stepClip(-1)
+      if (e.altKey) back()
+      else if (stageApi?.isFit) stepClip(-1)
       else stageApi?.pan(step, 0)
       break
     case 'ArrowRight':
@@ -847,12 +856,12 @@ function onKey(e: KeyboardEvent): void {
       togglePlay()
       break
     case 'Escape':
-      if (document.fullscreenElement) void document.exitFullscreen()
-      else if (editing.value) exitEdit()
-      else close()
+    case 'Backspace':
+      back()
       break
     case 'ArrowLeft':
-      seekBy(-5)
+      if (e.altKey) back()
+      else seekBy(-5)
       break
     case 'ArrowRight':
       seekBy(5)
@@ -1009,6 +1018,9 @@ watch(canEdit, (ok) => {
   if (ok && autoEdit) consumePendingEdit()
 })
 
+// The title bar's crumb for the screen beneath: leaves the way Back does, flip included.
+watch(closeRequests, () => close())
+
 /**
  * Hidden to the tray or minimized: unload the media. Chromium does not pause a
  * <video> for a window that is off screen, so this is the difference between an
@@ -1068,6 +1080,11 @@ onBeforeUnmount(() => {
   exitEdit()
   window.removeEventListener('keydown', onKey)
   document.removeEventListener('fullscreenchange', onFullscreen)
+  // Closed from under fullscreen (a delete, an upload's toast): the chrome App
+  // hid for it has to come back, and the listener above is gone by the time
+  // the document would say so.
+  if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined)
+  fullscreen.value = false
   observer?.disconnect()
   window.clearTimeout(hideTimer)
   window.clearTimeout(volumeTimer)
@@ -1153,9 +1170,9 @@ onBeforeUnmount(() => {
       </div>
     </header>
 
-    <!-- `.self` so only the letterbox around the video closes the player - clicks
-         on the video, the arrows or the overlays are handled by those elements. -->
-    <div class="stage-wrap" @click.self="close">
+    <!-- The letterbox is page, not scrim: a click on it does nothing, so leaving
+         the name field by clicking away commits the rename and keeps the clip up. -->
+    <div class="stage-wrap">
       <UTooltip
         v-if="hasPrev"
         :text="editing ? 'Finish or cancel the trim first' : 'Previous clip'"
@@ -1175,7 +1192,7 @@ onBeforeUnmount(() => {
         />
       </UTooltip>
 
-      <div ref="stageArea" class="stage-area" @click.self="close">
+      <div ref="stageArea" class="stage-area">
         <div
           ref="stage"
           class="stage"
@@ -1708,16 +1725,16 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .player {
-  position: fixed;
+  /* A page over the screen it was opened from, which stays mounted beneath
+     (inert) so the close flip has the card to land on. Opaque: the title bar
+     and sidebar are beside it, not under it, and in fullscreen App hides them
+     so the main area — and this — is the whole screen. */
+  position: absolute;
   inset: 0;
-  z-index: 50;
+  z-index: 10;
   display: flex;
   flex-direction: column;
-  background: color-mix(in srgb, var(--scrim) 97%, transparent);
-  /* The overlay covers the frameless title bar, whose drag strip would
-     otherwise swallow every click in the top 40px - the back arrow and the
-     details toggle both sit inside it. */
-  -webkit-app-region: no-drag;
+  background: var(--scrim);
   /* One width, one switch: everything that has to make room for the details
      pane reads --pane-w, which is 0 whenever the pane is not showing. */
   --details-w: 400px;
@@ -1735,9 +1752,11 @@ onBeforeUnmount(() => {
 .player.is-image {
   --controls-h: 84px;
 }
-/* Near the 980px minimum window the pane gives width back so the video keeps
-   the larger share of the screen. */
-@media (max-width: 1240px) {
+/* On a narrow page the pane gives width back so the video keeps the larger
+   share, and the edit row, which wraps, gets a taller block. Measured against
+   the main area (App.vue names it as the container): with the sidebar beside
+   the page, the window's width is not the width the layout has to fit. */
+@container main (max-width: 1240px) {
   .player {
     --details-w: 340px;
   }

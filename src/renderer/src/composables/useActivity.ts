@@ -4,6 +4,7 @@ import type { UploadJob } from '@shared/youtube'
 import { historyRecords } from './useActivityHistory'
 import { activeExports, exportJobs, exportLabel } from './useExports'
 import { scan, view } from './useLibrary'
+import { closePlayer } from './usePlayer'
 import { activeUploads, processingUploads, uploadJobs, uploadLabel } from './useUploads'
 
 /**
@@ -73,5 +74,6 @@ export function openActivity(tab?: ActivityTab): void {
   activityTab.value =
     tab ?? (activityItems.value.length || !historyRecords.value.length ? 'active' : 'history')
   activityOpen.value = false
+  closePlayer()
   view.value = 'activity'
 }

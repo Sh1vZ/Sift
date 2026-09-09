@@ -7,7 +7,7 @@ A local-first clip library for NVIDIA ShadowPlay (and any other recorder) — El
 - **Watch folders.** New recordings appear seconds after they finish writing.
 - **Previews.** Poster frames plus hover-to-scrub strips, rendered once by a bundled ffmpeg at below-normal CPU priority and cached in the profile directory (see [Run](#run)).
 - **Screenshots.** PNG, JPG, BMP and GIF captures sit in the same grids as the recordings — same dates, same favourites and seen state, same right-click menu — with an All / Videos / Screenshots switch in the toolbar of any game that has both. ShadowPlay's HDR screenshots (`.jxr`) are decoded once with Microsoft's reference JPEG XR decoder (jxrlib, as WebAssembly, off the main thread), tone-mapped to SDR and cached beside the posters, since neither Chromium nor ffmpeg can read them. Off under Settings → Indexing if you only want the clips.
-- **Player.** Custom controls, keyboard shortcuts, prev/next through the grid, autoplay-next, loop, speed, fullscreen. A screenshot opens in the same overlay as a viewer: fit to the screen, wheel to zoom around the pointer, drag to pan, double-click for actual size.
+- **Player.** A clip opens on a page of its own, zooming out of its card — the sidebar and the title bar's trail stay put, and Back, Esc or Backspace zoom it back. Custom controls, keyboard shortcuts, prev/next through the grid, autoplay-next, loop, speed, fullscreen. A screenshot opens on the same page as a viewer: fit to the screen, wheel to zoom around the pointer, drag to pan, double-click for actual size.
 - **Manage.** A details pane beside the video carries the clip's figures, and rows that take you places — the folder on disk, the recording an export was cut from, the YouTube page. The file name at the top is a field: type and leave it to rename. Delete goes to the Recycle Bin, or permanently from the confirm dialog. Every action is also on each card's right-click menu and on the player's **⋯** menu, so nothing needs the pane open.
 - **Filter and find.** Games home has a search; inside a game and on Clips one toolbar filters by name, favourites and unwatched, sorts, and tucks grouping, sharing and card size into a View menu. `/` focuses whichever box is on screen; Ctrl+K searches every clip from anywhere.
 - **Sidebar.** Labelled by default, with counts; Ctrl+B or the chevron at the bottom collapses it to an icon rail, and it collapses on its own under 1200px so the grid keeps its columns.
@@ -91,7 +91,7 @@ Press `?` anywhere for the same list in the app.
 | ↑ ↓ | Volume · M mute |
 | 0–9 | Jump to 0–90 % |
 | N / P | Next / previous clip |
-| F | Fullscreen · Esc back |
+| F | Fullscreen · Esc / Backspace back |
 | R | Loop |
 | I | Show / hide the details pane |
 | E | Trim & export (edit mode) · Esc cancels the trim |

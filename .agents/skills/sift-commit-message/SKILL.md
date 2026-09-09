@@ -94,7 +94,7 @@ Use the component, view, or composable that owns the change:
 - `app` — `App.vue`, `main.ts`, renderer bootstrap
 - `library-view`, `games`, `folders` — the three top-level screens
 - `clips` — `ClipsView.vue`, the recordings/exports partition in `useLibrary`, `useExports`
-- `player` — `PlayerOverlay.vue`, `PlayerDetails.vue` and `usePlayer`
+- `player` — `PlayerView.vue`, `PlayerDetails.vue` and `usePlayer`
 - `editor` — the player's trim/export edit mode: `useEditor.ts`, `TrimBar.vue`
 - `settings` — `SettingsView.vue`, `useSettings.ts` and the panes under `components/settings/`
 - `grid` — `ClipGrid.vue` and `useVirtualGrid`

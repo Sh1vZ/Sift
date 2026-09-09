@@ -49,7 +49,7 @@ declare module 'vue' {
     PendingBanner: typeof import('./src/components/youtube/PendingBanner.vue')['default']
     PlaybackPane: typeof import('./src/components/settings/PlaybackPane.vue')['default']
     PlayerDetails: typeof import('./src/components/PlayerDetails.vue')['default']
-    PlayerOverlay: typeof import('./src/components/PlayerOverlay.vue')['default']
+    PlayerView: typeof import('./src/components/PlayerView.vue')['default']
     SearchDialog: typeof import('./src/components/SearchDialog.vue')['default']
     SettingsPanel: typeof import('./src/components/settings/SettingsPanel.vue')['default']
     SettingsRow: typeof import('./src/components/settings/SettingsRow.vue')['default']

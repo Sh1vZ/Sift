@@ -1,5 +1,6 @@
 import { computed, ref } from 'vue'
 import { view } from './useLibrary'
+import { closePlayer } from './usePlayer'
 
 /**
  * The settings screen is one shell with a sub-menu rail. Every pane is a tab
@@ -338,6 +339,9 @@ export function revealRow(id: string): void {
 }
 
 export function openSettings(tab: SettingsTab = 'folders'): void {
+  // A clip's page comes down on the way — also one opened from Storage over
+  // this very screen, which no change of view would catch.
+  closePlayer()
   settingsTab.value = tab
   settingsQuery.value = ''
   view.value = 'settings'

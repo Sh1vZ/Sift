@@ -239,7 +239,7 @@ const props = withDefaults(defineProps<{ name: string; size?: number }>(), { siz
 ```
 
 - Keep components single-purpose. When a component passes ~300 lines, split the presentational
-  part out or move logic into a composable. `PlayerOverlay.vue` is the outlier, not the model.
+  part out or move logic into a composable. `PlayerView.vue` is the outlier, not the model.
 - Prefer `computed` over `watch`. Reserve `watch`/`watchEffect` for genuine side effects
   (DOM classes, `api` subscriptions, timers).
 - **Every** listener, timer, observer, `requestAnimationFrame` loop, and GSAP tween registered

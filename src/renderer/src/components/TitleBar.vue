@@ -5,6 +5,7 @@ import { activityLabel, openActivity } from '@/composables/useActivity'
 import { activeSection, openSettings, settingsTab } from '@/composables/useSettings'
 import { installUpdate, update, updatePill } from '@/composables/useUpdates'
 import { openSearch } from '@/composables/useSearch'
+import { current, requestClose } from '@/composables/usePlayer'
 
 const api = window.api
 const maximized = ref(false)
@@ -21,11 +22,13 @@ interface Crumb {
   icon?: string
   /** Set on every crumb but the current one: the trail is navigation, not a label. */
   onSelect?: () => void
+  /** A name rather than a section: shown as typed, not in the trail's capitals. */
+  plain?: boolean
 }
 
 /* The trail starts at the screen, not at the app: the wordmark in the sidebar
    already says Sift, and the first crumb is what the sidebar has selected. */
-const crumbs = computed<Crumb[]>(() => {
+const screenCrumbs = computed<Crumb[]>(() => {
   switch (screen.value) {
     case 'settings':
       return [
@@ -43,6 +46,20 @@ const crumbs = computed<Crumb[]>(() => {
     default:
       return [{ label: 'Games' }]
   }
+})
+
+/* An open clip is one more step, and the screen it sits over becomes a link
+   back to it — the same way out as the page's Back button. */
+const crumbs = computed<Crumb[]>(() => {
+  const trail = screenCrumbs.value
+  const clip = current.value
+  if (!clip) return trail
+  const under = trail[trail.length - 1]
+  return [
+    ...trail.slice(0, -1),
+    { ...under, onSelect: requestClose },
+    { label: clip.title, plain: true },
+  ]
 })
 
 const status = activityLabel
@@ -68,7 +85,7 @@ const status = activityLabel
             :ui="{ base: 'p-0 gap-1.5', leadingIcon: 'size-4' }"
             @click="item.onSelect()"
           />
-          <span v-else class="crumb crumb-current">
+          <span v-else class="crumb crumb-current" :class="{ 'crumb-plain': item.plain }">
             <UIcon v-if="item.icon" :name="item.icon" class="size-4" />
             {{ item.label }}
           </span>
@@ -213,6 +230,16 @@ const status = activityLabel
 .crumb-current {
   color: var(--fg);
   cursor: default;
+}
+/* A clip's title, as typed, and cut off before it can reach the search field. */
+.crumb-plain {
+  display: block;
+  max-width: min(36ch, 20vw);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-transform: none;
+  letter-spacing: 0.01em;
 }
 /* Centred on the title bar and taken out of the flow. In the flow it inflated
    the drag strip's content-based minimum, which overflowed the row and pushed
