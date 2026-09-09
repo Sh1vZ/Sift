@@ -7,6 +7,20 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 uses [semantic versioning](https://semver.org/spec/v2.0.0.html) — beta builds carry a
 `-beta.N` suffix and update from the beta channel.
 
+## [1.0.0-beta.12] - 2026-09-09
+
+### Added
+
+- A rail of game chips on Clips and Favourites: click one to narrow to that game,
+  Ctrl+click to add another.
+
+### Changed
+
+- The player is a page of its own. The screen you came from stays behind it, and
+  Back, the breadcrumb or the sidebar close it — clicking outside no longer does.
+- Renaming a clip while it is open keeps the player where it is, and its previews and
+  audio tracks follow the new name.
+
 ## [1.0.0-beta.11] - 2026-09-08
 
 ### Changed
