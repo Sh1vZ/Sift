@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import type { Clip, ExportJob } from '@shared/types'
 import ClipGrid from './ClipGrid.vue'
+import GameFilter from './GameFilter.vue'
 import LibraryToolbar from './LibraryToolbar.vue'
 import CountUp from './bits/CountUp.vue'
 import SplitText from './bits/SplitText.vue'
@@ -14,6 +15,8 @@ import {
   clipsFolder,
   clipsStats,
   exportedClips,
+  exportGames,
+  exportGroupBy,
   exportSort,
   goGames,
   orderedExports,
@@ -27,12 +30,20 @@ import { formatBytes, formatDuration } from '@/utils/format'
 
 const filters = clipsFilters
 
+/** "from Apex Legends", for the empty states, while the game rail narrows the grid. */
+const where = computed(() => {
+  const g = filters.games
+  return g.length === 1 ? ` from ${g[0]}` : g.length ? ' from those games' : ''
+})
+
 /** Names whichever filter emptied the grid, so the empty state is actionable. */
 const filteredTitle = computed(() => {
-  if (filters.favourites && filters.unwatched) return 'No unwatched favourites'
-  if (filters.favourites) return 'No favourite clips yet'
-  if (filters.unwatched) return "You've watched every clip"
-  return filters.share === 'shared' ? 'No clips on YouTube yet' : 'Every clip is on YouTube'
+  if (filters.favourites && filters.unwatched) return `No unwatched favourites${where.value}`
+  if (filters.favourites) return `No favourite clips${where.value} yet`
+  if (filters.unwatched) return `You've watched every clip${where.value}`
+  if (filters.share === 'shared') return `No clips${where.value} on YouTube yet`
+  if (filters.share === 'unshared') return `Every clip${where.value} is on YouTube`
+  return `No clips${where.value}`
 })
 
 /** A job's stand-in card until the real clip arrives through `clips:added`. */
@@ -79,16 +90,24 @@ function placeholder(job: ExportJob): Clip {
   }
 }
 
-/** Live and failed jobs lead their game's section; finished ones are already real clips. */
+/**
+ * Live and failed jobs lead their game's section, or the grid when there are
+ * no game headers; finished ones are already real clips. A job for a game the
+ * rail has filtered out stays off the grid with the rest of that game.
+ */
 const sectionsWithJobs = computed<Section[]>(() => {
-  const jobs = exportJobs.value.filter((j) => j.state !== 'done')
+  const wanted = filters.games
+  const jobs = exportJobs.value.filter(
+    (j) => j.state !== 'done' && (!wanted.length || wanted.includes(j.game)),
+  )
   if (!jobs.length) return clipSections.value
   const out = clipSections.value.map((s) => ({ ...s, clips: s.clips.slice() }))
+  const byGame = exportGroupBy.value === 'game'
   for (const job of [...jobs].reverse()) {
-    const key = `g:${job.game}`
+    const key = byGame ? `g:${job.game}` : (out[0]?.key ?? 'all')
     let section = out.find((s) => s.key === key)
     if (!section) {
-      section = { key, title: job.game, clips: [] }
+      section = { key, title: byGame ? job.game : null, clips: [] }
       out.unshift(section)
     }
     section.clips.unshift(placeholder(job))
@@ -102,7 +121,7 @@ const unreachable = computed(() =>
 )
 const resetKey = computed(
   () =>
-    `${settings.value.gridSize}|${exportSort.value}|${filters.share}|${filters.favourites}|${filters.unwatched}|${filters.query}`,
+    `${settings.value.gridSize}|${exportSort.value}|${exportGroupBy.value}|${filters.share}|${filters.favourites}|${filters.unwatched}|${filters.games.join(',')}|${filters.query}`,
 )
 /** Exports exist, but a filter hides all of them. */
 const filteredOut = computed(() => !hasContent.value && exportedClips.value.length > 0)
@@ -177,6 +196,11 @@ onBeforeUnmount(() => offSearch?.())
           <LibraryToolbar ref="toolbar" scope="clips" />
         </div>
       </Transition>
+
+      <!-- Only once there is a choice to make: one game's exports need no rail. -->
+      <Transition name="fade">
+        <GameFilter v-if="exportGames.length > 1" scope="clips" />
+      </Transition>
     </header>
 
     <Transition name="collapse">
@@ -222,7 +246,7 @@ onBeforeUnmount(() => offSearch?.())
           key="nomatch"
           class="empty"
           icon="i-lucide-search-x"
-          :title="`No clips match “${filters.query}”`"
+          :title="`No clips${where} match “${filters.query}”`"
           description="Try a shorter name — the filter also ignores spaces and punctuation."
         >
           <template #actions>
@@ -242,7 +266,7 @@ onBeforeUnmount(() => offSearch?.())
           icon="i-lucide-filter-x"
           :title="filteredTitle"
           :description="
-            filters.favourites || filters.unwatched
+            filters.favourites || filters.unwatched || filters.games.length
               ? 'Clear the filter to see the rest of your clips.'
               : 'The sharing filter is hiding the rest.'
           "

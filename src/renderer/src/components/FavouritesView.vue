@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import ClipGrid from './ClipGrid.vue'
+import GameFilter from './GameFilter.vue'
 import LibraryToolbar from './LibraryToolbar.vue'
 import CountUp from './bits/CountUp.vue'
 import SplitText from './bits/SplitText.vue'
 import {
   clearFilters,
+  favouriteGames,
+  favouriteGroupBy,
   favourites,
   favouriteSections,
   favouriteSort,
@@ -20,27 +23,35 @@ import { registerSearch } from '@/composables/useShortcuts'
 import { formatBytes, formatDuration } from '@/utils/format'
 
 /**
- * Everything hearted, from every game, in one flat run — recordings, exported
- * clips and screenshots together. The other two screens are organised by where
- * a file came from; this one is organised by the only thing its contents have
- * in common, so grouping it would undo the point.
+ * Everything hearted, from every game — recordings, exported clips and
+ * screenshots together. The other two screens are organised by where a file
+ * came from; this one is organised by the only thing its contents have in
+ * common, so it starts as one flat run. Once that run is long, the game rail
+ * narrows it to a game and the View menu can put headers back, by game or by
+ * date.
  */
 const filters = favouritesFilters
 
+/** "from Apex Legends", for the empty states, while the game rail narrows the grid. */
+const where = computed(() => {
+  const g = filters.games
+  return g.length === 1 ? ` from ${g[0]}` : g.length ? ' from those games' : ''
+})
+
 /** Names whichever filter emptied the grid, so the empty state is actionable. */
 const filteredTitle = computed(() => {
-  if (filters.unwatched) return "You've watched every favourite"
-  if (filters.kind === 'image') return 'No favourite screenshots'
-  if (filters.kind === 'video') return 'No favourite videos'
-  return filters.share === 'shared'
-    ? 'No favourites on YouTube yet'
-    : 'Every favourite is on YouTube'
+  if (filters.unwatched) return `You've watched every favourite${where.value}`
+  if (filters.kind === 'image') return `No favourite screenshots${where.value}`
+  if (filters.kind === 'video') return `No favourite videos${where.value}`
+  if (filters.share === 'shared') return `No favourites${where.value} on YouTube yet`
+  if (filters.share === 'unshared') return `Every favourite${where.value} is on YouTube`
+  return `No favourites${where.value}`
 })
 
 const hasContent = computed(() => favouriteSections.value.length > 0)
 const resetKey = computed(
   () =>
-    `${settings.value.gridSize}|${favouriteSort.value}|${filters.share}|${filters.kind}|${filters.unwatched}|${filters.query}`,
+    `${settings.value.gridSize}|${favouriteSort.value}|${favouriteGroupBy.value}|${filters.share}|${filters.kind}|${filters.unwatched}|${filters.games.join(',')}|${filters.query}`,
 )
 /** Favourites exist, but a filter hides all of them. */
 const filteredOut = computed(() => !hasContent.value && favourites.value.length > 0)
@@ -108,6 +119,11 @@ onBeforeUnmount(() => offSearch?.())
           <LibraryToolbar ref="toolbar" scope="favourites" />
         </div>
       </Transition>
+
+      <!-- Only once there is a choice to make: favourites from one game need no rail. -->
+      <Transition name="fade">
+        <GameFilter v-if="favouriteGames.length > 1" scope="favourites" />
+      </Transition>
     </header>
 
     <!-- Grid and empty state occupy the same box and cross-fade, so hearting the
@@ -130,7 +146,7 @@ onBeforeUnmount(() => offSearch?.())
           key="nomatch"
           class="empty"
           icon="i-lucide-search-x"
-          :title="`Nothing favourited matches “${filters.query}”`"
+          :title="`Nothing favourited${where} matches “${filters.query}”`"
           description="Try a shorter name — the filter also ignores spaces and punctuation."
         >
           <template #actions>

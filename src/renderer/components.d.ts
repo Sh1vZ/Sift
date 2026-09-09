@@ -36,6 +36,7 @@ declare module 'vue' {
     FavouritesView: typeof import('./src/components/FavouritesView.vue')['default']
     Folder: typeof import('./src/components/bits/Folder.vue')['default']
     FoldersPane: typeof import('./src/components/settings/FoldersPane.vue')['default']
+    GameFilter: typeof import('./src/components/GameFilter.vue')['default']
     GameMergeHints: typeof import('./src/components/GameMergeHints.vue')['default']
     GamesBrowser: typeof import('./src/components/GamesBrowser.vue')['default']
     Icon: typeof import('./src/components/Icon.vue')['default']

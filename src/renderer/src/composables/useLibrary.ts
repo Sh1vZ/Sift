@@ -251,6 +251,11 @@ export interface ViewFilters {
   share: ShareFilter
   /** Videos, screenshots, or both. Only a game's grid has both; the Clips view stays on 'all'. */
   kind: MediaFilter
+  /**
+   * Games to show, on the two grids that cross games — Clips and Favourites.
+   * Empty shows every game. A game's own grid is one game already and never sets it.
+   */
+  games: string[]
 }
 
 const blankFilters = (): ViewFilters => ({
@@ -259,6 +264,7 @@ const blankFilters = (): ViewFilters => ({
   unwatched: false,
   share: 'all',
   kind: 'all',
+  games: [],
 })
 
 /**
@@ -274,9 +280,9 @@ export const favouritesFilters = reactive<ViewFilters>(blankFilters())
 export const filtersFor = (scope: FilterScope): ViewFilters =>
   scope === 'clips' ? clipsFilters : scope === 'favourites' ? favouritesFilters : libraryFilters
 
-/** A toggle, the sharing select or the media kind — not the name filter — is hiding clips. */
+/** A toggle, the sharing select, the media kind or the game rail — not the name filter — is hiding clips. */
 export const isNarrowed = (f: ViewFilters): boolean =>
-  f.favourites || f.unwatched || f.share !== 'all' || f.kind !== 'all'
+  f.favourites || f.unwatched || f.share !== 'all' || f.kind !== 'all' || f.games.length > 0
 
 export function clearFilters(scope: FilterScope): void {
   const f = filtersFor(scope)
@@ -284,6 +290,7 @@ export function clearFilters(scope: FilterScope): void {
   f.unwatched = false
   f.share = 'all'
   f.kind = 'all'
+  f.games = []
 }
 
 /** The Clips view's order. The in-game order is a persisted setting; this one resets with the app. */
@@ -292,6 +299,23 @@ export const exportSort = ref<SortBy>('newest')
 /** The Favourites order — view state like the Clips one, not a setting. */
 export const favouriteSort = ref<SortBy>('newest')
 
+/**
+ * How a grid that crosses games is sectioned: a header per game, per date
+ * bucket, or one flat run. A game's own grid has its persisted `groupBy`
+ * instead, which offers the last two.
+ */
+export type GridGroup = 'game' | 'date' | 'none'
+
+/** The Clips view's grouping. View state like its order: resets with the app. */
+export const exportGroupBy = ref<GridGroup>('game')
+
+/**
+ * The Favourites grouping. Flat by default — the screen exists to cut across
+ * games, and headers would put the walls back — but a long list is easier to
+ * walk with them, so the View menu offers both.
+ */
+export const favouriteGroupBy = ref<GridGroup>('none')
+
 /** Letters and digits only, so "lords of the fallen" finds "LordsOfTheFallen_2026". */
 export const squash = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]+/g, '')
 
@@ -299,7 +323,18 @@ export const squash = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]+
 const matchesQuery = (c: Clip, q: string, qs: string): boolean =>
   !q || c.title.toLowerCase().includes(q) || squash(c.title).includes(qs)
 
-const matches = (c: Clip, f: ViewFilters, q: string, qs: string): boolean =>
+/** The rail's selection as a set, built once per pass; null when it selects nothing. */
+const gameSet = (f: ViewFilters): ReadonlySet<string> | null =>
+  f.games.length ? new Set(f.games) : null
+
+const matches = (
+  c: Clip,
+  f: ViewFilters,
+  q: string,
+  qs: string,
+  games: ReadonlySet<string> | null,
+): boolean =>
+  (!games || games.has(c.game)) &&
   (f.kind === 'all' || c.kind === f.kind) &&
   (f.share === 'all' || (f.share === 'shared') === Boolean(c.youtubeId)) &&
   (!f.favourites || c.favourite) &&
@@ -311,7 +346,10 @@ export const visibleClips = computed<Clip[]>(() => {
   const f = libraryFilters
   const q = f.query.trim().toLowerCase()
   const qs = squash(q)
-  const list = recordings.value.filter((c) => (!game || c.game === game) && matches(c, f, q, qs))
+  const games = gameSet(f)
+  const list = recordings.value.filter(
+    (c) => (!game || c.game === game) && matches(c, f, q, qs, games),
+  )
   return list.sort(compare(settings.value.sort))
 })
 
@@ -344,14 +382,37 @@ export const gridGroupBy = computed<'date' | 'none'>(() =>
   settings.value.groupBy === 'none' ? 'none' : 'date',
 )
 
-export const sections = computed<Section[]>(() => {
-  const list = visibleClips.value
+/**
+ * Cuts an already-ordered list into the grid's sections: one per game, the
+ * game with the newest clip first; one per date bucket, newest first; or one
+ * flat run. Each section keeps the list's own order, so the chosen sort holds
+ * under every header. `timeOf` is what "newest" means for the list — the
+ * recording time, or for exports the export time.
+ */
+function sectionBy(list: Clip[], group: GridGroup, timeOf: (c: Clip) => number): Section[] {
   if (!list.length) return []
-  if (gridGroupBy.value === 'none') return [{ key: 'all', title: null, clips: list }]
+  if (group === 'none') return [{ key: 'all', title: null, clips: list }]
+  if (group === 'game') {
+    const byGame = new Map<string, { latest: number; clips: Clip[] }>()
+    for (const c of list) {
+      let g = byGame.get(c.game)
+      if (!g) {
+        g = { latest: 0, clips: [] }
+        byGame.set(c.game, g)
+      }
+      g.clips.push(c)
+      const t = timeOf(c)
+      if (t > g.latest) g.latest = t
+    }
+    return [...byGame.entries()]
+      .sort((a, b) => b[1].latest - a[1].latest)
+      .map(([game, g]) => ({ key: `g:${game}`, title: game, clips: g.clips }))
+  }
+  // Read only on this branch, so a grid without date headers never rebuilds on the minute.
   const stamp = now.value
   const buckets = new Map<string, { title: string; order: number; clips: Clip[] }>()
   for (const c of list) {
-    const b = dateBucket(c.recordedAtMs, stamp)
+    const b = dateBucket(timeOf(c), stamp)
     let s = buckets.get(b.key)
     if (!s) {
       s = { title: b.title, order: b.order, clips: [] }
@@ -362,7 +423,11 @@ export const sections = computed<Section[]>(() => {
   return [...buckets.entries()]
     .sort((a, b) => a[1].order - b[1].order)
     .map(([key, s]) => ({ key, title: s.title, clips: s.clips }))
-})
+}
+
+export const sections = computed<Section[]>(() =>
+  sectionBy(visibleClips.value, gridGroupBy.value, (c) => c.recordedAtMs),
+)
 
 /** Grid order, flattened: what "next clip" means inside the player. */
 export const orderedClips = computed<Clip[]>(() => sections.value.flatMap((s) => s.clips))
@@ -380,30 +445,18 @@ export const libraryStats = computed(() => {
 /** When an export happened; hand-copied files fall back to their recording time. */
 const exportedAt = (c: Clip): number => c.createdAtMs || c.recordedAtMs
 
-/** The Clips view: one section per game in the chosen order, games by their latest export. */
+/** The Clips view: the exports in the chosen order, sectioned by game unless the View menu says otherwise. */
 export const clipSections = computed<Section[]>(() => {
   const f = clipsFilters
   const q = f.query.trim().toLowerCase()
   const qs = squash(q)
-  const list = exportedClips.value.filter((c) => matches(c, f, q, qs))
-  if (!list.length) return []
-  const byGame = new Map<string, { latest: number; clips: Clip[] }>()
-  for (const c of list) {
-    let g = byGame.get(c.game)
-    if (!g) {
-      g = { latest: 0, clips: [] }
-      byGame.set(c.game, g)
-    }
-    g.clips.push(c)
-    if (exportedAt(c) > g.latest) g.latest = exportedAt(c)
-  }
-  return [...byGame.entries()]
-    .sort((a, b) => b[1].latest - a[1].latest)
-    .map(([game, g]) => ({
-      key: `g:${game}`,
-      title: game,
-      clips: g.clips.sort(compare(exportSort.value, exportedAt)),
-    }))
+  const games = gameSet(f)
+  const list = exportedClips.value.filter((c) => matches(c, f, q, qs, games))
+  return sectionBy(
+    list.sort(compare(exportSort.value, exportedAt)),
+    exportGroupBy.value,
+    exportedAt,
+  )
 })
 
 export const orderedExports = computed<Clip[]>(() => clipSections.value.flatMap((s) => s.clips))
@@ -411,19 +464,18 @@ export const orderedExports = computed<Clip[]>(() => clipSections.value.flatMap(
 /** "Newest" on a grid holding both: when a clip was cut, when a recording was made. */
 const favouriteTime = (c: Clip): number => (scopeOf(c) === 'clips' ? exportedAt(c) : c.recordedAtMs)
 
-/**
- * The Favourites view: one flat run, no headers. Grouping it by game or by date
- * would rebuild the two screens this one exists to cut across.
- */
+/** The Favourites view: everything hearted in the chosen order, one flat run unless the View menu sections it. */
 export const favouriteSections = computed<Section[]>(() => {
   const f = favouritesFilters
   const q = f.query.trim().toLowerCase()
   const qs = squash(q)
-  const list = favourites.value.filter((c) => matches(c, f, q, qs))
-  if (!list.length) return []
-  return [
-    { key: 'all', title: null, clips: list.sort(compare(favouriteSort.value, favouriteTime)) },
-  ]
+  const games = gameSet(f)
+  const list = favourites.value.filter((c) => matches(c, f, q, qs, games))
+  return sectionBy(
+    list.sort(compare(favouriteSort.value, favouriteTime)),
+    favouriteGroupBy.value,
+    favouriteTime,
+  )
 })
 
 export const orderedFavourites = computed<Clip[]>(() =>
@@ -449,6 +501,60 @@ export const clipsStats = computed(() => {
   }
   return { count: exportedClips.value.length, duration, size }
 })
+
+// ------------------------------------------------------------- game rail
+
+/** A game as the rail under the toolbar shows it: its name and how much of the grid it holds. */
+export interface GameCount {
+  name: string
+  count: number
+}
+
+/**
+ * The games in a list, fullest first: the chips that narrow the grid the most
+ * sit nearest, and the count on each says why. Whole-grid counts, before the
+ * other filters, so the rail holds still while a toggle or the name filter
+ * changes what is under it.
+ */
+function countGames(list: Clip[]): GameCount[] {
+  const counts = new Map<string, number>()
+  for (const c of list) counts.set(c.game, (counts.get(c.game) ?? 0) + 1)
+  return [...counts.entries()]
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
+}
+
+/** Every game with an export, for the Clips view's rail. */
+export const exportGames = computed<GameCount[]>(() => countGames(exportedClips.value))
+
+/** Every game with something hearted, for the Favourites rail. */
+export const favouriteGames = computed<GameCount[]>(() => countGames(favourites.value))
+
+/** The rail's games for a scope. A game's own grid has no rail, so it gets none. */
+export const gamesFor = (scope: FilterScope): GameCount[] =>
+  scope === 'clips' ? exportGames.value : scope === 'favourites' ? favouriteGames.value : []
+
+/**
+ * A selected game that leaves the grid — its last clip deleted, its name
+ * changed by a rename or merge — leaves the selection too, or the grid would
+ * sit empty behind a filter with no chip left to clear it. Gated on there
+ * being a selection: a watch re-runs its getter on every dependency bump, and
+ * an unfiltered grid should not count its games on every batch a scan indexes.
+ */
+function pruneGames(f: ViewFilters, games: GameCount[] | null): void {
+  if (!games || !f.games.length) return
+  const present = new Set(games.map((g) => g.name))
+  const kept = f.games.filter((g) => present.has(g))
+  if (kept.length !== f.games.length) f.games = kept
+}
+watch(
+  () => (clipsFilters.games.length ? exportGames.value : null),
+  (games) => pruneGames(clipsFilters, games),
+)
+watch(
+  () => (favouritesFilters.games.length ? favouriteGames.value : null),
+  (games) => pruneGames(favouritesFilters, games),
+)
 
 export function getClip(id: string): Clip | undefined {
   return clipsById.get(id)

@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import type { DropdownMenuItem } from '@nuxt/ui'
-import type { GridSize, GroupBy, SortBy } from '@shared/types'
+import type { GridSize, SortBy } from '@shared/types'
 import {
+  exportGroupBy,
   exportSort,
+  favouriteGroupBy,
   favouriteSort,
   favouritesHaveImages,
   filtersFor,
@@ -14,15 +16,17 @@ import {
   SHARE_FILTERS,
   updateSettings,
   type FilterScope,
+  type GridGroup,
 } from '@/composables/useLibrary'
 
 /**
- * The row under a grid's title, the same on a game's clips and on the Clips
- * view: a name filter, the two state toggles that compose ("unwatched
- * favourites"), the order, and one View menu for the rarer choices — grouping,
- * the sharing filter, card size. It binds straight to the module state for its
- * scope, the house pattern for view state; the parent only says which grid it
- * stands over.
+ * The row under a grid's title, the same on a game's clips, on the Clips view
+ * and on Favourites: a name filter, the two state toggles that compose
+ * ("unwatched favourites"), the order, and one View menu for the rarer
+ * choices — grouping, the sharing filter, card size. It binds straight to the
+ * module state for its scope, the house pattern for view state; the parent
+ * only says which grid it stands over. The game rail the two cross-game
+ * screens put beneath it is `GameFilter`, bound to the same state.
  */
 const props = defineProps<{ scope: FilterScope }>()
 
@@ -58,10 +62,37 @@ const sortModel = computed({
   },
 })
 
-const groupOptions: Array<{ value: GroupBy; label: string; icon: string }> = [
+const groupOptions: Array<{ value: GridGroup; label: string; icon: string }> = [
+  { value: 'game', label: 'By game', icon: 'i-lucide-gamepad-2' },
   { value: 'date', label: 'By date', icon: 'i-lucide-calendar' },
   { value: 'none', label: 'No grouping', icon: 'i-lucide-layout-grid' },
 ]
+
+/** A game's grid is one game already, so it offers the other two. */
+const scopeGroupOptions = computed(() =>
+  props.scope === 'library' ? groupOptions.filter((g) => g.value !== 'game') : groupOptions,
+)
+
+/** Where each grid starts: exports under their games, favourites flat, a game by date. */
+const DEFAULT_GROUP: Record<FilterScope, GridGroup> = {
+  library: 'date',
+  clips: 'game',
+  favourites: 'none',
+}
+
+/** The in-game grouping is a persisted setting, like its order; the other two reset with the app. */
+const groupModel = computed<GridGroup>({
+  get: () => {
+    if (props.scope === 'clips') return exportGroupBy.value
+    if (props.scope === 'favourites') return favouriteGroupBy.value
+    return gridGroupBy.value
+  },
+  set: (v) => {
+    if (props.scope === 'clips') exportGroupBy.value = v
+    else if (props.scope === 'favourites') favouriteGroupBy.value = v
+    else if (v !== 'game') void updateSettings({ groupBy: v })
+  },
+})
 const sizeOptions: Array<{ value: GridSize; label: string; icon: string }> = [
   { value: 'large', label: 'Large cards', icon: 'i-lucide-grid-2x2' },
   { value: 'comfortable', label: 'Comfortable cards', icon: 'i-lucide-layout-grid' },
@@ -73,20 +104,19 @@ const stayOpen = (e: Event): void => e.preventDefault()
 
 const viewItems = computed<DropdownMenuItem[][]>(() => {
   const groups: DropdownMenuItem[][] = []
-  if (props.scope === 'library')
-    groups.push([
-      { label: 'Group', type: 'label' },
-      ...groupOptions.map<DropdownMenuItem>((g) => ({
-        label: g.label,
-        icon: g.icon,
-        type: 'checkbox',
-        checked: gridGroupBy.value === g.value,
-        onSelect: stayOpen,
-        onUpdateChecked: (on: boolean) => {
-          if (on) void updateSettings({ groupBy: g.value })
-        },
-      })),
-    ])
+  groups.push([
+    { label: 'Group', type: 'label' },
+    ...scopeGroupOptions.value.map<DropdownMenuItem>((g) => ({
+      label: g.label,
+      icon: g.icon,
+      type: 'checkbox',
+      checked: groupModel.value === g.value,
+      onSelect: stayOpen,
+      onUpdateChecked: (on: boolean) => {
+        if (on) groupModel.value = g.value
+      },
+    })),
+  ])
   groups.push([
     { label: 'Sharing', type: 'label' },
     ...SHARE_FILTERS.map<DropdownMenuItem>((s) => ({
@@ -119,7 +149,7 @@ const viewItems = computed<DropdownMenuItem[][]>(() => {
 /** How many view options sit off their default; shown on the View button. */
 const viewChanges = computed(
   () =>
-    Number(props.scope === 'library' && gridGroupBy.value !== 'date') +
+    Number(groupModel.value !== DEFAULT_GROUP[props.scope]) +
     Number(filters.value.share !== 'all') +
     Number(settings.value.gridSize !== 'large'),
 )
