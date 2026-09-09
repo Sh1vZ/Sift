@@ -46,14 +46,12 @@ const props = withDefaults(
   }>(),
   { editing: false, exportName: '' },
 )
-const emit = defineEmits<{
+defineEmits<{
   close: []
   remove: []
   edit: []
   source: []
   upload: []
-  /** The rename went through; the record with the new id. */
-  renamed: [next: Clip]
 }>()
 
 interface Row {
@@ -191,9 +189,9 @@ async function commitName(): Promise<void> {
     draft.value = props.clip.name
     return
   }
-  const renamed = await renameClip(props.clip, next)
-  if (renamed) emit('renamed', renamed)
-  else draft.value = props.clip.name
+  // On success the player swaps to the re-keyed record and the watch above
+  // refreshes the field from it; only a failure needs the old name put back.
+  if (!(await renameClip(props.clip, next))) draft.value = props.clip.name
 }
 
 function cancelName(): void {

@@ -3,6 +3,7 @@ import type { Clip } from '@shared/types'
 import {
   allClips,
   getClip,
+  onClipRekeyed,
   orderedClips,
   orderedExports,
   orderedFavourites,
@@ -122,6 +123,29 @@ watch(
     else if (fresh !== cur) current.value = fresh
   },
 )
+
+// A rename gives the open clip a new id. The swap lands here, ahead of the
+// version bump the watcher above runs on, so it finds the clip under its new
+// id instead of closing the page as if the file had been deleted — and
+// prev/next keep walking the same list, where the clip now sits re-keyed.
+let lastRekey: { from: string; to: string } | null = null
+onClipRekeyed((from, to) => {
+  if (current.value?.id !== from) return
+  lastRekey = { from, to: to.id }
+  current.value = to
+})
+
+/**
+ * Whether the id change `from` → `to` the player just saw was the open clip
+ * being renamed rather than a step to another clip. Answered once: the page
+ * asks from its clip watcher, and a stale answer must never make a later step
+ * look like a rename.
+ */
+export function consumeRekey(from: string | undefined, to: string): boolean {
+  const hit = lastRekey !== null && lastRekey.from === from && lastRekey.to === to
+  lastRekey = null
+  return hit
+}
 
 /** The clip that should take over if the current one goes away: next, else previous. */
 export function neighbor(): Clip | null {

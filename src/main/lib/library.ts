@@ -54,6 +54,7 @@ import {
   probeImage,
   removeArtifacts,
   removeAudioTracks,
+  renameAudioTracks,
   renderName,
   runLong,
   spriteName,
@@ -68,6 +69,9 @@ import { watchFolder } from './watcher'
 
 export type Emit = <K extends EventName>(name: K, payload: EventMap[K]) => void
 type FilmResult = ActionResult & { film?: string; frames?: number }
+
+/** Renames remembered for `clipPath`; far more than a session's worth of renames. */
+const RENAMED_CAP = 200
 
 const FLUSH_MS = 150
 const ADD_BATCH = 40
@@ -141,6 +145,13 @@ export class Library {
   private audioJobs = new Map<string, Promise<ActionResult & { file?: string }>>()
   /** The filmstrip being cut, if one is: one at a time, and the latest ask wins. */
   private film: { id: string; abort: AbortController; job: Promise<FilmResult> } | null = null
+  /**
+   * Old id → new id for every rename this session, so `clipPath` can keep
+   * serving a `<video>` that is mid-clip on the old id: the renderer pins the
+   * id it streams when a clip opens rather than reloading the element — and
+   * restarting the video — on a rename. Bounded; the oldest entries fall off.
+   */
+  private renamed = new Map<string, string>()
   private exportAbort: AbortController | null = null
   private exportsTimer: NodeJS.Timeout | null = null
   /** The sampler behind an import the user is waiting on; null between imports. See `startBurst`. */
@@ -195,8 +206,22 @@ export class Library {
     return this.store.data.settings
   }
 
+  /**
+   * The file behind an id, for the `clip://` protocol. An id retired by a
+   * rename this session still answers, following the rename chain to the
+   * record that carries the file now: the player's `<video>` keeps streaming
+   * the id it opened with (see `renamed`), and a 404 mid-clip would stall it.
+   */
   clipPath(id: string): string | undefined {
-    return this.store.data.clips[id]?.path
+    let key = id
+    for (let hops = 0; hops <= this.renamed.size; hops++) {
+      const clip = this.store.data.clips[key]
+      if (clip) return clip.path
+      const next = this.renamed.get(key)
+      if (!next) return undefined
+      key = next
+    }
+    return undefined
   }
 
   clip(id: string): Clip | undefined {
@@ -749,10 +774,20 @@ export class Library {
         () => (next.render = ''),
       )
     }
-    // Posters are moved above because regenerating them costs an ffmpeg run per
-    // clip; extractions are named off the id too, but re-cutting one is cheap
-    // and lazy, so they go rather than earning a fourth rename loop.
-    void removeAudioTracks(clip.id)
+    // The trim strip and the extracted audio tracks are named off the id too.
+    // Both move rather than go: the player may be mid-clip with the strip on
+    // screen and the tracks playing, and it asks for them again under the new
+    // id as soon as the rename lands — a miss here would be an ffmpeg run each.
+    // Awaited so that ask finds the files already in place.
+    await fsRename(join(cacheDir(), filmName(clip)), join(cacheDir(), filmName(next))).catch(
+      () => undefined,
+    )
+    await renameAudioTracks(clip.id, next.id)
+    this.renamed.set(clip.id, next.id)
+    if (this.renamed.size > RENAMED_CAP) {
+      const oldest = this.renamed.keys().next().value
+      if (oldest !== undefined) this.renamed.delete(oldest)
+    }
     delete this.store.data.clips[clip.id]
     this.store.data.clips[next.id] = next
     this.store.deleteClip(clip.id)

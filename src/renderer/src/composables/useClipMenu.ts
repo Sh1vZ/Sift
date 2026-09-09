@@ -46,8 +46,6 @@ export interface ClipMenuOptions {
   rectOf?: (clip: Clip) => Rect | null
   /** Leave out Play and Trim & export — the player already shows both. */
   omitOpen?: boolean
-  /** After a rename: the player swaps its `current` to the new record. */
-  onRenamed?: (next: Clip) => void
   /** Before a delete goes through: the player steps to a neighbour first. */
   beforeDelete?: () => void
 }
@@ -170,10 +168,7 @@ export function clipMenuItems(clip: Clip, opts: ClipMenuOptions): ClipMenuItem[]
       label: 'Rename',
       icon: 'i-lucide-pencil',
       disabled: busy,
-      onSelect: () =>
-        void renameClipDialog(clip).then((next) => {
-          if (next) opts.onRenamed?.(next)
-        }),
+      onSelect: () => void renameClipDialog(clip),
     },
   )
   // Sharing gets its own group: a live upload swaps the entry for its Cancel.

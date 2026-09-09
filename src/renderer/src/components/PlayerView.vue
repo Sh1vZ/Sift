@@ -45,6 +45,7 @@ import { searchOpen } from '@/composables/useSearch'
 import {
   closePlayer,
   closeRequests,
+  consumeRekey,
   current,
   fullscreen,
   hasNext,
@@ -69,6 +70,7 @@ import {
   inSec,
   outSec,
   prepareFilmstrip,
+  rekeyFilmstrip,
   resetRange,
   selectionLength,
   setIn,
@@ -156,18 +158,29 @@ const flipping = ref(true)
 const frameReady = ref(false)
 const poster = computed(() => (clip.value.thumb ? api.thumbUrl(clip.value.thumb) : ''))
 const showPoster = computed(() => Boolean(poster.value) && (flipping.value || !frameReady.value))
+/**
+ * What the stage streams, pinned when a clip opens rather than read off the
+ * record each time: a rename re-keys the record, and a src that followed it
+ * would reload the element and start the video over. Main keeps resolving the
+ * old id to the file's new path (see `Library.clipPath`), so the element plays
+ * on across the rename and only a real step to another clip re-pins these.
+ */
+const mediaId = ref(clip.value.id)
+const imageUrl = ref(imageUrlOf(clip.value))
+/** The SDR render of an HDR screenshot, else the original through the same door the video uses. */
+function imageUrlOf(c: Clip): string {
+  return c.render ? api.thumbUrl(c.render) : api.mediaUrl(c.id)
+}
 const src = computed(() =>
-  suspended.value || flipping.value || isImage.value ? undefined : api.mediaUrl(clip.value.id),
+  suspended.value || flipping.value || isImage.value ? undefined : api.mediaUrl(mediaId.value),
 )
 /**
- * What the image stage shows: the SDR render of an HDR screenshot, else the
- * original through the same door the video uses. Gated like the video's src,
- * so the poster carries the flip and nothing decodes while the window is away.
+ * What the image stage shows. Gated like the video's src, so the poster
+ * carries the flip and nothing decodes while the window is away.
  */
-const imageSrc = computed(() => {
-  if (!isImage.value || suspended.value || flipping.value) return undefined
-  return clip.value.render ? api.thumbUrl(clip.value.render) : api.mediaUrl(clip.value.id)
-})
+const imageSrc = computed(() =>
+  !isImage.value || suspended.value || flipping.value ? undefined : imageUrl.value,
+)
 const ratio = computed(() =>
   clip.value.width && clip.value.height ? clip.value.width / clip.value.height : 16 / 9,
 )
@@ -273,8 +286,9 @@ function cancelDwell(): void {
 function onImageLoaded(): void {
   frameReady.value = true
   cancelDwell()
-  const target = clip.value
-  seenTimer = window.setTimeout(() => void markSeen(target), SEEN_AFTER_MS)
+  // Read when it fires, not now: a rename inside the second re-keys the
+  // record, and the old one would be marked under an id that is gone.
+  seenTimer = window.setTimeout(() => void markSeen(clip.value), SEEN_AFTER_MS)
 }
 
 /**
@@ -286,7 +300,6 @@ const moreItems = computed(() =>
   clipMenuItems(clip.value, {
     variant: source.value === 'clips' ? 'export' : 'recording',
     omitOpen: true,
-    onRenamed,
     beforeDelete,
   }),
 )
@@ -744,11 +757,6 @@ async function leave(): Promise<void> {
   else closePlayer()
 }
 
-/** A rename changes the id: swap in place so prev/next keep walking the same list. */
-function onRenamed(next: Clip): void {
-  current.value = next
-}
-
 /** Runs once the delete is confirmed, before the file goes: step off the clip first. */
 function beforeDelete(): void {
   exitEdit()
@@ -982,7 +990,19 @@ function consumePendingEdit(): void {
 
 watch(
   () => clip.value.id,
-  () => {
+  (id, from) => {
+    if (consumeRekey(from, id)) {
+      // The same file under a new name: the element keeps streaming the old
+      // id, which main still resolves, so playback never notices. Only what
+      // is keyed by id follows the record — the extracted tracks, which main
+      // moved to the new id's names (their elements re-point and re-sync: a
+      // blink on the extra tracks, never on the video), and the trim strip.
+      void ensureTracks(clip.value)
+      rekeyFilmstrip(clip.value)
+      return
+    }
+    mediaId.value = id
+    imageUrl.value = imageUrlOf(clip.value)
     // First, before anything can await: the outgoing clip's tracks are still
     // playing, and the new clip's extractions are a round trip away.
     releaseAll()
@@ -1348,7 +1368,6 @@ onBeforeUnmount(() => {
         :editing="editing"
         :export-name="exportName + outExt"
         @close="toggleDetails"
-        @renamed="onRenamed"
         @remove="remove"
         @edit="toggleEdit"
         @source="goToSource"

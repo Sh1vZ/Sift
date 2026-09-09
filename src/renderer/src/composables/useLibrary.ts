@@ -911,6 +911,22 @@ async function withPending<T>(
   }
 }
 
+type RekeyListener = (from: string, to: Clip) => void
+const rekeyListeners = new Set<RekeyListener>()
+
+/**
+ * A clip's id follows its path, so a rename replaces the record under a new
+ * id. Anything holding a clip by id — the player's `current` — is told here,
+ * synchronously, before the change is published: a watcher that sees the
+ * version bump first finds the old id gone and takes the clip for deleted.
+ * `usePlayer` registers rather than being imported, so the composable graph
+ * stays acyclic (usePlayer → useLibrary).
+ */
+export function onClipRekeyed(fn: RekeyListener): () => void {
+  rekeyListeners.add(fn)
+  return () => rekeyListeners.delete(fn)
+}
+
 export async function renameClip(clip: Clip, name: string): Promise<Clip | null> {
   return withPending(clip.id, 'rename', 'Renaming…', async () => {
     const res = await api.clips.rename(clip.id, name)
@@ -922,9 +938,11 @@ export async function renameClip(clip: Clip, name: string): Promise<Clip | null>
       })
       return null
     }
-    // Swap the record now so the UI never sees a gap before the events arrive.
+    // Swap the record now so the UI never sees a gap before the events arrive,
+    // and tell the holders of the old id before anything reacts to the bump.
     clipsById.delete(clip.id)
     clipsById.set(res.clip.id, res.clip)
+    for (const fn of rekeyListeners) fn(clip.id, res.clip)
     version.value++
     return res.clip
   })

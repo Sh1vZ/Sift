@@ -907,6 +907,25 @@ export async function removeAudioTracks(clipId: string): Promise<void> {
   }
 }
 
+/**
+ * A rename gives the clip a new id, and the extractions are named by id: move
+ * them along the way the posters are moved, so the player keeps its tracks
+ * across the rename and the next open finds them cut. A cut still in flight
+ * for the old id is dropped — it would land under a name nothing asks for.
+ */
+export async function renameAudioTracks(from: string, to: string): Promise<void> {
+  if (!from || !to || from === to) return
+  const dir = audioDir()
+  const names = await readdir(dir).catch(() => [] as string[])
+  for (const name of names) {
+    if (name.startsWith(`${from}-`))
+      await fsRename(join(dir, name), join(dir, to + name.slice(from.length))).catch(
+        () => undefined,
+      )
+    else if (name.startsWith(`~${from}-`)) await unlink(join(dir, name)).catch(() => undefined)
+  }
+}
+
 export async function removeArtifacts(
   clip: Pick<Clip, 'thumb' | 'sprite'> & { render?: string; film?: string },
 ): Promise<void> {

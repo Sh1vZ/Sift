@@ -89,6 +89,26 @@ export function prepareFilmstrip(clip: Clip): void {
   })
 }
 
+/**
+ * The open clip was renamed: same strip, new id and (main moved the file) new
+ * name. Asked without the stand-in reset `prepareFilmstrip` does, so a bar
+ * mid-trim never blinks back to the sprite; the answer is immediate, as the
+ * frames are already on disk.
+ */
+export function rekeyFilmstrip(clip: Clip): void {
+  const had = filmstrip.value
+  if (clip.kind !== 'video' || !had || had.id === clip.id) return
+  const ask = ++filmAsk
+  filmstrip.value = { ...had, id: clip.id }
+  void api.clips.filmstrip(clip.id).then((res) => {
+    if (ask !== filmAsk) return
+    filmstrip.value =
+      res.ok && res.film
+        ? { id: clip.id, count: res.frames ?? 0, strip: api.thumbUrl(res.film) }
+        : null
+  })
+}
+
 export function enterEdit(clip: Clip): void {
   duration = clip.duration
   inSec.value = 0
