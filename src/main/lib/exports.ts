@@ -1,10 +1,14 @@
 import { extname } from 'node:path'
 import {
   AUDIO_EXPORT_FORMATS,
+  GIF_FPS,
+  GIF_WIDTHS,
+  MAX_GIF_S,
   type AudioExportExt,
   type AudioExportRequest,
   type Clip,
   type ExportRequest,
+  type GifExportRequest,
 } from '@shared/types'
 
 /** Characters Windows refuses in a file or folder name (plus control characters). */
@@ -69,6 +73,16 @@ export function isAudioExportExt(ext: string): ext is AudioExportExt {
  */
 export const ADTS_CONTAINERS = new Set(['.mkv', '.ts', '.flv', '.avi', '.webm'])
 
+/**
+ * HDR frames (PQ or HLG) tone-mapped to BT.709. Applied after the downscale,
+ * so the curve runs over the output's pixels rather than the full frame: ~30 ms
+ * on top of the decode for a poster. Without it a poster or a GIF shows the
+ * raw PQ signal as if it were SDR — a grey wash where the game was bright.
+ */
+export const TONE_MAP =
+  'zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=hable:desat=0,' +
+  'zscale=t=bt709:m=bt709:r=tv,format=yuv420p'
+
 /** Error message, or null when the request is fine to run. */
 export function validateExportRequest(
   req: Pick<ExportRequest, 'name' | 'start' | 'end'>,
@@ -97,6 +111,23 @@ export function validateAudioExportRequest(
   if (!clip.hasAudio || !clip.audioTracks.length) return 'This clip has no audio.'
   if (!keptOf(req.tracks ?? null, clip.audioTracks.length).length)
     return 'No audio track is selected. Unmute one in the mixer.'
+  return null
+}
+
+/** As `validateExportRequest`, plus the frame size has to be known and the selection kept to GIF length. */
+export function validateGifExportRequest(
+  req: GifExportRequest,
+  clip: Clip | undefined,
+): string | null {
+  const invalid = validateExportRequest(req, clip)
+  if (invalid || !clip) return invalid ?? 'Clip not found.'
+  if (clip.width <= 0 || clip.height <= 0) return 'Media info is still loading for this clip.'
+  if (req.end - req.start > MAX_GIF_S + 0.01)
+    return `GIFs can be at most ${MAX_GIF_S} seconds long.`
+  if (!(GIF_WIDTHS as readonly number[]).includes(req.width))
+    return 'Pick one of the offered widths.'
+  if (!(GIF_FPS as readonly number[]).includes(req.fps))
+    return 'Pick one of the offered frame rates.'
   return null
 }
 
@@ -331,6 +362,95 @@ export function buildAudioExportArgs(p: AudioExportPlan): string[] {
   args.push('-avoid_negative_ts', 'make_zero')
   args.push('-progress', 'pipe:1', '-stats_period', '0.25', '-nostats', p.out)
   return args
+}
+
+export interface GifExportPlan {
+  src: string
+  /** The GIF, at its temp name. */
+  out: string
+  /** The palette the first pass writes and the second reads: a one-frame PNG beside `out`. */
+  palette: string
+  start: number
+  end: number
+  width: number
+  fps: number
+  hdr: boolean
+}
+
+/**
+ * Frame rate, downscale and, for HDR, the tone map — the same frames in both
+ * passes, so the palette fits what it is painted onto. `-2` keeps the height
+ * even; `min` never scales a source up.
+ */
+function gifFrames(p: GifExportPlan): string {
+  const frames = `fps=${p.fps},scale=min(iw\\,${p.width}):-2:flags=lanczos`
+  return p.hdr ? `${frames},${TONE_MAP}` : frames
+}
+
+/**
+ * Two ffmpeg runs, in order. A GIF has 256 colours a frame at most, and the
+ * way to choose them well is to build a palette from every frame first and
+ * then paint the frames with it. The two steps could share one graph, but
+ * that graph has to hold every frame in memory until the palette is ready —
+ * hundreds of megabytes over a selection this long — so the frames are
+ * decoded twice instead, which costs seconds, not memory.
+ *
+ * The palette pass writes nothing but one PNG, so `-progress` would have no
+ * output time to report and the bar would sit at zero for half the job. A
+ * second, null output takes the same frames and gives the report a clock.
+ */
+export function buildGifExportArgs(p: GifExportPlan): string[][] {
+  const head = [
+    '-y',
+    '-nostdin',
+    '-v',
+    'error',
+    '-threads',
+    '1',
+    '-filter_threads',
+    '1',
+    '-filter_complex_threads',
+    '1',
+    '-ss',
+    p.start.toFixed(3),
+    '-to',
+    p.end.toFixed(3),
+    '-i',
+    p.src,
+  ]
+  const report = ['-progress', 'pipe:1', '-stats_period', '0.25', '-nostats']
+  const frames = gifFrames(p)
+  const palette = [
+    ...head,
+    '-filter_complex',
+    `[0:v]${frames},split[pal][clock];[pal]palettegen=reserve_transparent=0[p]`,
+    '-map',
+    '[p]',
+    '-update',
+    '1',
+    p.palette,
+    '-map',
+    '[clock]',
+    ...report,
+    '-f',
+    'null',
+    '-',
+  ]
+  const paint = [
+    ...head,
+    '-i',
+    p.palette,
+    '-filter_complex',
+    `[0:v]${frames}[f];[f][1:v]paletteuse=diff_mode=rectangle`,
+    '-an',
+    '-sn',
+    '-dn',
+    '-loop',
+    '0',
+    ...report,
+    p.out,
+  ]
+  return [palette, paint]
 }
 
 /** `name`, `name (2)`, `name (3)`… — the first candidate `taken` does not reject. */

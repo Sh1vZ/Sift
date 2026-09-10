@@ -29,6 +29,7 @@ const api: Api = {
     copyFile: (id) => ipcRenderer.invoke('clip:copy-file', id),
     export: (req) => ipcRenderer.invoke('clip:export', req),
     exportAudio: (req) => ipcRenderer.invoke('clip:export-audio', req),
+    exportGif: (req) => ipcRenderer.invoke('clip:export-gif', req),
     openYouTube: (id) => ipcRenderer.invoke('clip:open-youtube', id),
     copyYouTubeLink: (id) => ipcRenderer.invoke('clip:copy-youtube-link', id),
     removeFromYouTube: (id) => ipcRenderer.invoke('clip:remove-youtube', id),

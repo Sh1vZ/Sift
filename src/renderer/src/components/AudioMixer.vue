@@ -82,7 +82,7 @@ function onRename(index: number, e: Event): void {
       <UButton
         class="mix"
         icon="i-lucide-audio-lines"
-        :label="mixSummary"
+        :label="`Tracks · ${mixSummary}`"
         :color="isDefaultMix ? 'neutral' : 'primary'"
         :variant="isDefaultMix ? 'ghost' : 'soft'"
         :aria-label="`Audio tracks: ${mixSummary}`"

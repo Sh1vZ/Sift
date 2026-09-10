@@ -1,3 +1,4 @@
+import type { DropdownMenuItem } from '@nuxt/ui'
 import type { Clip, ExportJob } from '@shared/types'
 import { confirmWithAlt, prompt } from './useDialogs'
 import { cancelExport, dismissExport } from './useExports'
@@ -226,4 +227,38 @@ export function clipMenuItems(clip: Clip, opts: ClipMenuOptions): ClipMenuItem[]
   ]
   // An empty group would still draw its separator.
   return [main, share, danger].filter((group) => group.length)
+}
+
+/**
+ * The Share menu: the two ways a clip leaves the app, each item saying what
+ * it does. Behind the Share button in the player's header and in the details
+ * pane, so the two never drift apart. A live upload disables its entry rather
+ * than swapping it — the banner over the stage and the pane's upload row both
+ * carry the Cancel.
+ */
+export function shareMenuItems(clip: Clip): DropdownMenuItem[] {
+  const busy = Boolean(pendingByClip.value[clip.id])
+  const items: DropdownMenuItem[] = [
+    {
+      label: 'Copy file',
+      description: 'The file itself, to paste into Discord or a folder',
+      icon: 'i-lucide-clipboard-copy',
+      disabled: busy,
+      onSelect: () => void copyClipFile(clip),
+    },
+  ]
+  if (clip.kind !== 'image') {
+    const up = uploadByClip.value[clip.id]
+    const uploading = Boolean(up && (up.state === 'queued' || up.state === 'uploading'))
+    items.push({
+      label: clip.youtubeId ? 'Upload to YouTube again' : 'Upload to YouTube',
+      description: uploading
+        ? 'An upload is already running'
+        : 'Opens the upload form: project, title, privacy',
+      icon: 'i-lucide-youtube',
+      disabled: clip.probeState !== 'ok' || busy || uploading,
+      onSelect: () => openUploadDialog(clip),
+    })
+  }
+  return items
 }

@@ -1,8 +1,9 @@
 import { computed, ref, shallowRef } from 'vue'
-import type { Clip, ExportJob, ExportKind } from '@shared/types'
+import { MAX_GIF_S, type Clip, type ExportJob, type ExportKind } from '@shared/types'
 import { clamp } from '@/utils/format'
 import { audibleTracks, tracks as mixerTracks } from './useAudioMixer'
-import { exportAudio, exportClip } from './useExports'
+import { exportAudio, exportClip, exportGif } from './useExports'
+import { settings } from './useLibrary'
 import { toast } from './useToasts'
 
 const api = window.api
@@ -38,6 +39,8 @@ export const submittingKind = ref<ExportKind | null>(null)
 export const submitting = computed(() => submittingKind.value !== null)
 /** Whether the clip being edited has any sound to export. */
 const sourceHasAudio = ref(false)
+/** Whether its frame size is known yet, which a GIF is scaled from. */
+const sourceHasSize = ref(false)
 
 let duration = 0
 
@@ -53,9 +56,10 @@ export const canExport = computed(
 /** Why Export is off, in words, or empty when it is not: the row shows this beside the button. */
 export const exportProblem = computed(() => {
   if (!editing.value) return ''
-  if (!exportName.value.trim()) return 'Give the clip a name'
-  if (selectionLength.value < MIN_SELECTION_S)
-    return `Selection is too short (at least ${MIN_SELECTION_S} s)`
+  // Short and actionable: this sits in the trim row beside the Export button,
+  // where a sentence would be cut off before it said what to do.
+  if (!exportName.value.trim()) return 'Name the file'
+  if (selectionLength.value < MIN_SELECTION_S) return `Select at least ${MIN_SELECTION_S} s`
   return ''
 })
 
@@ -67,10 +71,47 @@ export const exportProblem = computed(() => {
 export const audioProblem = computed(() => {
   if (!editing.value) return ''
   if (!sourceHasAudio.value) return 'Source has no audio'
-  if (exportTracks.value?.length === 0) return 'Every track is muted in the mixer'
+  if (exportTracks.value?.length === 0) return 'Unmute a track first'
   return exportProblem.value
 })
 export const canExportAudio = computed(() => canExport.value && !audioProblem.value)
+
+/** Why Export GIF is off, or empty. A GIF is for a moment, so the selection is capped as well. */
+export const gifProblem = computed(() => {
+  if (!editing.value) return ''
+  if (!sourceHasSize.value) return 'Media info still loading'
+  if (selectionLength.value > MAX_GIF_S) return `Trim to ${MAX_GIF_S} s or less`
+  return exportProblem.value
+})
+export const canExportGif = computed(() => canExport.value && !gifProblem.value)
+
+/**
+ * Which export the Export button makes: a clip, the sound alone, or a GIF.
+ * Kept across clips rather than reset on each open — someone cutting GIFs cuts
+ * several — and the row shows only the chosen kind's options.
+ */
+export const exportKind = ref<ExportKind>('clip')
+/** The chosen kind's reason for being off, or ''. */
+export const currentProblem = computed(() => {
+  switch (exportKind.value) {
+    case 'clip':
+      return exportProblem.value
+    case 'audio':
+      return audioProblem.value
+    case 'gif':
+      return gifProblem.value
+  }
+})
+export const canSubmit = computed(() => {
+  switch (exportKind.value) {
+    case 'clip':
+      return canExport.value
+    case 'audio':
+      return canExportAudio.value
+    case 'gif':
+      return canExportGif.value
+  }
+})
 
 /**
  * The trim bar's filmstrip for the clip in the player: keyframes from across
@@ -132,6 +173,7 @@ export function enterEdit(clip: Clip): void {
   outSec.value = duration
   exportMuted.value = false
   sourceHasAudio.value = clip.hasAudio
+  sourceHasSize.value = clip.width > 0 && clip.height > 0
   exportName.value = `${clip.title} - Clip`
   editing.value = true
   prepareFilmstrip(clip)
@@ -166,10 +208,9 @@ export async function submit(clip: Clip): Promise<ExportJob | null> {
       muted: exportMuted.value,
       tracks: exportTracks.value ?? undefined,
     })
-    if (job) {
-      toast('info', 'Exporting clip', `${job.name}${job.ext} · ${job.game}`)
-      exitEdit()
-    }
+    // The row stays open: the next export — the same moment as a GIF, say —
+    // starts from the selection already made.
+    if (job) toast('info', 'Exporting clip', `${job.name}${job.ext} · ${job.game}`)
     return job
   } finally {
     submittingKind.value = null
@@ -192,10 +233,39 @@ export async function submitAudio(clip: Clip): Promise<ExportJob | null> {
       end: outSec.value,
       tracks: exportTracks.value ?? undefined,
     })
-    if (job) {
-      toast('info', 'Exporting audio', `${job.name}${job.ext}`)
-      exitEdit()
-    }
+    if (job) toast('info', 'Exporting audio', `${job.name}${job.ext}`)
+    return job
+  } finally {
+    submittingKind.value = null
+  }
+}
+
+/** The export the row is set to. */
+export function submitCurrent(clip: Clip): Promise<ExportJob | null> {
+  switch (exportKind.value) {
+    case 'clip':
+      return submit(clip)
+    case 'audio':
+      return submitAudio(clip)
+    case 'gif':
+      return submitGif(clip)
+  }
+}
+
+/** The selection as an animated GIF, at the width and rate the GIF menu keeps in settings. */
+export async function submitGif(clip: Clip): Promise<ExportJob | null> {
+  if (!canExportGif.value) return null
+  submittingKind.value = 'gif'
+  try {
+    const job = await exportGif({
+      id: clip.id,
+      name: exportName.value.trim(),
+      start: inSec.value,
+      end: outSec.value,
+      width: settings.value.gifWidth,
+      fps: settings.value.gifFps,
+    })
+    if (job) toast('info', 'Exporting GIF', `${job.name}${job.ext}`)
     return job
   } finally {
     submittingKind.value = null

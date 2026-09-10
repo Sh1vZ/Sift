@@ -72,10 +72,15 @@ export function historyGone(r: ActivityRecord): boolean {
   return Boolean(r.clipId) && !getClip(r.clipId)
 }
 
-/** An audio-only export: a sound file, never a clip. Told by the title, which carries the extension. */
-function audioExport(r: ActivityRecord): boolean {
+/**
+ * The icon for an export that made a file rather than a clip — a sound or a
+ * GIF — or null for a clip. Told by the title, which carries the extension.
+ */
+function fileExportIcon(r: ActivityRecord): string | null {
   const title = r.title.toLowerCase()
-  return r.kind === 'export' && AUDIO_EXPORT_FORMATS.some((f) => title.endsWith(f.ext))
+  if (title.endsWith('.gif')) return 'i-lucide-image-play'
+  if (AUDIO_EXPORT_FORMATS.some((f) => title.endsWith(f.ext))) return 'i-lucide-music'
+  return null
 }
 
 /** The past tense the second line opens with; failed rows say `<Verb> failed`. */
@@ -128,7 +133,7 @@ export function historyLine(r: ActivityRecord): string {
 export function historyIcon(r: ActivityRecord): string {
   switch (r.kind) {
     case 'export':
-      return audioExport(r) ? 'i-lucide-audio-lines' : 'i-lucide-scissors'
+      return fileExportIcon(r) ?? 'i-lucide-scissors'
     case 'upload':
       return 'i-lucide-youtube'
     case 'copy-file':
@@ -199,7 +204,7 @@ export function historyActions(r: ActivityRecord): HistoryAction[] {
   switch (r.kind) {
     case 'export':
       if (r.status === 'failed') return []
-      // An audio export names no clip; main finds the file by the row.
+      // An audio or GIF export names no clip; main finds the file by the row.
       if (!r.clipId && r.path)
         return [
           {

@@ -1,5 +1,12 @@
 import { computed, ref } from 'vue'
-import type { AudioExportRequest, ExportJob, ExportRequest, ExportState } from '@shared/types'
+import type {
+  ActionResult,
+  AudioExportRequest,
+  ExportJob,
+  ExportRequest,
+  ExportState,
+  GifExportRequest,
+} from '@shared/types'
 import { historyRecords } from './useActivityHistory'
 import { alertError } from './useDialogs'
 import { getClip, goClips } from './useLibrary'
@@ -38,8 +45,8 @@ function apply(list: ExportJob[]): void {
   for (const j of list) {
     const prev = known.get(j.id)
     if (!prev || prev === j.state) continue
-    if (j.state === 'done' && j.kind === 'audio') {
-      toast('success', 'Audio exported', j.name + j.ext, {
+    if (j.state === 'done' && j.kind !== 'clip') {
+      toast('success', j.kind === 'gif' ? 'GIF exported' : 'Audio exported', j.name + j.ext, {
         label: 'Show in Explorer',
         onClick: () => void revealExport(j),
       })
@@ -94,12 +101,11 @@ export async function exportClip(req: ExportRequest): Promise<ExportJob | null> 
 }
 
 /**
- * The selection's audio alone. Main puts up the save dialog; a dismissed one
- * resolves null with nothing to say, exactly like a refused request after its
- * alert, so the caller stays on the trim either way.
+ * Main's answer to an export that goes to a file. It put up the save dialog;
+ * a dismissed one resolves null with nothing to say, exactly like a refused
+ * request after its alert, so the caller stays on the trim either way.
  */
-export async function exportAudio(req: AudioExportRequest): Promise<ExportJob | null> {
-  const res = await api.clips.exportAudio(req)
+function accepted(res: ActionResult & { job?: ExportJob; cancelled?: boolean }): ExportJob | null {
   if (res.cancelled) return null
   if (!res.ok || !res.job) {
     void alertError({
@@ -111,6 +117,16 @@ export async function exportAudio(req: AudioExportRequest): Promise<ExportJob | 
     return null
   }
   return res.job
+}
+
+/** The selection's audio alone, to a file the user picks. */
+export async function exportAudio(req: AudioExportRequest): Promise<ExportJob | null> {
+  return accepted(await api.clips.exportAudio(req))
+}
+
+/** The selection as an animated GIF, to a file the user picks. */
+export async function exportGif(req: GifExportRequest): Promise<ExportJob | null> {
+  return accepted(await api.clips.exportGif(req))
 }
 
 /**

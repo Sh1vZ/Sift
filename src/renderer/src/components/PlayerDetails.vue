@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import type { Clip } from '@shared/types'
-import { imageFormatLabel } from '@shared/types'
+import { AUDIO_EXPORT_FORMATS, MAX_GIF_S, imageFormatLabel } from '@shared/types'
 import FavouriteButton from './FavouriteButton.vue'
+import { shareMenuItems } from '@/composables/useClipMenu'
+import { exportKind, exportMuted, inSec, outSec, selectionLength } from '@/composables/useEditor'
 import {
   checkOnYouTube,
   clipsFolder,
-  copyClipFile,
   copyClipPath,
   copyYouTubeLink,
   getClip,
@@ -16,6 +17,7 @@ import {
   removeFromYouTube,
   renameClip,
   revealClip,
+  settings,
 } from '@/composables/useLibrary'
 import { cancelUpload, progressText, stageText, uploadByClip } from '@/composables/useUploads'
 import { youtubeUrl } from '@shared/youtube'
@@ -51,7 +53,6 @@ defineEmits<{
   remove: []
   edit: []
   source: []
-  upload: []
 }>()
 
 interface Row {
@@ -163,9 +164,63 @@ const sourceLine = computed(() => {
   if (c.createdAtMs) parts.push(`Exported ${formatFull(c.createdAtMs)}`)
   return parts.join(' · ')
 })
-const destination = computed(
-  () => `${clipsFolder.value?.name ?? 'Sift Clips'}\\${props.clip.game}\\${props.exportName}`,
+// ------------------------------------------------------- export (trimming)
+// The trim row's format switch decides all three: the heading, where the file
+// lands, and what it will be. Audio and GIF go to a folder the save dialog
+// asks for, so they show the folder the last one went to, or just the name.
+
+const exportHeading = computed(() => {
+  switch (exportKind.value) {
+    case 'clip':
+      return 'Export clip'
+    case 'audio':
+      return 'Export audio only'
+    case 'gif':
+      return 'Export GIF'
+  }
+})
+const exportIcon = computed(() => {
+  switch (exportKind.value) {
+    case 'clip':
+      return 'i-lucide-film'
+    case 'audio':
+      return 'i-lucide-music'
+    case 'gif':
+      return 'i-lucide-image-play'
+  }
+})
+/** The selection as the trim row holds it: what the file will contain. */
+const rangeLine = computed(
+  () =>
+    `${formatTimecode(inSec.value)} – ${formatTimecode(outSec.value)} · ${formatTimecode(selectionLength.value)} long`,
 )
+const destination = computed(() => {
+  const name = props.exportName
+  switch (exportKind.value) {
+    case 'clip':
+      return `${clipsFolder.value?.name ?? 'Sift Clips'}\\${props.clip.game}\\${name}`
+    case 'audio':
+      return settings.value.audioExportDir ? `${settings.value.audioExportDir}\\${name}` : name
+    case 'gif':
+      return settings.value.gifExportDir ? `${settings.value.gifExportDir}\\${name}` : name
+  }
+})
+// One or two plain sentences: what you get, and the one thing worth knowing.
+const exportNote = computed(() => {
+  switch (exportKind.value) {
+    case 'clip':
+      return `${exportMuted.value ? 'No audio. ' : ''}Same quality as the recording, no re-encode. It may start a split second early.`
+    case 'audio': {
+      const format = AUDIO_EXPORT_FORMATS.find((f) => f.ext === settings.value.audioExportExt)
+      return `Just the sound, as ${format?.label ?? 'MP3'}. You pick the folder when you save.`
+    }
+    case 'gif':
+      return `${settings.value.gifWidth} px wide at ${settings.value.gifFps} fps, up to ${MAX_GIF_S} s. You pick the folder when you save.`
+  }
+})
+
+/** The same Share menu the player's header offers; the footer keeps to two lines, so it stays in trim mode too. */
+const shareItems = computed(() => shareMenuItems(props.clip))
 
 // ---------------------------------------------------------- inline rename
 
@@ -210,19 +265,20 @@ function channels(count: number): string {
 }
 
 /**
- * One track reads as it always has. Several are worth spelling out: it is the
- * only place the codec and channel layout of each are visible, and the reason
- * the player is offering a mixer at all.
+ * One track reads as it always has. Several are summed up — count, codec,
+ * layouts — because the row is one line: naming each track ran past the edge
+ * and hid the very detail it was there for. The mixer names them.
  */
 function audioValue(c: Clip): string {
   const tracks = c.audioTracks ?? []
-  if (tracks.length > 1)
-    return tracks
-      .map((t, i) => {
-        const detail = [t.codec.toUpperCase(), channels(t.channels)].filter(Boolean).join(' ')
-        return `${t.title || t.language || `Track ${i + 1}`}${detail ? ` (${detail})` : ''}`
-      })
-      .join(', ')
+  if (tracks.length > 1) {
+    const codecs = [...new Set(tracks.map((t) => t.codec.toUpperCase()))].join('/')
+    const layouts = tracks
+      .map((t) => channels(t.channels))
+      .filter(Boolean)
+      .join(' + ')
+    return [`${tracks.length} tracks`, codecs, layouts].filter(Boolean).join(' · ')
+  }
   if (c.hasAudio) return 'Included'
   return c.muted ? 'Removed' : 'None'
 }
@@ -353,13 +409,18 @@ const rows = computed<Row[]>(() => {
         description="This file could not be probed, so some values below are missing."
       />
 
-      <section v-if="editing">
-        <h4>Export</h4>
-        <p class="path" :title="destination">{{ destination }}</p>
-        <p class="note">
-          Stream copy, no re-encode. The start snaps to the keyframe just before it, so the clip can
-          begin a fraction of a second early.
-        </p>
+      <!-- Follows the format switch in the trim row: what the file will hold,
+           where it lands and what it will be, for the format Export is set to.
+           Lifted on the brand tint: the one section about what is going to
+           happen, so it reads before the facts below it. -->
+      <section v-if="editing" class="export-card">
+        <h4 class="export-head">
+          <UIcon :name="exportIcon" class="export-icon" />
+          {{ exportHeading }}
+        </h4>
+        <p class="export-range mono">{{ rangeLine }}</p>
+        <p class="path export-path" :title="destination">{{ destination }}</p>
+        <p class="note export-note">{{ exportNote }}</p>
       </section>
 
       <section>
@@ -495,10 +556,13 @@ const rows = computed<Row[]>(() => {
       </section>
     </div>
 
+    <!-- Two lines in either mode: the primary action (or, while trimming, the
+         way out — the export itself is in the trim row), then Share with the
+         two ways a clip leaves the app and a small Delete kept apart in red. -->
     <footer class="actions">
       <UButton
         v-if="!isImage"
-        icon="i-lucide-scissors"
+        :icon="editing ? 'i-lucide-x' : 'i-lucide-scissors'"
         :label="editing ? 'Cancel trim' : 'Trim & export'"
         :color="editing ? 'neutral' : 'primary'"
         :variant="editing ? 'subtle' : 'solid'"
@@ -527,45 +591,44 @@ const rows = computed<Row[]>(() => {
         />
       </div>
       <div class="actions-row">
-        <UTooltip
-          v-if="!isImage"
-          :text="clip.youtubeId ? 'Upload to YouTube again' : 'Upload to YouTube'"
+        <UDropdownMenu
+          :items="shareItems"
+          :content="{ side: 'top', align: 'start' }"
+          :ui="{ content: 'min-w-80' }"
         >
+          <!-- Fills the row like the button above it, with icon, word and
+               chevron kept together in the middle (`block` alone would send the
+               chevron to the far edge and make it read as a select). -->
           <UButton
-            class="grow"
-            icon="i-lucide-youtube"
-            :label="clip.youtubeId ? 'Upload again' : 'Upload'"
+            class="share"
+            icon="i-lucide-share-2"
+            trailing-icon="i-lucide-chevron-down"
+            label="Share"
             color="neutral"
             variant="subtle"
             block
-            :disabled="clip.probeState !== 'ok' || busy || uploading"
-            @click="$emit('upload')"
+            :ui="{ trailingIcon: 'ms-0' }"
+            :loading="pendingAction?.kind === 'copy-file'"
+            :disabled="busy"
+            aria-label="Share: copy the file, or upload it to YouTube"
+          />
+        </UDropdownMenu>
+        <!-- Ends the row, bordered in red and a step apart: reachable and
+             unmistakable, never under a pointer aimed at Share. -->
+        <UTooltip text="Delete · moves the file to the Recycle Bin">
+          <UButton
+            class="danger"
+            icon="i-lucide-trash-2"
+            color="error"
+            variant="subtle"
+            square
+            aria-label="Delete: moves the file to the Recycle Bin"
+            :loading="pendingAction?.kind === 'delete'"
+            :disabled="busy"
+            @click="$emit('remove')"
           />
         </UTooltip>
-        <UButton
-          class="grow"
-          icon="i-lucide-clipboard-copy"
-          label="Copy file"
-          color="neutral"
-          variant="subtle"
-          block
-          :loading="pendingAction?.kind === 'copy-file'"
-          :disabled="busy"
-          @click="copyClipFile(clip)"
-        />
       </div>
-      <!-- On its own line, small and unfilled: reachable, never in the way. -->
-      <UButton
-        class="danger"
-        icon="i-lucide-trash-2"
-        label="Delete"
-        color="error"
-        variant="ghost"
-        size="sm"
-        :loading="pendingAction?.kind === 'delete'"
-        :disabled="busy"
-        @click="$emit('remove')"
-      />
     </footer>
   </aside>
 </template>
@@ -711,6 +774,41 @@ h4 {
   color: var(--fg-muted);
 }
 
+/* The export block while trimming: brand tint and full-strength text, where
+   every other section is a quiet table of facts. */
+.export-card {
+  padding: var(--s-4);
+  border-radius: var(--r-md);
+  background: var(--primary-soft);
+  box-shadow: inset 0 0 0 1px var(--border-active);
+}
+.export-head {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  color: var(--fg-strong);
+}
+.export-icon {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  color: var(--secondary);
+}
+.export-range {
+  margin: 0 0 var(--s-3);
+  font-size: var(--text-sm);
+  color: var(--fg);
+}
+.export-path {
+  background: color-mix(in srgb, var(--bg-0) 75%, transparent);
+  color: var(--fg);
+}
+.export-note {
+  margin-top: var(--s-3);
+  font-size: var(--text-base);
+  color: var(--fg);
+}
+
 /* A place you can go: one row, pressed whole. */
 .link-row {
   display: flex;
@@ -810,14 +908,18 @@ h4 {
   border-top: 1px solid var(--border);
   background: var(--bg-1);
 }
+/* Share takes the row, Delete ends it: the same full width as the line above. */
 .actions-row {
   display: flex;
   align-items: center;
   gap: var(--s-2);
 }
-.actions-row .grow {
+.actions-row .share {
   flex: 1;
   min-width: 0;
+}
+.actions-row .danger {
+  margin-left: var(--s-2);
 }
 .upload-row {
   position: relative;
@@ -846,8 +948,5 @@ h4 {
   left: 0;
   right: 0;
   bottom: 0;
-}
-.danger {
-  align-self: flex-end;
 }
 </style>

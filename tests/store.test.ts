@@ -15,13 +15,16 @@ import { changelogReleases, changelogSection, parseChangelog } from '@shared/cha
 import {
   ACTIVITY_CAP,
   DEFAULT_SETTINGS,
+  MAX_GIF_S,
   type ActivityRecord,
   type Clip,
   type LibraryFolder,
 } from '@shared/types'
 import {
+  TONE_MAP,
   buildAudioExportArgs,
   buildExportArgs,
+  buildGifExportArgs,
   copiesAudio,
   exportExt,
   isAudioExportExt,
@@ -31,6 +34,7 @@ import {
   uniqueName,
   parseProgressLine,
   validateAudioExportRequest,
+  validateGifExportRequest,
 } from '../src/main/lib/exports'
 import { Store } from '../src/main/lib/store'
 
@@ -636,6 +640,76 @@ function exportHelperCases(): void {
         buildAudioExportArgs({ ...audioPlan, out: '~out.ogg' }).indexOf('-c:a') + 1
       ] === 'libopus',
     'wav is PCM and ogg is Opus',
+  )
+
+  // ---------------------------------------------------------------- gif
+  // Long enough that the cap, not the clip's end, is what a long selection hits.
+  const withSize: Clip = { ...withAudio, duration: 120, width: 1920, height: 1080 }
+  const gifReq = {
+    id: 'src',
+    name: 'Clip',
+    start: 1,
+    end: 4,
+    width: 480 as const,
+    fps: 15 as const,
+  }
+  check(validateGifExportRequest(gifReq, withSize) === null, 'a GIF of a probed clip is fine')
+  check(
+    validateGifExportRequest({ ...gifReq, end: 1 + MAX_GIF_S + 1 }, withSize) !== null &&
+      validateGifExportRequest({ ...gifReq, end: 1 + MAX_GIF_S }, withSize) === null,
+    'a GIF selection is capped in length',
+  )
+  check(
+    validateGifExportRequest(gifReq, { ...withSize, width: 0 }) !== null,
+    'a GIF needs the probed frame size',
+  )
+
+  const gifPlan = {
+    src: 'in.mp4',
+    out: '~out.gif',
+    palette: '~out.palette.png',
+    start: 1.5,
+    end: 4,
+    width: 480,
+    fps: 15,
+    hdr: false,
+  }
+  const passes = buildGifExportArgs(gifPlan)
+  const [palette = [], paint = []] = passes
+  check(passes.length === 2, 'a GIF is two passes')
+  const paletteGraph = palette[palette.indexOf('-filter_complex') + 1] ?? ''
+  check(
+    paletteGraph.includes('palettegen') &&
+      paletteGraph.includes('fps=15') &&
+      paletteGraph.includes('480') &&
+      palette.includes('~out.palette.png') &&
+      palette.includes('null'),
+    'the first pass builds the palette and keeps a clock output for progress',
+  )
+  const paintGraph = paint[paint.indexOf('-filter_complex') + 1] ?? ''
+  check(
+    paintGraph.includes('paletteuse') &&
+      paintGraph.includes('fps=15') &&
+      paint[paint.length - 1] === '~out.gif' &&
+      paint.includes('-loop'),
+    'the second pass paints the frames with it',
+  )
+  check(
+    paint.indexOf('-ss') < paint.indexOf('-i') &&
+      paint[paint.indexOf('-ss') + 1] === '1.500' &&
+      paint.filter((a) => a === '-i').length === 2,
+    'the paint pass seeks the source and reads the palette',
+  )
+  check(
+    !paintGraph.includes('tonemap') &&
+      buildGifExportArgs({ ...gifPlan, hdr: true }).every((pass) =>
+        pass.some((a) => a.includes(TONE_MAP)),
+      ),
+    'an HDR source is tone-mapped in both passes',
+  )
+  check(
+    passes.every((pass) => pass.includes('-threads') && pass[pass.indexOf('-threads') + 1] === '1'),
+    'both GIF passes run on one thread',
   )
 }
 

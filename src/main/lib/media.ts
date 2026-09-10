@@ -4,7 +4,7 @@ import { constants as osConstants, setPriority } from 'node:os'
 import { basename, dirname, extname, join } from 'node:path'
 import { Worker } from 'node:worker_threads'
 import type { AudioTrack, Clip } from '@shared/types'
-import { ADTS_CONTAINERS } from './exports'
+import { ADTS_CONTAINERS, TONE_MAP } from './exports'
 import { jxrTuning } from './jxr'
 import jxrWorkerPath from './jxr.worker?modulePath'
 import { FFMPEG, FFPROBE, audioDir, cacheDir } from './paths'
@@ -60,15 +60,6 @@ const SCALE_FLAGS = 'area'
  * the filters: measured 4–15% faster per job on top of being predictable.
  */
 const ONE_THREAD_FILTERS = ['-filter_threads', '1', '-filter_complex_threads', '1']
-/**
- * HDR frames (PQ or HLG) tone-mapped to BT.709 for a JPEG. Applied after the
- * downscale, so the curve runs over a few hundred pixels a side rather than
- * the full frame: ~30 ms on top of the decode. Without it the cards show the
- * raw PQ signal as if it were SDR — a grey wash where the game was bright.
- */
-const TONE_MAP =
-  'zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=hable:desat=0,' +
-  'zscale=t=bt709:m=bt709:r=tv,format=yuv420p'
 /** The transfer characteristics ffprobe reports for an HDR stream: PQ, and HLG. */
 const HDR_TRANSFERS = new Set(['smpte2084', 'arib-std-b67'])
 /**

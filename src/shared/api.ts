@@ -16,6 +16,7 @@ import type {
   EventName,
   ExportJob,
   ExportRequest,
+  GifExportRequest,
   LibraryFolder,
   LibrarySnapshot,
   Settings,
@@ -81,6 +82,10 @@ export interface Api {
      */
     exportAudio(
       req: AudioExportRequest,
+    ): Promise<ActionResult & { job?: ExportJob; cancelled?: boolean }>
+    /** The selection as an animated GIF, to a file the user picks; `cancelled` as for `exportAudio`. */
+    exportGif(
+      req: GifExportRequest,
     ): Promise<ActionResult & { job?: ExportJob; cancelled?: boolean }>
     /** Opens the clip's YouTube page in the browser. */
     openYouTube(id: string): Promise<ActionResult>

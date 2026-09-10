@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { DropdownMenuItem } from '@nuxt/ui'
-import type { Clip } from '@shared/types'
-import { imageFormatLabel } from '@shared/types'
+import type { AudioExportExt, Clip, ExportKind } from '@shared/types'
+import { AUDIO_EXPORT_FORMATS, GIF_FPS, GIF_WIDTHS, imageFormatLabel } from '@shared/types'
 import ElasticSlider from './bits/ElasticSlider.vue'
 import AudioMixer from './AudioMixer.vue'
 import ImageStage from './ImageStage.vue'
@@ -20,7 +20,7 @@ import {
   toggleFavourite,
   updateSettings,
 } from '@/composables/useLibrary'
-import { clipMenuItems, deleteClipDialog } from '@/composables/useClipMenu'
+import { clipMenuItems, deleteClipDialog, shareMenuItems } from '@/composables/useClipMenu'
 import {
   applyGains,
   auxSrc,
@@ -59,15 +59,16 @@ import {
   source,
 } from '@/composables/usePlayer'
 import {
-  audioProblem,
-  canExport,
   canExportAudio,
+  canExportGif,
+  canSubmit,
+  currentProblem,
   editing,
   enterEdit,
   exitEdit,
+  exportKind,
   exportMuted,
   exportName,
-  exportProblem,
   filmstrip,
   inSec,
   outSec,
@@ -77,16 +78,17 @@ import {
   selectionLength,
   setIn,
   setOut,
-  submit,
   submitAudio,
-  submittingKind,
+  submitCurrent,
+  submitGif,
+  submitting,
 } from '@/composables/useEditor'
 import { exportJobs } from '@/composables/useExports'
 import { fadeOut, flipFrom, flipTo } from '@/composables/useMotion'
 import { activeTheme } from '@/composables/useTheme'
 import { visible as windowVisible } from '@/composables/useWindowVisibility'
 import { dialog } from '@/composables/useDialogs'
-import { openUploadDialog, uploadByClip, uploadDialog } from '@/composables/useUploads'
+import { uploadByClip, uploadDialog } from '@/composables/useUploads'
 import { toast } from '@/composables/useToasts'
 import {
   clamp,
@@ -306,6 +308,9 @@ const moreItems = computed(() =>
     beforeDelete,
   }),
 )
+
+/** Copy file and Upload, behind the header's Share button; the details pane offers the same list. */
+const shareItems = computed(() => shareMenuItems(clip.value))
 
 const rateItems = computed<DropdownMenuItem[]>(() =>
   RATES.map((r) => ({
@@ -709,15 +714,130 @@ function onTrimDrag(active: boolean): void {
   }
 }
 
+/** The export the format switch is set to. */
 async function exportNow(): Promise<void> {
-  if (!canExport.value) return
-  await submit(clip.value)
+  if (!canSubmit.value) return
+  await submitCurrent(clip.value)
 }
+
+/** The format switch: what the selection becomes. */
+const EXPORT_KINDS: ReadonlyArray<{
+  kind: ExportKind
+  label: string
+  icon: string
+  hint: string
+}> = [
+  {
+    kind: 'clip',
+    label: 'Clip',
+    icon: 'i-lucide-film',
+    hint: 'A trimmed video, into your clips folder',
+  },
+  {
+    kind: 'audio',
+    label: 'Audio only',
+    icon: 'i-lucide-music',
+    hint: 'Just the sound, to a file you pick — MP3, M4A, WAV or OGG',
+  },
+  {
+    kind: 'gif',
+    label: 'GIF',
+    icon: 'i-lucide-image-play',
+    hint: 'An animated GIF, to a file you pick',
+  },
+]
+const exportLabel = computed(() => {
+  switch (exportKind.value) {
+    case 'clip':
+      return 'Export clip'
+    case 'audio':
+      return 'Export audio'
+    case 'gif':
+      return 'Export GIF'
+  }
+})
+const exportHint = computed(() => {
+  switch (exportKind.value) {
+    case 'clip':
+      return 'Cut the selection into your clips folder'
+    case 'audio':
+      return 'Save the sound to a file you pick'
+    case 'gif':
+      return 'Save an animated GIF to a file you pick'
+  }
+})
+/** What the name will end in: the clip's container, the audio format the last export used, or .gif. */
+const nameExt = computed(() => {
+  switch (exportKind.value) {
+    case 'clip':
+      return outExt.value
+    case 'audio':
+      return settings.value.audioExportExt
+    case 'gif':
+      return '.gif'
+  }
+})
 
 async function exportAudioNow(): Promise<void> {
   if (!canExportAudio.value) return
   await submitAudio(clip.value)
 }
+
+async function exportGifNow(): Promise<void> {
+  if (!canExportGif.value) return
+  await submitGif(clip.value)
+}
+
+const stayOpen = (e: Event): void => e.preventDefault()
+
+/** One line each on what the format is for; the save dialog then opens on the pick. */
+const AUDIO_FORMAT_HINTS: Record<AudioExportExt, string> = {
+  '.mp3': 'Plays anywhere',
+  '.m4a': 'AAC, like the recording',
+  '.wav': 'Uncompressed, biggest',
+  '.ogg': 'Opus, small and clear',
+}
+const audioFormatItems = computed<DropdownMenuItem[]>(() =>
+  AUDIO_EXPORT_FORMATS.map<DropdownMenuItem>((f) => ({
+    label: f.label,
+    description: AUDIO_FORMAT_HINTS[f.ext],
+    type: 'checkbox',
+    checked: settings.value.audioExportExt === f.ext,
+    onUpdateChecked: (on: boolean) => {
+      if (on) void updateSettings({ audioExportExt: f.ext })
+    },
+  })),
+)
+const audioFormatLabel = computed(
+  () => AUDIO_EXPORT_FORMATS.find((f) => f.ext === settings.value.audioExportExt)?.label ?? 'MP3',
+)
+/** Width and frame rate for the next GIF, kept in settings so the pick outlives the session. */
+const gifItems = computed<DropdownMenuItem[][]>(() => [
+  [
+    { label: 'Width', type: 'label' },
+    ...GIF_WIDTHS.map<DropdownMenuItem>((w) => ({
+      label: `${w} px`,
+      type: 'checkbox',
+      checked: settings.value.gifWidth === w,
+      onSelect: stayOpen,
+      onUpdateChecked: (on: boolean) => {
+        if (on) void updateSettings({ gifWidth: w })
+      },
+    })),
+  ],
+  [
+    { label: 'Frame rate', type: 'label' },
+    ...GIF_FPS.map<DropdownMenuItem>((f) => ({
+      label: `${f} fps`,
+      type: 'checkbox',
+      checked: settings.value.gifFps === f,
+      onSelect: stayOpen,
+      onUpdateChecked: (on: boolean) => {
+        if (on) void updateSettings({ gifFps: f })
+      },
+    })),
+  ],
+])
 
 function goToSource(): void {
   if (!openSource(clip.value))
@@ -957,6 +1077,10 @@ function onKey(e: KeyboardEvent): void {
       if (editing.value && clip.value.hasAudio) exportMuted.value = !exportMuted.value
       else handled = false
       break
+    case 'G':
+      if (editing.value) void exportGifNow()
+      else handled = false
+      break
     case 'R':
       if (editing.value) resetRange()
       else handled = false
@@ -1181,6 +1305,23 @@ onBeforeUnmount(() => {
             @click="toggleDetails"
           />
         </UTooltip>
+        <UTooltip text="Share">
+          <UDropdownMenu
+            :items="shareItems"
+            :content="{ align: 'end' }"
+            :ui="{ content: 'min-w-80' }"
+            @update:open="poke"
+          >
+            <UButton
+              icon="i-lucide-share-2"
+              color="neutral"
+              variant="ghost"
+              square
+              aria-label="Share: copy the file, or upload it to YouTube"
+              :loading="pending?.kind === 'copy-file'"
+            />
+          </UDropdownMenu>
+        </UTooltip>
         <UDropdownMenu
           :items="moreItems"
           :content="{ align: 'end' }"
@@ -1374,12 +1515,11 @@ onBeforeUnmount(() => {
         v-if="details && !fullscreen"
         :clip="clip"
         :editing="editing"
-        :export-name="exportName + outExt"
+        :export-name="exportName + nameExt"
         @close="toggleDetails"
         @remove="remove"
         @edit="toggleEdit"
         @source="goToSource"
-        @upload="openUploadDialog(clip)"
       />
     </Transition>
 
@@ -1521,8 +1661,14 @@ onBeforeUnmount(() => {
       <!-- Stays mounted and opens by height, so the row grows out of the
            controls instead of snapping in and shoving everything upward. -->
       <div class="edit-slot" :class="{ open: editing }" :inert="editing ? undefined : true">
+        <!-- A grid of three areas: the range and the audio tracks on one line,
+             the export form on the next, and all three on one line once the
+             container is wide enough for it — decided by a container query,
+             never by incidental wrapping. The export is a format switch — Clip,
+             Audio only, GIF — followed by only that format's option and one
+             Export button named for it. -->
         <div class="edit-row">
-          <div class="range">
+          <div class="range" role="group" aria-label="Trim range">
             <div class="step">
               <UTooltip text="Previous frame" :kbds="[',']">
                 <UButton
@@ -1545,49 +1691,90 @@ onBeforeUnmount(() => {
                 />
               </UTooltip>
             </div>
+            <!-- Start and End say which point each is; the click moves it to the
+                 playhead, which the tooltip and the key spell out. -->
             <UTooltip text="Set start to the playhead" :kbds="['[']">
               <UButton
-                class="mono point"
-                icon="i-lucide-arrow-right-to-line"
-                :label="formatTimecode(inSec)"
+                class="point"
                 color="neutral"
                 variant="subtle"
-                aria-label="Set start to the playhead"
+                aria-label="Start: set to the playhead"
                 @click="setIn(time)"
-              />
+              >
+                <span class="point-cap">Start</span>
+                <span class="point-time mono">{{ formatTimecode(inSec) }}</span>
+              </UButton>
             </UTooltip>
-            <span class="len mono" title="Selection length" aria-label="Selection length">{{
-              formatTimecode(selectionLength)
-            }}</span>
+            <span class="len" title="Selection length" aria-label="Selection length">
+              <span class="mono">{{ formatTimecode(selectionLength) }}</span>
+            </span>
             <UTooltip text="Set end to the playhead" :kbds="[']']">
               <UButton
-                class="mono point"
-                icon="i-lucide-arrow-left-to-line"
-                :label="formatTimecode(outSec)"
+                class="point"
                 color="neutral"
                 variant="subtle"
-                aria-label="Set end to the playhead"
+                aria-label="End: set to the playhead"
                 @click="setOut(time)"
-              />
+              >
+                <span class="point-cap">End</span>
+                <span class="point-time mono">{{ formatTimecode(outSec) }}</span>
+              </UButton>
             </UTooltip>
-            <UTooltip text="Reset range" :kbds="['Shift', 'R']">
+            <UTooltip text="Reset to the whole clip" :kbds="['Shift', 'R']">
               <UButton
                 icon="i-lucide-rotate-ccw"
                 color="neutral"
                 variant="ghost"
                 square
-                aria-label="Reset range"
+                aria-label="Reset to the whole clip"
                 @click="resetRange"
               />
             </UTooltip>
+          </div>
+
+          <!-- Which tracks play, and so which the export keeps: for the ear as
+               much as for the file, so it sits between the two. -->
+          <div class="tracks">
             <AudioMixer v-if="hasMixer && editing" @change="applyVolume" @toggle="poke" />
+          </div>
+
+          <div class="export" role="group" aria-label="Export">
+            <UInput
+              v-model="exportName"
+              class="name"
+              placeholder="File name"
+              spellcheck="false"
+              autocomplete="off"
+              aria-label="File name"
+              :ui="{ trailing: 'pe-2.5' }"
+              @keydown.enter.prevent="exportNow"
+              @keydown.esc.prevent="exitEdit"
+            >
+              <template #trailing>
+                <span class="ext mono">{{ nameExt }}</span>
+              </template>
+            </UInput>
+            <UFieldGroup role="group" aria-label="Export format">
+              <UTooltip v-for="k in EXPORT_KINDS" :key="k.kind" :text="k.hint">
+                <UButton
+                  :icon="k.icon"
+                  :label="k.label"
+                  :color="exportKind === k.kind ? 'primary' : 'neutral'"
+                  :variant="exportKind === k.kind ? 'soft' : 'subtle'"
+                  :aria-pressed="exportKind === k.kind"
+                  @click="exportKind = k.kind"
+                />
+              </UTooltip>
+            </UFieldGroup>
+            <!-- The chosen format's own option, and nothing else's. -->
             <UTooltip
-              :text="clip.hasAudio ? 'Drop the audio from the export' : 'Source has no audio'"
+              v-if="exportKind === 'clip'"
+              :text="clip.hasAudio ? 'Export the clip without its audio' : 'Source has no audio'"
               :kbds="['Shift', 'M']"
             >
               <UButton
                 :icon="exportMuted ? 'i-lucide-volume-x' : 'i-lucide-volume-2'"
-                :label="exportMuted ? 'Muted' : 'Mute'"
+                label="No audio"
                 :color="exportMuted ? 'primary' : 'neutral'"
                 :variant="exportMuted ? 'soft' : 'subtle'"
                 :aria-pressed="exportMuted"
@@ -1595,51 +1782,56 @@ onBeforeUnmount(() => {
                 @click="exportMuted = !exportMuted"
               />
             </UTooltip>
-          </div>
-
-          <div class="export">
-            <UInput
-              v-model="exportName"
-              class="name"
-              placeholder="Clip name"
-              spellcheck="false"
-              autocomplete="off"
-              aria-label="Clip name"
-              :ui="{ trailing: 'pe-2.5' }"
-              @keydown.enter.prevent="exportNow"
-              @keydown.esc.prevent="exitEdit"
+            <UDropdownMenu
+              v-else-if="exportKind === 'gif'"
+              :items="gifItems"
+              :content="{ align: 'end' }"
+              :ui="{ content: 'min-w-40' }"
             >
-              <template #trailing>
-                <span class="ext mono">{{ outExt }}</span>
-              </template>
-            </UInput>
+              <UButton
+                class="gif-opts"
+                icon="i-lucide-settings-2"
+                trailing-icon="i-lucide-chevron-down"
+                :label="`${settings.gifWidth} px · ${settings.gifFps} fps`"
+                color="neutral"
+                variant="subtle"
+                aria-label="GIF width and frame rate"
+              />
+            </UDropdownMenu>
+            <!-- The audio format here rather than only in the save dialog's
+                 type list; the dialog opens on whatever is picked. -->
+            <UDropdownMenu
+              v-else-if="exportKind === 'audio'"
+              :items="audioFormatItems"
+              :content="{ align: 'end' }"
+              :ui="{ content: 'min-w-56' }"
+            >
+              <UButton
+                class="gif-opts"
+                icon="i-lucide-file-audio"
+                trailing-icon="i-lucide-chevron-down"
+                :label="audioFormatLabel"
+                color="neutral"
+                variant="subtle"
+                aria-label="Audio format"
+              />
+            </UDropdownMenu>
             <!-- Why Export is off, in words, instead of a silently disabled button. -->
-            <p v-if="exportProblem" class="problem" role="status">{{ exportProblem }}</p>
+            <p v-if="currentProblem" class="problem" role="status" :title="currentProblem">
+              {{ currentProblem }}
+            </p>
+            <!-- No Cancel here: the trim toggle in the transport row, the details
+                 pane and Esc all leave edit mode, and a third copy only pushed
+                 Export onto a line of its own. -->
             <div class="submit">
-              <UButton label="Cancel trim" color="neutral" variant="ghost" @click="exitEdit" />
-              <!-- The audio's own problems live in the tooltip, not beside the
-                   button: a silent clip would otherwise show them the whole time. -->
-              <UTooltip
-                :text="audioProblem || 'Save the selection’s sound alone — MP3, M4A, WAV or OGG'"
-                :kbds="['Ctrl', 'Shift', 'Enter']"
-              >
-                <UButton
-                  icon="i-lucide-audio-lines"
-                  label="Export audio"
-                  color="neutral"
-                  variant="subtle"
-                  :loading="submittingKind === 'audio'"
-                  :disabled="!canExportAudio"
-                  @click="exportAudioNow"
-                />
-              </UTooltip>
-              <UTooltip text="Export the selection" :kbds="['Ctrl', 'Enter']">
+              <!-- A disabled button explains itself on hover too. -->
+              <UTooltip :text="currentProblem || exportHint" :kbds="['Ctrl', 'Enter']">
                 <UButton
                   icon="i-lucide-download"
-                  label="Export"
+                  :label="exportLabel"
                   color="primary"
-                  :loading="submittingKind === 'clip'"
-                  :disabled="!canExport"
+                  :loading="submitting"
+                  :disabled="!canSubmit"
                   @click="exportNow"
                 />
               </UTooltip>
@@ -2127,6 +2319,8 @@ onBeforeUnmount(() => {
 .edit-slot {
   display: grid;
   grid-template-rows: 0fr;
+  /* The row lays itself out by this width — see `.edit-row`. */
+  container-type: inline-size;
   margin-top: 0;
   opacity: 0;
   transition:
@@ -2140,28 +2334,58 @@ onBeforeUnmount(() => {
   opacity: 1;
 }
 
-/* Edit row: range on the left, the export form on the right; wraps near the
-   980px minimum instead of squeezing the name field. */
+/* Edit row: three grid areas. Two lines by default — the range and the audio
+   tracks, then the export form — and one line once the container is wide
+   enough for all of it (a maximised 1920px window with the details pane shut).
+   Explicit rows, because two nested wrapping flexboxes each broke wherever
+   they happened to run out of room and left the export folded beside a
+   range that was centred against it. */
 .edit-row {
   /* The clipped grid item: without these the 0fr row cannot collapse. */
   min-height: 0;
   overflow: hidden;
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas:
+    'range tracks'
+    'export export';
   align-items: center;
-  flex-wrap: wrap;
-  gap: var(--s-3);
+  row-gap: var(--s-2);
+  column-gap: var(--s-4);
   padding: var(--s-2) var(--s-3);
   border-radius: var(--r-md);
   background: color-mix(in srgb, var(--bg-3) 60%, transparent);
   border: 1px solid var(--border);
 }
-/* Two clusters: the range on the left, the export form on the right. At the
-   window minimum the form drops to its own line rather than squeezing the name. */
+@container (min-width: 1700px) {
+  .edit-row {
+    grid-template-columns: auto auto minmax(0, 1fr);
+    grid-template-areas: 'range tracks export';
+  }
+}
 .range {
+  grid-area: range;
+  display: flex;
+  align-items: center;
+  gap: var(--s-1);
+}
+.tracks {
+  grid-area: tracks;
+  display: flex;
+  align-items: center;
+  justify-self: start;
+}
+/* The export form. Only the name and the reason text flex — the name within
+   bounds, the reason down to nothing — and the controls keep their size, so
+   Export stays at the end of the line. Wrapping is the last resort, at the
+   window minimum, and beats clipping the button under `overflow: hidden`. */
+.export {
+  grid-area: export;
+  min-width: 0;
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: var(--s-1);
+  gap: var(--s-2);
 }
 /* Kept tight together: they are one control, and they sit at the head of the
    range row because you step to the frame before you mark it. */
@@ -2170,28 +2394,49 @@ onBeforeUnmount(() => {
   align-items: center;
   margin-right: var(--s-1);
 }
+/* "Start 1:37.2": the caption says which point, the time is the value. */
 .point {
-  min-width: 116px;
+  min-width: 128px;
   justify-content: center;
-  text-transform: none;
+  gap: var(--s-2);
 }
+/* "480 px · 15 fps", "M4A (AAC)": values, not a shouted label. */
+.gif-opts {
+  text-transform: none;
+  letter-spacing: 0;
+}
+.point-cap {
+  font-size: var(--text-xs);
+  letter-spacing: 0.06em;
+  color: var(--fg-muted);
+}
+.point-time {
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--fg);
+}
+/* The selection's length, drawn as the span between its two points. */
 .len {
-  min-width: 64px;
-  text-align: center;
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-width: 96px;
+  padding: 0 var(--s-1);
   font-size: var(--text-sm);
   color: var(--fg-muted);
 }
-.export {
-  flex: 1 1 420px;
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: var(--s-2);
+.len::before,
+.len::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border-hover);
 }
 .name {
-  flex: 1 1 180px;
+  flex: 1 1 140px;
   min-width: 0;
+  /* A file name, not a paragraph: on a wide line the slack goes to the reason text instead. */
+  max-width: 380px;
 }
 .name :deep(input) {
   min-width: 0;
@@ -2200,9 +2445,14 @@ onBeforeUnmount(() => {
   font-size: var(--text-sm);
   color: var(--fg-muted);
 }
+/* Why Export is off. Zero basis: flex-wrap breaks lines on the basis, so this
+   never decides where the line breaks — it fills what is left, and truncates
+   (the full text is in its title and the button's tooltip). */
 .problem {
-  flex: 0 1 auto;
+  flex: 1 1 0;
   min-width: 0;
+  /* Hugs the Export button it explains. */
+  text-align: right;
   font-size: var(--text-sm);
   color: var(--warning);
   white-space: nowrap;

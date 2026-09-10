@@ -19,6 +19,16 @@ import {
  * popover and the Activity page, so the two never drift apart.
  */
 const liveExport = (j: ExportJob): boolean => j.state === 'queued' || j.state === 'running'
+function exportIcon(j: ExportJob): string {
+  switch (j.kind) {
+    case 'clip':
+      return 'i-lucide-scissors'
+    case 'audio':
+      return 'i-lucide-music'
+    case 'gif':
+      return 'i-lucide-image-play'
+  }
+}
 const liveUpload = (j: UploadJob): boolean => j.state === 'queued' || j.state === 'uploading'
 /** Sift has stopped asking, so the row offers the question as a button instead. */
 const stalled = (j: UploadJob): boolean => j.state === 'processing' && j.checksStopped
@@ -89,7 +99,7 @@ function openUploaded(j: UploadJob): void {
     <li v-for="item in activityItems" :key="item.id" class="item">
       <template v-if="item.kind === 'export'">
         <UIcon
-          :name="item.job.kind === 'audio' ? 'i-lucide-audio-lines' : 'i-lucide-scissors'"
+          :name="exportIcon(item.job)"
           class="item-icon"
           :class="{ 'is-failed': item.job.state === 'failed' }"
         />

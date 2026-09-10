@@ -15,7 +15,9 @@ import type {
   EventMap,
   EventName,
   ExportJob,
+  ExportKind,
   ExportRequest,
+  GifExportRequest,
   LibraryFolder,
   LibrarySnapshot,
   ScanState,
@@ -23,7 +25,7 @@ import type {
   WarmupClip,
   WhatsNew,
 } from '@shared/types'
-import { isHdrImage, mediaKindOf } from '@shared/types'
+import { DEFAULT_SETTINGS, isHdrImage, mediaKindOf } from '@shared/types'
 import { ActivityLog } from './activity'
 import { burstWorkers, busyThreads, sampleCpu, type CpuSample } from './burst'
 import { fullChangelog, releaseNotesFor } from './changelog'
@@ -33,8 +35,10 @@ import {
   INVALID_NAME,
   type AudioExportPlan,
   type ExportPlan,
+  type GifExportPlan,
   buildAudioExportArgs,
   buildExportArgs,
+  buildGifExportArgs,
   exportExt,
   isAudioExportExt,
   mixesAudio,
@@ -44,6 +48,7 @@ import {
   uniqueName,
   validateAudioExportRequest,
   validateExportRequest,
+  validateGifExportRequest,
 } from './exports'
 import {
   extractAudioTrack,
@@ -967,53 +972,114 @@ export class Library {
     if (!existsSync(source.path))
       return { ok: false, error: 'The source file is no longer on disk.' }
 
-    // The first of these that exists; the game's folder is only there once a
-    // clip has been exported for it, and a remembered folder can be unplugged.
-    const root = this.clipsRoot()
-    const suggested =
-      [this.settings.audioExportDir, join(root, safeGameDir(source.game)), root, dirname(root)]
-        .filter(Boolean)
-        .find((d) => existsSync(d)) ?? join(root, safeGameDir(source.game))
-    const base = sanitizeName(req.name).name ?? 'Clip'
-    const chosen = await pick(
-      join(suggested, base + this.settings.audioExportExt),
-      this.settings.audioExportExt,
-    )
+    const { audioExportExt: ext } = this.settings
+    const suggested = this.suggestedExportDir(this.settings.audioExportDir, source.game)
+    const chosen = await pick(join(suggested, this.exportBase(req.name) + ext), ext)
     if (chosen === null) return { ok: true, cancelled: true }
 
     const out = normalize(chosen)
-    const ext = extname(out).toLowerCase()
-    if (!isAudioExportExt(ext))
+    const chosenExt = extname(out).toLowerCase()
+    if (!isAudioExportExt(chosenExt))
       return { ok: false, error: 'Pick one of the audio formats the dialog offers.' }
-    const name = basename(out, extname(out))
-    if (!name.trim()) return { ok: false, error: 'Name cannot be empty.' }
-    const dir = dirname(out)
-    if (!existsSync(dir)) return { ok: false, error: `${dir} does not exist.` }
-    if ([...this.exportTargets.values()].some((p) => p.toLowerCase() === out.toLowerCase()))
-      return { ok: false, error: 'Another export is already writing that file.' }
-    if (this.store.data.clips[clipId(out)])
-      return { ok: false, error: 'That file is in the library. Pick another name.' }
+    const problem = this.checkExportTarget(out)
+    if (problem) return { ok: false, error: problem }
 
-    this.setSettings({ audioExportDir: dir, audioExportExt: ext })
+    this.setSettings({ audioExportDir: dirname(out), audioExportExt: chosenExt })
+    const job: ExportJob = { ...this.fileExportJob('audio', source, req, out), tracks: req.tracks }
+    this.queueExport(job, source)
+    return { ok: true, job: { ...job } }
+  }
+
+  /**
+   * The selection as an animated GIF, at the width and frame rate asked for,
+   * to a file of the user's choosing — the same dance as `exportAudio`. The
+   * export does not index the GIF; one saved into a watched folder is picked
+   * up by the watcher exactly as a screenshot dropped there would be.
+   */
+  async exportGif(
+    req: GifExportRequest,
+    pick: (defaultPath: string) => Promise<string | null>,
+  ): Promise<ActionResult & { job?: ExportJob; cancelled?: boolean }> {
+    if (!ffmpegAvailable()) return { ok: false, error: 'ffmpeg is not available in this build.' }
+    const source = this.store.data.clips[req.id]
+    const invalid = validateGifExportRequest(req, source)
+    if (invalid || !source) return { ok: false, error: invalid ?? 'Clip not found.' }
+    if (!existsSync(source.path))
+      return { ok: false, error: 'The source file is no longer on disk.' }
+
+    const suggested = this.suggestedExportDir(this.settings.gifExportDir, source.game)
+    const chosen = await pick(join(suggested, this.exportBase(req.name) + '.gif'))
+    if (chosen === null) return { ok: true, cancelled: true }
+
+    const out = normalize(chosen)
+    if (extname(out).toLowerCase() !== '.gif')
+      return { ok: false, error: 'The file has to end in .gif.' }
+    const problem = this.checkExportTarget(out)
+    if (problem) return { ok: false, error: problem }
+
+    this.setSettings({ gifExportDir: dirname(out) })
     const job: ExportJob = {
+      ...this.fileExportJob('gif', source, req, out),
+      gif: { width: req.width, fps: req.fps },
+    }
+    this.queueExport(job, source)
+    return { ok: true, job: { ...job } }
+  }
+
+  /** The name the save dialog opens with: what the editor typed, made safe, else a stand-in. */
+  private exportBase(name: string): string {
+    return sanitizeName(name).name ?? 'Clip'
+  }
+
+  /**
+   * Where the save dialog for an export to a file opens: the folder the last
+   * one went to, else the game's folder under the clips root — the first of
+   * these that exists, since the game's folder is only there once a clip has
+   * been exported for it, and a remembered folder can be unplugged.
+   */
+  private suggestedExportDir(remembered: string, game: string): string {
+    const root = this.clipsRoot()
+    const gameDir = join(root, safeGameDir(game))
+    return (
+      [remembered, gameDir, root, dirname(root)].filter(Boolean).find((d) => existsSync(d)) ??
+      gameDir
+    )
+  }
+
+  /** Why the path the dialog came back with will not do, or null when it will. */
+  private checkExportTarget(out: string): string | null {
+    if (!basename(out, extname(out)).trim()) return 'Name cannot be empty.'
+    const dir = dirname(out)
+    if (!existsSync(dir)) return `${dir} does not exist.`
+    if ([...this.exportTargets.values()].some((p) => p.toLowerCase() === out.toLowerCase()))
+      return 'Another export is already writing that file.'
+    if (this.store.data.clips[clipId(out)]) return 'That file is in the library. Pick another name.'
+    return null
+  }
+
+  /** A queued job for an export to `out`, a file the user picked, rather than into the clips folder. */
+  private fileExportJob(
+    kind: ExportKind,
+    source: Clip,
+    req: Pick<ExportRequest, 'start' | 'end'>,
+    out: string,
+  ): ExportJob {
+    return {
       id: randomUUID().slice(0, 8),
-      kind: 'audio',
+      kind,
       sourceId: source.id,
       sourceThumb: source.thumb,
       game: source.game,
-      name,
-      ext,
+      name: basename(out, extname(out)),
+      ext: extname(out).toLowerCase(),
       path: out,
       start: Math.max(0, req.start),
       end: Math.min(req.end, source.duration),
       muted: false,
-      tracks: req.tracks,
       state: 'queued',
       progress: 0,
       createdAtMs: Date.now(),
     }
-    this.queueExport(job, source)
-    return { ok: true, job: { ...job } }
   }
 
   private queueExport(job: ExportJob, source: Clip): void {
@@ -1069,28 +1135,33 @@ export class Library {
     const out = job.path
     // `~` names are invisible to the scanner and the watcher, so a half-written
     // export can never be indexed; it is renamed into place once ffmpeg is done.
-    // An audio export overwrites whatever the user said it could in the save
-    // dialog, and the rename is what does it, all at once.
+    // An export to a file the user picked overwrites whatever the save dialog
+    // said it could, and the rename is what does it, all at once.
     const tmp = join(dirname(out), '~' + job.name + job.ext)
+    // A GIF's palette, handed from its first pass to its second; '' otherwise.
+    const palette = job.kind === 'gif' ? join(dirname(out), `~${job.name}.palette.png`) : ''
     job.state = 'running'
     this.scheduleExportsEmit(true)
     const abort = new AbortController()
     this.exportAbort = abort
     try {
-      const { args, written } = await this.planExport(job, source, tmp)
-      const { code, stderrTail } = await runLong(FFMPEG, args, {
-        stallMs: EXPORT_STALL_MS,
-        maxMs: EXPORT_MAX_MS,
-        signal: abort.signal,
-        onLine: (line) => {
-          const t = parseProgressLine(line)
-          if (t === null || written <= 0) return
-          job.progress = Math.min(1, t / written)
-          this.scheduleExportsEmit()
-        },
-      })
-      if (abort.signal.aborted) throw new Error('Export cancelled.')
-      if (code !== 0) throw new Error(stderrTail || `ffmpeg exited with code ${code}`)
+      const passes = await this.planExport(job, source, tmp, palette)
+      for (const [i, pass] of passes.entries()) {
+        const { code, stderrTail } = await runLong(FFMPEG, pass.args, {
+          stallMs: EXPORT_STALL_MS,
+          maxMs: EXPORT_MAX_MS,
+          signal: abort.signal,
+          onLine: (line) => {
+            const t = parseProgressLine(line)
+            if (t === null || pass.written <= 0) return
+            // Each pass is an equal share of the bar.
+            job.progress = Math.min(1, (i + Math.min(1, t / pass.written)) / passes.length)
+            this.scheduleExportsEmit()
+          },
+        })
+        if (abort.signal.aborted) throw new Error('Export cancelled.')
+        if (code !== 0) throw new Error(stderrTail || `ffmpeg exited with code ${code}`)
+      }
       await fsRename(tmp, out)
       if (job.kind === 'clip') job.clipId = await this.indexExport(job, source)
       job.progress = 1
@@ -1105,6 +1176,8 @@ export class Library {
         job.error = (err as Error).message
       }
     } finally {
+      // The palette has served its pass, or never will; only ever our own file.
+      if (palette) await unlink(palette).catch(() => undefined)
       this.exportAbort = null
       this.exportTargets.delete(job.id)
       this.scheduleExportsEmit(true)
@@ -1129,15 +1202,31 @@ export class Library {
   }
 
   /**
-   * The ffmpeg invocation for a job writing to `tmp`, and the seconds of output
-   * it will produce — what progress is measured against, which for a clip is
+   * The ffmpeg runs for a job writing to `tmp`, in order — one for a clip or
+   * a sound, two for a GIF — each with the seconds of output it will produce:
+   * what its share of the progress is measured against, which for a clip is
    * not quite the selection (see the seek below).
    */
   private async planExport(
     job: ExportJob,
     source: Clip,
     tmp: string,
-  ): Promise<{ args: string[]; written: number }> {
+    palette: string,
+  ): Promise<Array<{ args: string[]; written: number }>> {
+    const span = job.end - job.start
+    if (job.kind === 'gif') {
+      const plan: GifExportPlan = {
+        src: source.path,
+        out: tmp,
+        palette,
+        start: job.start,
+        end: job.end,
+        width: job.gif?.width ?? DEFAULT_SETTINGS.gifWidth,
+        fps: job.gif?.fps ?? DEFAULT_SETTINGS.gifFps,
+        hdr: source.hdr,
+      }
+      return buildGifExportArgs(plan).map((args) => ({ args, written: span }))
+    }
     if (job.kind === 'audio') {
       const plan: AudioExportPlan = {
         src: source.path,
@@ -1148,7 +1237,7 @@ export class Library {
         codecs: source.audioTracks.map((t) => t.codec),
         srcExt: source.ext,
       }
-      return { args: buildAudioExportArgs(plan), written: job.end - job.start }
+      return [{ args: buildAudioExportArgs(plan), written: span }]
     }
     const plan: ExportPlan = {
       src: source.path,
@@ -1168,7 +1257,7 @@ export class Library {
     if (mixesAudio(plan)) plan.seek = (await keyframeBefore(source.path, job.start)) ?? undefined
     // What ffmpeg will actually write, which that seek makes a little longer
     // than the selection the user asked for.
-    return { args: buildExportArgs(plan), written: job.end - (plan.seek ?? job.start) }
+    return [{ args: buildExportArgs(plan), written: job.end - (plan.seek ?? job.start) }]
   }
 
   /** The finished clip export joins the index, ahead of the preview backlog. Returns its clip id. */

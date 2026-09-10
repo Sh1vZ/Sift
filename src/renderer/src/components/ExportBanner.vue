@@ -17,7 +17,9 @@ const props = defineProps<{ job: ExportJob }>()
 
 const pct = computed(() => Math.round(props.job.progress * 100))
 const live = computed(() => props.job.state === 'queued' || props.job.state === 'running')
-const audio = computed(() => props.job.kind === 'audio')
+/** A sound or a GIF: a file the user placed, not a clip in the library. */
+const toFile = computed(() => props.job.kind !== 'clip')
+const noun = computed(() => (props.job.kind === 'gif' ? 'GIF' : 'Audio'))
 const file = computed(() => `${props.job.name}${props.job.ext}`)
 
 // Every state spelled out on purpose: a `default` arm would render the next
@@ -29,7 +31,7 @@ const title = computed(() => {
     case 'running':
       return `Exporting ${file.value} · ${pct.value}%`
     case 'done':
-      return audio.value ? 'Audio exported' : 'Clip exported'
+      return toFile.value ? `${noun.value} exported` : 'Clip exported'
     case 'failed':
       return 'Export failed'
     case 'cancelled':
@@ -43,12 +45,18 @@ const detail = computed(() => {
     case 'queued':
       return 'Another export is ahead of this one.'
     case 'running':
-      return audio.value
-        ? 'Audio only — the recording itself is never touched.'
-        : 'Stream copy — the recording itself is never touched.'
+      switch (j.kind) {
+        case 'clip':
+          return 'Stream copy — the recording itself is never touched.'
+        case 'audio':
+          return 'Audio only — the recording itself is never touched.'
+        case 'gif':
+          return 'Two passes: a palette, then the frames. The recording itself is never touched.'
+      }
+    // eslint-disable-next-line no-fallthrough -- every kind returns above; the switch is exhaustive
     case 'done':
       // Where it went matters for a file saved outside the library.
-      return audio.value ? `${file.value} · ${dirname(j.path)}` : `${file.value} · ${j.game}`
+      return toFile.value ? `${file.value} · ${dirname(j.path)}` : `${file.value} · ${j.game}`
     case 'failed':
       return j.error || 'ffmpeg reported an error.'
     case 'cancelled':
@@ -99,7 +107,7 @@ function view(): void {
       @click="cancelExport(job.id)"
     />
     <UButton
-      v-else-if="job.state === 'done' && audio"
+      v-else-if="job.state === 'done' && toFile"
       icon="i-lucide-folder-open"
       label="Show in Explorer"
       color="primary"

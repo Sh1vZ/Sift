@@ -3,10 +3,16 @@ import { readFile } from 'node:fs/promises'
 import { basename } from 'node:path'
 import {
   AUDIO_EXPORT_FORMATS,
+  DEFAULT_SETTINGS,
+  GIF_FPS,
+  GIF_WIDTHS,
   THEME_IDS,
   type AudioExportExt,
   type AudioExportRequest,
   type ExportRequest,
+  type GifExportRequest,
+  type GifFps,
+  type GifWidth,
   type Settings,
 } from '@shared/types'
 import { YOUTUBE_PRIVACIES, type UploadRequest, type YouTubePrivacy } from '@shared/youtube'
@@ -17,6 +23,8 @@ import type { YouTube } from './lib/youtube'
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : '')
 const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : NaN)
+const isGifWidth = (v: unknown): v is GifWidth => (GIF_WIDTHS as readonly unknown[]).includes(v)
+const isGifFps = (v: unknown): v is GifFps => (GIF_FPS as readonly unknown[]).includes(v)
 const privacy = (v: unknown): YouTubePrivacy =>
   YOUTUBE_PRIVACIES.includes(v as YouTubePrivacy) ? (v as YouTubePrivacy) : 'private'
 /** A client secret file is a few hundred bytes; anything larger is not one. */
@@ -48,27 +56,31 @@ async function pickFolder(win: BrowserWindow | null, title: string): Promise<str
 }
 
 /**
- * Save dialog for an audio-only export. The file type picked there is the
- * format: Windows appends the selected type's extension to a bare name and
- * swaps it when the type changes. The format the last export used leads the
- * list, because the dialog opens on the first entry.
+ * Save dialog for an export that goes to a file of the user's choosing. The
+ * file type picked there is the format: Windows appends the selected type's
+ * extension to a bare name and swaps it when the type changes.
  */
-async function pickAudioFile(
+async function pickSaveFile(
   win: BrowserWindow | null,
+  title: string,
   defaultPath: string,
-  first: AudioExportExt,
+  filters: Electron.FileFilter[],
 ): Promise<string | null> {
-  const ordered = [...AUDIO_EXPORT_FORMATS].sort((a, b) =>
-    a.ext === first ? -1 : b.ext === first ? 1 : 0,
-  )
   const opts: Electron.SaveDialogOptions = {
-    title: 'Save audio as',
+    title,
     defaultPath,
-    filters: ordered.map((f) => ({ name: f.label, extensions: [f.ext.slice(1)] })),
+    filters,
     properties: ['showOverwriteConfirmation', 'dontAddToRecent'],
   }
   const result = win ? await dialog.showSaveDialog(win, opts) : await dialog.showSaveDialog(opts)
   return result.canceled || !result.filePath ? null : result.filePath
+}
+
+/** The audio formats, the one the last export used first: the dialog opens on the first entry. */
+function audioFilters(first: AudioExportExt): Electron.FileFilter[] {
+  return [...AUDIO_EXPORT_FORMATS]
+    .sort((a, b) => (a.ext === first ? -1 : b.ext === first ? 1 : 0))
+    .map((f) => ({ name: f.label, extensions: [f.ext.slice(1)] }))
 }
 
 export function registerIpc(
@@ -111,6 +123,9 @@ export function registerIpc(
     if (p.audioExportDir !== undefined) p.audioExportDir = str(p.audioExportDir)
     if (p.audioExportExt !== undefined && !isAudioExportExt(str(p.audioExportExt)))
       delete p.audioExportExt
+    if (p.gifWidth !== undefined && !isGifWidth(p.gifWidth)) delete p.gifWidth
+    if (p.gifFps !== undefined && !isGifFps(p.gifFps)) delete p.gifFps
+    if (p.gifExportDir !== undefined) p.gifExportDir = str(p.gifExportDir)
     // -1 is "leave every track audible"; anything below that is not a track.
     // Capped both ways: these are labels for a handful of streams, not storage.
     if (p.audioTrackNames !== undefined)
@@ -182,7 +197,21 @@ export function registerIpc(
       tracks: trackList(r.tracks),
     }
     return library.exportAudio(req, (defaultPath, ext) =>
-      pickAudioFile(getWindow(), defaultPath, ext),
+      pickSaveFile(getWindow(), 'Save audio as', defaultPath, audioFilters(ext)),
+    )
+  })
+  ipcMain.handle('clip:export-gif', (_e, raw) => {
+    const r = (raw ?? {}) as Record<string, unknown>
+    const req: GifExportRequest = {
+      id: str(r.id),
+      name: str(r.name),
+      start: num(r.start),
+      end: num(r.end),
+      width: isGifWidth(r.width) ? r.width : DEFAULT_SETTINGS.gifWidth,
+      fps: isGifFps(r.fps) ? r.fps : DEFAULT_SETTINGS.gifFps,
+    }
+    return library.exportGif(req, (defaultPath) =>
+      pickSaveFile(getWindow(), 'Save GIF as', defaultPath, [{ name: 'GIF', extensions: ['gif'] }]),
     )
   })
 

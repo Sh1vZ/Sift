@@ -139,10 +139,10 @@ export type ExportState = 'queued' | 'running' | 'done' | 'failed' | 'cancelled'
 
 /**
  * A trimmed copy of the recording into the clips folder, indexed as a clip of
- * its own; or its audio alone, to a file the user picked, which the library
- * never indexes.
+ * its own; or its audio alone, or an animated GIF of it, to a file the user
+ * picked, which the export itself never indexes.
  */
-export type ExportKind = 'clip' | 'audio'
+export type ExportKind = 'clip' | 'audio' | 'gif'
 
 /**
  * Containers an audio-only export can be saved as: the file types the save
@@ -157,6 +157,19 @@ export const AUDIO_EXPORT_FORMATS = [
 ] as const
 
 export type AudioExportExt = (typeof AUDIO_EXPORT_FORMATS)[number]['ext']
+
+/** Widths an animated GIF is scaled to; the GIF menu offers these. A source narrower than the pick keeps its own width. */
+export const GIF_WIDTHS = [320, 480, 640, 800] as const
+export type GifWidth = (typeof GIF_WIDTHS)[number]
+/** Frame rates the GIF menu offers. */
+export const GIF_FPS = [10, 15, 20, 25] as const
+export type GifFps = (typeof GIF_FPS)[number]
+/**
+ * Longest selection a GIF is cut from. A GIF is for a moment, not a clip:
+ * past this the file runs to tens of megabytes and the two decode passes to
+ * minutes.
+ */
+export const MAX_GIF_S = 30
 
 /** What the editor asks for. Validated again in main; never trusted as-is. */
 export interface ExportRequest {
@@ -180,6 +193,12 @@ export interface ExportRequest {
  */
 export type AudioExportRequest = Omit<ExportRequest, 'muted'>
 
+/** The selection as an animated GIF, scaled and rated as asked; where it goes is picked in main's save dialog. */
+export interface GifExportRequest extends Omit<ExportRequest, 'muted' | 'tracks'> {
+  width: GifWidth
+  fps: GifFps
+}
+
 export interface ExportJob {
   id: string
   kind: ExportKind
@@ -197,6 +216,8 @@ export interface ExportJob {
   muted: boolean
   /** Audio tracks the export keeps; absent keeps every one. */
   tracks?: number[]
+  /** GIF only: the width it is scaled to and its frame rate. */
+  gif?: { width: number; fps: number }
   state: ExportState
   /** 0..1 */
   progress: number
@@ -353,8 +374,14 @@ export interface Settings {
    * folder. Never surfaced in the UI.
    */
   audioExportDir: string
-  /** Internal: the file type the last audio-only export used; the dialog offers it first. Never surfaced in the UI. */
+  /** The file type an audio-only export gets; the trim row's format menu sets it, and the save dialog opens on it. */
   audioExportExt: AudioExportExt
+  /** Width an exported GIF is scaled to (one of `GIF_WIDTHS`); the GIF menu in the trim bar sets it. */
+  gifWidth: GifWidth
+  /** Frame rate of an exported GIF (one of `GIF_FPS`); set from the same menu. */
+  gifFps: GifFps
+  /** Internal: where the last GIF was saved, as `audioExportDir` is for audio. Never surfaced in the UI. */
+  gifExportDir: string
 }
 
 export interface ScanState {
@@ -613,4 +640,7 @@ export const DEFAULT_SETTINGS: Settings = {
   dismissedGameMerges: [],
   audioExportDir: '',
   audioExportExt: '.mp3',
+  gifWidth: 480,
+  gifFps: 15,
+  gifExportDir: '',
 }
