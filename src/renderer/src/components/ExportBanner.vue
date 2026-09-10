@@ -2,9 +2,10 @@
 import { computed } from 'vue'
 import type { ExportJob } from '@shared/types'
 import Icon from './Icon.vue'
-import { cancelExport, dismissExport } from '@/composables/useExports'
+import { cancelExport, dismissExport, revealExport } from '@/composables/useExports'
 import { getClip } from '@/composables/useLibrary'
 import { openResult } from '@/composables/useSearch'
+import { dirname } from '@/utils/format'
 
 /**
  * An export of the open recording, laid over the top edge of the player from
@@ -16,6 +17,7 @@ const props = defineProps<{ job: ExportJob }>()
 
 const pct = computed(() => Math.round(props.job.progress * 100))
 const live = computed(() => props.job.state === 'queued' || props.job.state === 'running')
+const audio = computed(() => props.job.kind === 'audio')
 const file = computed(() => `${props.job.name}${props.job.ext}`)
 
 // Every state spelled out on purpose: a `default` arm would render the next
@@ -27,7 +29,7 @@ const title = computed(() => {
     case 'running':
       return `Exporting ${file.value} · ${pct.value}%`
     case 'done':
-      return 'Clip exported'
+      return audio.value ? 'Audio exported' : 'Clip exported'
     case 'failed':
       return 'Export failed'
     case 'cancelled':
@@ -41,9 +43,12 @@ const detail = computed(() => {
     case 'queued':
       return 'Another export is ahead of this one.'
     case 'running':
-      return 'Stream copy — the recording itself is never touched.'
+      return audio.value
+        ? 'Audio only — the recording itself is never touched.'
+        : 'Stream copy — the recording itself is never touched.'
     case 'done':
-      return `${file.value} · ${j.game}`
+      // Where it went matters for a file saved outside the library.
+      return audio.value ? `${file.value} · ${dirname(j.path)}` : `${file.value} · ${j.game}`
     case 'failed':
       return j.error || 'ffmpeg reported an error.'
     case 'cancelled':
@@ -92,6 +97,15 @@ function view(): void {
       variant="subtle"
       size="sm"
       @click="cancelExport(job.id)"
+    />
+    <UButton
+      v-else-if="job.state === 'done' && audio"
+      icon="i-lucide-folder-open"
+      label="Show in Explorer"
+      color="primary"
+      variant="subtle"
+      size="sm"
+      @click="revealExport(job)"
     />
     <UButton
       v-else-if="job.state === 'done' && job.clipId"

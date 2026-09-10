@@ -1,5 +1,6 @@
 import { computed, ref } from 'vue'
-import type { ExportJob, ExportRequest, ExportState } from '@shared/types'
+import type { AudioExportRequest, ExportJob, ExportRequest, ExportState } from '@shared/types'
+import { historyRecords } from './useActivityHistory'
 import { alertError } from './useDialogs'
 import { getClip, goClips } from './useLibrary'
 import { closePlayer } from './usePlayer'
@@ -37,7 +38,12 @@ function apply(list: ExportJob[]): void {
   for (const j of list) {
     const prev = known.get(j.id)
     if (!prev || prev === j.state) continue
-    if (j.state === 'done') {
+    if (j.state === 'done' && j.kind === 'audio') {
+      toast('success', 'Audio exported', j.name + j.ext, {
+        label: 'Show in Explorer',
+        onClick: () => void revealExport(j),
+      })
+    } else if (j.state === 'done') {
       toast('success', 'Clip exported', j.name + j.ext, {
         label: 'View clip',
         // Looked up when clicked, not now: the clip lands in the index a
@@ -85,6 +91,41 @@ export async function exportClip(req: ExportRequest): Promise<ExportJob | null> 
     return null
   }
   return res.job
+}
+
+/**
+ * The selection's audio alone. Main puts up the save dialog; a dismissed one
+ * resolves null with nothing to say, exactly like a refused request after its
+ * alert, so the caller stays on the trim either way.
+ */
+export async function exportAudio(req: AudioExportRequest): Promise<ExportJob | null> {
+  const res = await api.clips.exportAudio(req)
+  if (res.cancelled) return null
+  if (!res.ok || !res.job) {
+    void alertError({
+      title: 'Could not start the export',
+      message:
+        'The export never joined the queue, so nothing is being written. The trim is still on screen — close this and try again.',
+      detail: res.error,
+    })
+    return null
+  }
+  return res.job
+}
+
+/**
+ * Explorer on an exported file. Main knows the job only while it lingers in
+ * the live list (ten seconds past done); a toast held open longer than that
+ * falls back to the History row, which keeps the path for good.
+ */
+export async function revealExport(job: ExportJob): Promise<void> {
+  const res = await api.exports.reveal(job.id)
+  if (res.ok) return
+  const record = historyRecords.value.find(
+    (r) => r.kind === 'export' && r.status === 'done' && r.path === job.path,
+  )
+  const fallback = record ? await api.activity.reveal(record.id) : res
+  if (!fallback.ok) toast('error', 'Could not show the file', fallback.error)
 }
 
 export async function cancelExport(id: string): Promise<void> {

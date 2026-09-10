@@ -10,6 +10,7 @@ import type {
 import type {
   ActionResult,
   AppStats,
+  AudioExportRequest,
   Clip,
   EventMap,
   EventName,
@@ -72,6 +73,15 @@ export interface Api {
     copyFile(id: string): Promise<ActionResult>
     /** Queues a stream-copy export; progress arrives through `exports:changed`. */
     export(req: ExportRequest): Promise<ActionResult & { job?: ExportJob }>
+    /**
+     * The selection's audio alone, to a file the user picks in a save dialog
+     * whose file type sets the format (see `AUDIO_EXPORT_FORMATS`). Resolves
+     * `cancelled` when the dialog was dismissed; otherwise the job runs and
+     * reports through `exports:changed` like a clip export.
+     */
+    exportAudio(
+      req: AudioExportRequest,
+    ): Promise<ActionResult & { job?: ExportJob; cancelled?: boolean }>
     /** Opens the clip's YouTube page in the browser. */
     openYouTube(id: string): Promise<ActionResult>
     /** Puts `https://youtu.be/<id>` on the system clipboard. */
@@ -103,9 +113,13 @@ export interface Api {
     cancel(id: string): Promise<ActionResult>
     /** Drops a finished/failed job from the list ahead of its automatic pruning. */
     dismiss(id: string): Promise<void>
+    /** Explorer on a finished job's file — while the job is still in the list. */
+    reveal(id: string): Promise<ActionResult>
   }
   /** The History tab: finished work main kept. The list itself arrives in the snapshot and on `activity:changed`. */
   activity: {
+    /** Explorer on the file a row is about: how an audio export, which has no clip to open, is found again. */
+    reveal(id: string): Promise<ActionResult>
     /** Forgets one row. */
     remove(id: string): Promise<void>
     /** Forgets every row. */

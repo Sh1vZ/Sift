@@ -137,6 +137,27 @@ export interface WarmupClip {
 
 export type ExportState = 'queued' | 'running' | 'done' | 'failed' | 'cancelled'
 
+/**
+ * A trimmed copy of the recording into the clips folder, indexed as a clip of
+ * its own; or its audio alone, to a file the user picked, which the library
+ * never indexes.
+ */
+export type ExportKind = 'clip' | 'audio'
+
+/**
+ * Containers an audio-only export can be saved as: the file types the save
+ * dialog offers, in this order, with the label each shows there. The chosen
+ * type decides the encoder (see `buildAudioExportArgs`).
+ */
+export const AUDIO_EXPORT_FORMATS = [
+  { ext: '.mp3', label: 'MP3' },
+  { ext: '.m4a', label: 'M4A (AAC)' },
+  { ext: '.wav', label: 'WAV' },
+  { ext: '.ogg', label: 'OGG (Opus)' },
+] as const
+
+export type AudioExportExt = (typeof AUDIO_EXPORT_FORMATS)[number]['ext']
+
 /** What the editor asks for. Validated again in main; never trusted as-is. */
 export interface ExportRequest {
   /** Source clip id. */
@@ -153,8 +174,15 @@ export interface ExportRequest {
   tracks?: number[]
 }
 
+/**
+ * The selection's audio alone. Where it goes is chosen in main's save dialog,
+ * not here, so there is no mute: the request is for the sound.
+ */
+export type AudioExportRequest = Omit<ExportRequest, 'muted'>
+
 export interface ExportJob {
   id: string
+  kind: ExportKind
   sourceId: string
   /** Poster of the source, so the progress card has a picture from the first frame. */
   sourceThumb: string
@@ -162,6 +190,8 @@ export interface ExportJob {
   /** Final file name without extension, after collision suffixing. */
   name: string
   ext: string
+  /** Absolute path the file is written to: under the clips folder for a clip, wherever the user chose for audio. */
+  path: string
   start: number
   end: number
   muted: boolean
@@ -317,6 +347,14 @@ export interface Settings {
    * game, so the merge hint stays gone across launches. Never surfaced in the UI.
    */
   dismissedGameMerges: string[]
+  /**
+   * Internal: where the last audio-only export was saved, so the save dialog
+   * opens there next time; '' (or a folder since gone) opens in the clips
+   * folder. Never surfaced in the UI.
+   */
+  audioExportDir: string
+  /** Internal: the file type the last audio-only export used; the dialog offers it first. Never surfaced in the UI. */
+  audioExportExt: AudioExportExt
 }
 
 export interface ScanState {
@@ -573,4 +611,6 @@ export const DEFAULT_SETTINGS: Settings = {
   trayHintShown: false,
   lastSeenVersion: '',
   dismissedGameMerges: [],
+  audioExportDir: '',
+  audioExportExt: '.mp3',
 }

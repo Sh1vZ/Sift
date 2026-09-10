@@ -20,13 +20,17 @@ import {
   type LibraryFolder,
 } from '@shared/types'
 import {
+  buildAudioExportArgs,
   buildExportArgs,
+  copiesAudio,
   exportExt,
+  isAudioExportExt,
   mixesAudio,
   safeGameDir,
   sanitizeName,
   uniqueName,
   parseProgressLine,
+  validateAudioExportRequest,
 } from '../src/main/lib/exports'
 import { Store } from '../src/main/lib/store'
 
@@ -516,6 +520,122 @@ function exportHelperCases(): void {
       buildExportArgs({ ...mixPlan, out: 'out.webm' }).indexOf('-c:a') + 1
     ] === 'libopus',
     'webm mixes to opus',
+  )
+
+  // ---------------------------------------------------------- audio only
+  check(
+    isAudioExportExt('.mp3') && isAudioExportExt('.M4A') && !isAudioExportExt('.mp4'),
+    'isAudioExportExt knows the offered formats, whatever their case',
+  )
+  const withAudio: Clip = {
+    ...clip('src'),
+    duration: 30,
+    probeState: 'ok',
+    hasAudio: true,
+    audioTracks: [
+      {
+        index: 0,
+        streamIndex: 1,
+        codec: 'aac',
+        channels: 2,
+        title: '',
+        language: '',
+        isDefault: true,
+        offset: 0,
+      },
+      {
+        index: 1,
+        streamIndex: 2,
+        codec: 'aac',
+        channels: 1,
+        title: '',
+        language: '',
+        isDefault: false,
+        offset: 0,
+      },
+    ],
+  }
+  const audioReq = { id: 'src', name: 'Clip', start: 1, end: 4 }
+  check(
+    validateAudioExportRequest(audioReq, withAudio) === null,
+    'a sound export of a clip with audio is fine',
+  )
+  check(
+    validateAudioExportRequest(audioReq, { ...withAudio, hasAudio: false, audioTracks: [] }) !==
+      null,
+    'a silent clip has no audio to export',
+  )
+  check(
+    validateAudioExportRequest({ ...audioReq, tracks: [] }, withAudio) !== null &&
+      validateAudioExportRequest({ ...audioReq, tracks: [5] }, withAudio) !== null,
+    'every track muted, or only tracks the source lacks, is nothing to export',
+  )
+  check(
+    validateAudioExportRequest({ ...audioReq, start: 3.9 }, withAudio) !== null,
+    'the audio selection has the same minimum length',
+  )
+
+  const audioPlan = {
+    src: 'in.mp4',
+    out: '~out.mp3',
+    start: 1.5,
+    end: 4,
+    tracks: [0],
+    codecs: ['aac', 'aac'],
+    srcExt: '.mp4',
+  }
+  const mp3 = buildAudioExportArgs(audioPlan)
+  check(
+    mp3.indexOf('-ss') < mp3.indexOf('-i') && mp3[mp3.indexOf('-ss') + 1] === '1.500',
+    'audio export seeks to the in-point as an input option',
+  )
+  check(
+    mp3.includes('-vn') && mp3.includes('0:a:0') && !mp3.some((a) => a.startsWith('0:v')),
+    'audio export maps the one track and drops the video',
+  )
+  check(
+    mp3[mp3.indexOf('-c:a') + 1] === 'libmp3lame' && mp3.includes('-ac') && !mp3.includes('copy'),
+    'mp3 encodes to stereo',
+  )
+  check(
+    mp3[mp3.length - 1] === '~out.mp3' && !mp3.includes('-copypriorss'),
+    'mp3 writes to the output path',
+  )
+  const m4a = buildAudioExportArgs({ ...audioPlan, out: '~out.m4a' })
+  check(
+    copiesAudio({ ...audioPlan, out: '~out.m4a' }) &&
+      m4a[m4a.indexOf('-c:a') + 1] === 'copy' &&
+      m4a[m4a.indexOf('-copypriorss') + 1] === '0' &&
+      !m4a.includes('-bsf:a'),
+    'a lone AAC track into m4a is copied, cut at the in-point',
+  )
+  check(
+    buildAudioExportArgs({ ...audioPlan, out: '~out.m4a', srcExt: '.mkv' }).includes(
+      'aac_adtstoasc',
+    ),
+    'a copy out of Matroska rebuilds the AAC header',
+  )
+  const m4aOpus = buildAudioExportArgs({ ...audioPlan, out: '~out.m4a', codecs: ['opus'] })
+  check(
+    m4aOpus[m4aOpus.indexOf('-c:a') + 1] === 'aac' && !m4aOpus.includes('-copypriorss'),
+    'a non-AAC track into m4a is encoded',
+  )
+  const both = buildAudioExportArgs({ ...audioPlan, out: '~out.m4a', tracks: null })
+  const bothGraph = both[both.indexOf('-filter_complex') + 1] ?? ''
+  check(
+    bothGraph.includes('amix=inputs=2') &&
+      both.includes('[mix]') &&
+      both[both.indexOf('-c:a') + 1] === 'aac',
+    'several kept tracks are summed and encoded, never copied',
+  )
+  check(
+    buildAudioExportArgs({ ...audioPlan, out: '~out.wav' })[
+      buildAudioExportArgs({ ...audioPlan, out: '~out.wav' }).indexOf('-c:a') + 1
+    ] === 'pcm_s16le' &&
+      buildAudioExportArgs({ ...audioPlan, out: '~out.ogg' })[
+        buildAudioExportArgs({ ...audioPlan, out: '~out.ogg' }).indexOf('-c:a') + 1
+      ] === 'libopus',
+    'wav is PCM and ogg is Opus',
   )
 }
 

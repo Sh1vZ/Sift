@@ -59,7 +59,9 @@ import {
   source,
 } from '@/composables/usePlayer'
 import {
+  audioProblem,
   canExport,
+  canExportAudio,
   editing,
   enterEdit,
   exitEdit,
@@ -76,7 +78,8 @@ import {
   setIn,
   setOut,
   submit,
-  submitting,
+  submitAudio,
+  submittingKind,
 } from '@/composables/useEditor'
 import { exportJobs } from '@/composables/useExports'
 import { fadeOut, flipFrom, flipTo } from '@/composables/useMotion'
@@ -711,6 +714,11 @@ async function exportNow(): Promise<void> {
   await submit(clip.value)
 }
 
+async function exportAudioNow(): Promise<void> {
+  if (!canExportAudio.value) return
+  await submitAudio(clip.value)
+}
+
 function goToSource(): void {
   if (!openSource(clip.value))
     toast(
@@ -954,7 +962,7 @@ function onKey(e: KeyboardEvent): void {
       else handled = false
       break
     case 'Enter':
-      if (editing.value && e.ctrlKey) void exportNow()
+      if (editing.value && e.ctrlKey) void (e.shiftKey ? exportAudioNow() : exportNow())
       else handled = false
       break
     default:
@@ -1609,12 +1617,28 @@ onBeforeUnmount(() => {
             <p v-if="exportProblem" class="problem" role="status">{{ exportProblem }}</p>
             <div class="submit">
               <UButton label="Cancel trim" color="neutral" variant="ghost" @click="exitEdit" />
+              <!-- The audio's own problems live in the tooltip, not beside the
+                   button: a silent clip would otherwise show them the whole time. -->
+              <UTooltip
+                :text="audioProblem || 'Save the selection’s sound alone — MP3, M4A, WAV or OGG'"
+                :kbds="['Ctrl', 'Shift', 'Enter']"
+              >
+                <UButton
+                  icon="i-lucide-audio-lines"
+                  label="Export audio"
+                  color="neutral"
+                  variant="subtle"
+                  :loading="submittingKind === 'audio'"
+                  :disabled="!canExportAudio"
+                  @click="exportAudioNow"
+                />
+              </UTooltip>
               <UTooltip text="Export the selection" :kbds="['Ctrl', 'Enter']">
                 <UButton
                   icon="i-lucide-download"
                   label="Export"
                   color="primary"
-                  :loading="submitting"
+                  :loading="submittingKind === 'clip'"
                   :disabled="!canExport"
                   @click="exportNow"
                 />

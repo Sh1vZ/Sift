@@ -1,5 +1,5 @@
 import { ref } from 'vue'
-import type { ActivityRecord, Clip } from '@shared/types'
+import { AUDIO_EXPORT_FORMATS, type ActivityRecord, type Clip } from '@shared/types'
 import { youtubeUrl } from '@shared/youtube'
 import { confirm } from './useDialogs'
 import {
@@ -14,6 +14,7 @@ import {
 } from './useLibrary'
 import { openResult } from './useSearch'
 import { openSettings } from './useSettings'
+import { toast } from './useToasts'
 import { openUploadDialog } from './useUploads'
 import { openExternalUrl } from './useYouTube'
 
@@ -71,6 +72,12 @@ export function historyGone(r: ActivityRecord): boolean {
   return Boolean(r.clipId) && !getClip(r.clipId)
 }
 
+/** An audio-only export: a sound file, never a clip. Told by the title, which carries the extension. */
+function audioExport(r: ActivityRecord): boolean {
+  const title = r.title.toLowerCase()
+  return r.kind === 'export' && AUDIO_EXPORT_FORMATS.some((f) => title.endsWith(f.ext))
+}
+
 /** The past tense the second line opens with; failed rows say `<Verb> failed`. */
 function verb(kind: ActivityRecord['kind']): string {
   // Every arm is spelled out: a `default` would let a new kind render with no verb.
@@ -121,7 +128,7 @@ export function historyLine(r: ActivityRecord): string {
 export function historyIcon(r: ActivityRecord): string {
   switch (r.kind) {
     case 'export':
-      return 'i-lucide-scissors'
+      return audioExport(r) ? 'i-lucide-audio-lines' : 'i-lucide-scissors'
     case 'upload':
       return 'i-lucide-youtube'
     case 'copy-file':
@@ -180,12 +187,27 @@ export interface HistoryAction {
 }
 
 /** The buttons a row carries besides its remove. Clip-bound ones stay visible but disabled once the clip is gone. */
+/** Explorer on the file a row names: the route for an audio export, which has no clip to open. */
+export async function revealHistory(r: ActivityRecord): Promise<void> {
+  const res = await api.activity.reveal(r.id)
+  if (!res.ok) toast('error', 'Could not show the file', res.error)
+}
+
 export function historyActions(r: ActivityRecord): HistoryAction[] {
   const clip = historyClip(r)
   const gone = !clip
   switch (r.kind) {
     case 'export':
       if (r.status === 'failed') return []
+      // An audio export names no clip; main finds the file by the row.
+      if (!r.clipId && r.path)
+        return [
+          {
+            label: 'Show in Explorer',
+            icon: 'i-lucide-folder-open',
+            onSelect: () => void revealHistory(r),
+          },
+        ]
       return [
         {
           label: 'Show in Explorer',

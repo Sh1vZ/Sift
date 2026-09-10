@@ -4,6 +4,7 @@ import { constants as osConstants, setPriority } from 'node:os'
 import { basename, dirname, extname, join } from 'node:path'
 import { Worker } from 'node:worker_threads'
 import type { AudioTrack, Clip } from '@shared/types'
+import { ADTS_CONTAINERS } from './exports'
 import { jxrTuning } from './jxr'
 import jxrWorkerPath from './jxr.worker?modulePath'
 import { FFMPEG, FFPROBE, audioDir, cacheDir } from './paths'
@@ -86,8 +87,6 @@ const MAX_TRACK_OFFSET_S = 1
  * keyframe, the read only has to reach far enough to report it.
  */
 const KEYFRAME_WINDOW_S = 0.05
-/** Containers whose AAC needs its ASC rebuilt on the way into mp4. */
-const ADTS_CONTAINERS = new Set(['.mkv', '.ts', '.flv', '.avi', '.webm'])
 
 export interface ProbeResult {
   duration: number

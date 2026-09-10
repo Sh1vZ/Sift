@@ -8,6 +8,8 @@ import type { ChangelogRelease } from '@shared/changelog'
 import type {
   ActionResult,
   AppStats,
+  AudioExportExt,
+  AudioExportRequest,
   Clip,
   ClipPatch,
   EventMap,
@@ -29,14 +31,18 @@ import { copyFileToClipboard } from './clipboard'
 import { cleanTitle, clipId, deriveGame, parseRecordedAt, prettifyGame } from './clips'
 import {
   INVALID_NAME,
+  type AudioExportPlan,
   type ExportPlan,
+  buildAudioExportArgs,
   buildExportArgs,
   exportExt,
+  isAudioExportExt,
   mixesAudio,
   parseProgressLine,
   safeGameDir,
   sanitizeName,
   uniqueName,
+  validateAudioExportRequest,
   validateExportRequest,
 } from './exports'
 import {
@@ -922,11 +928,13 @@ export class Library {
     })
     const job: ExportJob = {
       id: randomUUID().slice(0, 8),
+      kind: 'clip',
       sourceId: source.id,
       sourceThumb: source.thumb,
       game: source.game,
       name,
       ext,
+      path: join(dir, name + ext),
       start: Math.max(0, req.start),
       end: Math.min(req.end, source.duration),
       muted: req.muted && source.hasAudio,
@@ -935,13 +943,104 @@ export class Library {
       progress: 0,
       createdAtMs: Date.now(),
     }
+    this.queueExport(job, source)
+    return { ok: true, job: { ...job } }
+  }
+
+  /**
+   * The selection's audio alone, to a file of the user's choosing. `pick` is
+   * the save dialog (the ipc layer supplies it): it is handed a suggested path
+   * — the folder of the last audio export, else the game's folder under the
+   * clips root — and the format that export used, and comes back with the
+   * chosen path or null. The dialog's file type decides the container; the
+   * extension is checked again here, since anything can be typed in that box.
+   * The file is not indexed: the library is of clips, and this is not one.
+   */
+  async exportAudio(
+    req: AudioExportRequest,
+    pick: (defaultPath: string, ext: AudioExportExt) => Promise<string | null>,
+  ): Promise<ActionResult & { job?: ExportJob; cancelled?: boolean }> {
+    if (!ffmpegAvailable()) return { ok: false, error: 'ffmpeg is not available in this build.' }
+    const source = this.store.data.clips[req.id]
+    const invalid = validateAudioExportRequest(req, source)
+    if (invalid || !source) return { ok: false, error: invalid ?? 'Clip not found.' }
+    if (!existsSync(source.path))
+      return { ok: false, error: 'The source file is no longer on disk.' }
+
+    // The first of these that exists; the game's folder is only there once a
+    // clip has been exported for it, and a remembered folder can be unplugged.
+    const root = this.clipsRoot()
+    const suggested =
+      [this.settings.audioExportDir, join(root, safeGameDir(source.game)), root, dirname(root)]
+        .filter(Boolean)
+        .find((d) => existsSync(d)) ?? join(root, safeGameDir(source.game))
+    const base = sanitizeName(req.name).name ?? 'Clip'
+    const chosen = await pick(
+      join(suggested, base + this.settings.audioExportExt),
+      this.settings.audioExportExt,
+    )
+    if (chosen === null) return { ok: true, cancelled: true }
+
+    const out = normalize(chosen)
+    const ext = extname(out).toLowerCase()
+    if (!isAudioExportExt(ext))
+      return { ok: false, error: 'Pick one of the audio formats the dialog offers.' }
+    const name = basename(out, extname(out))
+    if (!name.trim()) return { ok: false, error: 'Name cannot be empty.' }
+    const dir = dirname(out)
+    if (!existsSync(dir)) return { ok: false, error: `${dir} does not exist.` }
+    if ([...this.exportTargets.values()].some((p) => p.toLowerCase() === out.toLowerCase()))
+      return { ok: false, error: 'Another export is already writing that file.' }
+    if (this.store.data.clips[clipId(out)])
+      return { ok: false, error: 'That file is in the library. Pick another name.' }
+
+    this.setSettings({ audioExportDir: dir, audioExportExt: ext })
+    const job: ExportJob = {
+      id: randomUUID().slice(0, 8),
+      kind: 'audio',
+      sourceId: source.id,
+      sourceThumb: source.thumb,
+      game: source.game,
+      name,
+      ext,
+      path: out,
+      start: Math.max(0, req.start),
+      end: Math.min(req.end, source.duration),
+      muted: false,
+      tracks: req.tracks,
+      state: 'queued',
+      progress: 0,
+      createdAtMs: Date.now(),
+    }
+    this.queueExport(job, source)
+    return { ok: true, job: { ...job } }
+  }
+
+  private queueExport(job: ExportJob, source: Clip): void {
     this.exports.set(job.id, job)
-    this.exportTargets.set(job.id, join(dir, name + ext))
+    this.exportTargets.set(job.id, job.path)
     this.scheduleExportsEmit(true)
     this.exportChain = this.exportChain
-      .then(() => this.runExportJob(job, source, dir))
+      .then(() => this.runExportJob(job, source))
       .catch(() => undefined)
-    return { ok: true, job: { ...job } }
+  }
+
+  /** Explorer on a finished job's file. Only while the job is in the list; `revealActivity` covers it after that. */
+  revealExport(id: string): ActionResult {
+    const job = this.exports.get(id)
+    if (job?.state !== 'done') return { ok: false, error: 'Export not found.' }
+    if (!existsSync(job.path)) return { ok: false, error: 'The file is no longer there.' }
+    shell.showItemInFolder(job.path)
+    return { ok: true }
+  }
+
+  /** Explorer on the file a history row is about; the path is main's own, recorded when the work finished. */
+  revealActivity(id: string): ActionResult {
+    const record = this.activity.find(id)
+    if (!record?.path) return { ok: false, error: 'Nothing to show for that row.' }
+    if (!existsSync(record.path)) return { ok: false, error: 'The file is no longer there.' }
+    shell.showItemInFolder(record.path)
+    return { ok: true }
   }
 
   cancelExport(id: string): ActionResult {
@@ -965,38 +1064,21 @@ export class Library {
     this.scheduleExportsEmit(true)
   }
 
-  private async runExportJob(job: ExportJob, source: Clip, dir: string): Promise<void> {
+  private async runExportJob(job: ExportJob, source: Clip): Promise<void> {
     if (job.state !== 'queued') return
-    const out = join(dir, job.name + job.ext)
+    const out = job.path
     // `~` names are invisible to the scanner and the watcher, so a half-written
     // export can never be indexed; it is renamed into place once ffmpeg is done.
-    const tmp = join(dir, '~' + job.name + job.ext)
+    // An audio export overwrites whatever the user said it could in the save
+    // dialog, and the rename is what does it, all at once.
+    const tmp = join(dirname(out), '~' + job.name + job.ext)
     job.state = 'running'
     this.scheduleExportsEmit(true)
     const abort = new AbortController()
     this.exportAbort = abort
-    const span = job.end - job.start
     try {
-      const plan: ExportPlan = {
-        src: source.path,
-        out: tmp,
-        start: job.start,
-        end: job.end,
-        muted: job.muted,
-        tracks: job.tracks ?? null,
-        audioCount: source.audioTracks.length,
-        vcodec: source.vcodec,
-      }
-      // Only a mix is decoded, and only a decoded stream starts exactly where
-      // it was asked to — the copied video starts at the keyframe before that.
-      // Seeking both there keeps the run-up to the in-point from arriving
-      // silent. A source that will not give up its keyframes simply exports
-      // from the in-point, which costs that run-up its sound and nothing else.
-      if (mixesAudio(plan)) plan.seek = (await keyframeBefore(source.path, job.start)) ?? undefined
-      // What ffmpeg will actually write, which that seek makes a little longer
-      // than the selection; `span` is what the user asked for.
-      const written = job.end - (plan.seek ?? job.start)
-      const { code, stderrTail } = await runLong(FFMPEG, buildExportArgs(plan), {
+      const { args, written } = await this.planExport(job, source, tmp)
+      const { code, stderrTail } = await runLong(FFMPEG, args, {
         stallMs: EXPORT_STALL_MS,
         maxMs: EXPORT_MAX_MS,
         signal: abort.signal,
@@ -1010,77 +1092,9 @@ export class Library {
       if (abort.signal.aborted) throw new Error('Export cancelled.')
       if (code !== 0) throw new Error(stderrTail || `ffmpeg exited with code ${code}`)
       await fsRename(tmp, out)
-      const st = await stat(out)
-      const folder = this.clipsFolder()
-      if (!folder) throw new Error('The clips folder was removed during the export.')
-
-      // The directory the export landed in, not `job.game`: `safeGameDir` may
-      // have dropped a character a folder name cannot carry, and this is what a
-      // rescan of the clips folder would derive for the file.
-      const sourceGame = deriveGame(folder, out)
-
-      const clip: Clip = {
-        id: clipId(out),
-        path: out,
-        name: job.name,
-        title: cleanTitle(job.name, sourceGame),
-        ext: job.ext,
-        kind: 'video',
-        folderId: folder.id,
-        game: this.displayGame(sourceGame),
-        sourceGame,
-        size: st.size,
-        mtimeMs: st.mtimeMs,
-        recordedAtMs: source.recordedAtMs,
-        duration: span,
-        width: source.width,
-        height: source.height,
-        fps: source.fps,
-        vcodec: source.vcodec,
-        // A stream copy keeps the source's transfer; the probe confirms it.
-        hdr: source.hdr,
-        hasAudio: source.hasAudio && !job.muted && job.tracks?.length !== 0,
-        // Left for the probe: the export may have dropped tracks, so the
-        // source's list is not this file's list.
-        audioTracks: [],
-        thumb: '',
-        sprite: '',
-        spriteFrames: 0,
-        render: '',
-        probeState: 'pending',
-        sourceId: source.id,
-        trimStart: job.start,
-        trimEnd: job.end,
-        muted: job.muted,
-        createdAtMs: Date.now(),
-        youtubeId: '',
-        youtubeAccountId: '',
-        youtubeStage: '',
-        youtubeReason: '',
-        youtubeCheckedAtMs: 0,
-        youtubeWatchUntilMs: 0,
-        // A clip you just cut is neither starred nor watched yet.
-        favourite: false,
-        seenAtMs: 0,
-      }
-      const previous = this.store.data.clips[clip.id]
-      if (previous) void removeArtifacts({ ...previous, film: filmName(previous) })
-      this.store.data.clips[clip.id] = clip
-      this.store.upsertClip(clip)
-      this.added.set(clip.id, clip)
-      // Sent now, not on the timer: the done state and the history row that
-      // follow name this clip, and the renderer must already have it.
-      this.flushEvents()
-      // The user is waiting for this poster: ahead of the backlog.
-      this.enqueueWork(clip, true)
-      if (!previous) {
-        folder.clipCount++
-        this.store.upsertFolder(folder)
-        this.emitFolders()
-      }
+      if (job.kind === 'clip') job.clipId = await this.indexExport(job, source)
       job.progress = 1
       job.state = 'done'
-      job.clipId = clip.id
     } catch (err) {
       // Only ever our own partial file — never a user's clip.
       await unlink(tmp).catch(() => undefined)
@@ -1112,6 +1126,123 @@ export class Library {
         })
       }
     }
+  }
+
+  /**
+   * The ffmpeg invocation for a job writing to `tmp`, and the seconds of output
+   * it will produce — what progress is measured against, which for a clip is
+   * not quite the selection (see the seek below).
+   */
+  private async planExport(
+    job: ExportJob,
+    source: Clip,
+    tmp: string,
+  ): Promise<{ args: string[]; written: number }> {
+    if (job.kind === 'audio') {
+      const plan: AudioExportPlan = {
+        src: source.path,
+        out: tmp,
+        start: job.start,
+        end: job.end,
+        tracks: job.tracks ?? null,
+        codecs: source.audioTracks.map((t) => t.codec),
+        srcExt: source.ext,
+      }
+      return { args: buildAudioExportArgs(plan), written: job.end - job.start }
+    }
+    const plan: ExportPlan = {
+      src: source.path,
+      out: tmp,
+      start: job.start,
+      end: job.end,
+      muted: job.muted,
+      tracks: job.tracks ?? null,
+      audioCount: source.audioTracks.length,
+      vcodec: source.vcodec,
+    }
+    // Only a mix is decoded, and only a decoded stream starts exactly where
+    // it was asked to — the copied video starts at the keyframe before that.
+    // Seeking both there keeps the run-up to the in-point from arriving
+    // silent. A source that will not give up its keyframes simply exports
+    // from the in-point, which costs that run-up its sound and nothing else.
+    if (mixesAudio(plan)) plan.seek = (await keyframeBefore(source.path, job.start)) ?? undefined
+    // What ffmpeg will actually write, which that seek makes a little longer
+    // than the selection the user asked for.
+    return { args: buildExportArgs(plan), written: job.end - (plan.seek ?? job.start) }
+  }
+
+  /** The finished clip export joins the index, ahead of the preview backlog. Returns its clip id. */
+  private async indexExport(job: ExportJob, source: Clip): Promise<string> {
+    const out = job.path
+    const st = await stat(out)
+    const folder = this.clipsFolder()
+    if (!folder) throw new Error('The clips folder was removed during the export.')
+
+    // The directory the export landed in, not `job.game`: `safeGameDir` may
+    // have dropped a character a folder name cannot carry, and this is what a
+    // rescan of the clips folder would derive for the file.
+    const sourceGame = deriveGame(folder, out)
+
+    const clip: Clip = {
+      id: clipId(out),
+      path: out,
+      name: job.name,
+      title: cleanTitle(job.name, sourceGame),
+      ext: job.ext,
+      kind: 'video',
+      folderId: folder.id,
+      game: this.displayGame(sourceGame),
+      sourceGame,
+      size: st.size,
+      mtimeMs: st.mtimeMs,
+      recordedAtMs: source.recordedAtMs,
+      duration: job.end - job.start,
+      width: source.width,
+      height: source.height,
+      fps: source.fps,
+      vcodec: source.vcodec,
+      // A stream copy keeps the source's transfer; the probe confirms it.
+      hdr: source.hdr,
+      hasAudio: source.hasAudio && !job.muted && job.tracks?.length !== 0,
+      // Left for the probe: the export may have dropped tracks, so the
+      // source's list is not this file's list.
+      audioTracks: [],
+      thumb: '',
+      sprite: '',
+      spriteFrames: 0,
+      render: '',
+      probeState: 'pending',
+      sourceId: source.id,
+      trimStart: job.start,
+      trimEnd: job.end,
+      muted: job.muted,
+      createdAtMs: Date.now(),
+      youtubeId: '',
+      youtubeAccountId: '',
+      youtubeStage: '',
+      youtubeReason: '',
+      youtubeCheckedAtMs: 0,
+      youtubeWatchUntilMs: 0,
+      // A clip you just cut is neither starred nor watched yet.
+      favourite: false,
+      seenAtMs: 0,
+    }
+    const previous = this.store.data.clips[clip.id]
+    if (previous) void removeArtifacts({ ...previous, film: filmName(previous) })
+    this.store.data.clips[clip.id] = clip
+    this.store.upsertClip(clip)
+    this.added.set(clip.id, clip)
+    // Sent now, not on the timer: the done state and the history row that
+    // follow name this clip, and the renderer must already have it.
+    this.flushEvents()
+    // The user is waiting for this poster: ahead of the backlog.
+    this.enqueueWork(clip, true)
+    if (!previous) {
+      folder.clipCount++
+      this.store.upsertFolder(folder)
+      this.emitFolders()
+    }
+    return clip.id
   }
 
   private pruneLater(job: ExportJob): void {

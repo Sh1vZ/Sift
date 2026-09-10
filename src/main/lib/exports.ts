@@ -1,4 +1,11 @@
-import type { Clip, ExportRequest } from '@shared/types'
+import { extname } from 'node:path'
+import {
+  AUDIO_EXPORT_FORMATS,
+  type AudioExportExt,
+  type AudioExportRequest,
+  type Clip,
+  type ExportRequest,
+} from '@shared/types'
 
 /** Characters Windows refuses in a file or folder name (plus control characters). */
 export const INVALID_NAME = /[<>:"/\\|?*]|\p{Cc}/u
@@ -49,8 +56,24 @@ export function exportExt(sourceExt: string): string {
   }
 }
 
+/** Case-insensitive: the save dialog hands back whatever case the user typed. */
+export function isAudioExportExt(ext: string): ext is AudioExportExt {
+  const lower = ext.toLowerCase()
+  return AUDIO_EXPORT_FORMATS.some((f) => f.ext === lower)
+}
+
+/**
+ * Source containers that keep AAC in a shape the mp4 muxer cannot take as-is:
+ * Matroska keeps the AudioSpecificConfig aside and MPEG-TS is ADTS-framed.
+ * A copy out of one of these needs `-bsf:a aac_adtstoasc`.
+ */
+export const ADTS_CONTAINERS = new Set(['.mkv', '.ts', '.flv', '.avi', '.webm'])
+
 /** Error message, or null when the request is fine to run. */
-export function validateExportRequest(req: ExportRequest, clip: Clip | undefined): string | null {
+export function validateExportRequest(
+  req: Pick<ExportRequest, 'name' | 'start' | 'end'>,
+  clip: Clip | undefined,
+): string | null {
   if (!clip) return 'Clip not found.'
   if (clip.kind === 'image') return 'Screenshots cannot be trimmed.'
   if (clip.probeState !== 'ok' || clip.duration <= 0)
@@ -61,6 +84,19 @@ export function validateExportRequest(req: ExportRequest, clip: Clip | undefined
   if (req.start < 0) return 'Start cannot be before the beginning.'
   if (req.end > clip.duration + 0.5) return 'End is past the end of the clip.'
   if (req.end - req.start < MIN_SELECTION_S) return 'Selection is too short.'
+  return null
+}
+
+/** As `validateExportRequest`, plus there has to be a track for the sound to come from. */
+export function validateAudioExportRequest(
+  req: AudioExportRequest,
+  clip: Clip | undefined,
+): string | null {
+  const invalid = validateExportRequest(req, clip)
+  if (invalid || !clip) return invalid ?? 'Clip not found.'
+  if (!clip.hasAudio || !clip.audioTracks.length) return 'This clip has no audio.'
+  if (!keptOf(req.tracks ?? null, clip.audioTracks.length).length)
+    return 'No audio track is selected. Unmute one in the mixer.'
   return null
 }
 
@@ -92,10 +128,13 @@ export interface ExportPlan {
 }
 
 /** The kept tracks as concrete indices, with anything the source no longer has dropped. */
+function keptOf(tracks: number[] | null, audioCount: number): number[] {
+  const all = Array.from({ length: Math.max(0, audioCount) }, (_, i) => i)
+  return tracks ? tracks.filter((k) => all.includes(k)) : all
+}
+
 function keptTracks(p: ExportPlan): number[] {
-  if (p.muted) return []
-  const all = Array.from({ length: Math.max(0, p.audioCount) }, (_, i) => i)
-  return p.tracks ? p.tracks.filter((k) => all.includes(k)) : all
+  return p.muted ? [] : keptOf(p.tracks, p.audioCount)
 }
 
 /**
@@ -195,6 +234,101 @@ export function buildExportArgs(p: ExportPlan): string[] {
   args.push('-avoid_negative_ts', 'make_zero')
   // Apple-style tag so the mp4 also plays in players that only know hvc1.
   if (p.vcodec === 'hevc' && p.out.toLowerCase().endsWith('.mp4')) args.push('-tag:v', 'hvc1')
+  args.push('-progress', 'pipe:1', '-stats_period', '0.25', '-nostats', p.out)
+  return args
+}
+
+export interface AudioExportPlan {
+  src: string
+  /** Output path. Its extension is one of `AUDIO_EXPORT_FORMATS` and picks the container, and with it the encoder. */
+  out: string
+  start: number
+  end: number
+  /** As `ExportPlan.tracks`: the tracks to keep, or `null` for every one. */
+  tracks: number[] | null
+  /** Codec of each source audio track, by type-relative index. Also how many there are. */
+  codecs: string[]
+  /** Extension of the source file, for the containers a copy needs `aac_adtstoasc` out of. */
+  srcExt: string
+}
+
+/**
+ * Encoder for each container the dialog offers. The lossy ones get the same
+ * rate as a mixed clip export, so a sound exported on its own is the sound
+ * the clip would have carried.
+ */
+function audioEncoder(ext: AudioExportExt): string[] {
+  switch (ext) {
+    case '.mp3':
+      return ['-c:a', 'libmp3lame', '-b:a', MIX_BITRATE]
+    case '.m4a':
+      return ['-c:a', 'aac', '-b:a', MIX_BITRATE]
+    case '.wav':
+      return ['-c:a', 'pcm_s16le']
+    case '.ogg':
+      return ['-c:a', 'libopus', '-b:a', MIX_BITRATE]
+  }
+}
+
+/**
+ * True when the export can be the source's own AAC packets: one track, into
+ * the one offered container that carries AAC as-is. Every other case decodes.
+ */
+export function copiesAudio(p: AudioExportPlan): boolean {
+  const kept = keptOf(p.tracks, p.codecs.length)
+  return (
+    kept.length === 1 &&
+    extname(p.out).toLowerCase() === '.m4a' &&
+    p.codecs[kept[0] ?? -1] === 'aac'
+  )
+}
+
+/**
+ * The selection's audio alone, to a file of the user's choosing. Several kept
+ * tracks are summed exactly as a clip export sums them; one is taken as it is.
+ *
+ * Where a clip export has to seek to a keyframe, this has no video to keep in
+ * step with, and a decoded track is cut at `start` exactly. The one copied
+ * case is the odd one out: a copied stream normally keeps everything from the
+ * seek point, which for audio is the *video* keyframe before `start` (the mov
+ * demuxer parks every stream at the sync sample the seek landed on), so the
+ * file would open a couple of seconds early. `-copypriorss 0` drops those
+ * packets instead, and an AAC packet is about 21 ms — as close to the mark as
+ * a copy can land.
+ *
+ * Encoded output is always stereo: mp3 cannot carry 5.1 game audio, a mono
+ * mic upmixes cleanly, and the mix graph is stereo already so it costs that
+ * path nothing.
+ */
+export function buildAudioExportArgs(p: AudioExportPlan): string[] {
+  const kept = keptOf(p.tracks, p.codecs.length)
+  const ext = extname(p.out).toLowerCase()
+  const encoder = isAudioExportExt(ext) ? audioEncoder(ext) : audioEncoder('.mp3')
+  const mix = kept.length > 1
+  const args = [
+    '-y',
+    '-nostdin',
+    '-v',
+    'error',
+    '-threads',
+    '1',
+    '-ss',
+    p.start.toFixed(3),
+    '-to',
+    p.end.toFixed(3),
+    '-i',
+    p.src,
+  ]
+  if (mix) args.push('-filter_complex', mixGraph(kept), '-map', MIX_OUT)
+  else args.push('-map', `0:a:${kept[0] ?? 0}`)
+  args.push('-vn', '-sn', '-dn')
+  if (copiesAudio(p)) {
+    args.push('-c:a', 'copy', '-copypriorss', '0')
+    if (ADTS_CONTAINERS.has(p.srcExt.toLowerCase())) args.push('-bsf:a', 'aac_adtstoasc')
+  } else {
+    args.push(...encoder, '-ac', '2')
+  }
+  args.push('-avoid_negative_ts', 'make_zero')
   args.push('-progress', 'pipe:1', '-stats_period', '0.25', '-nostats', p.out)
   return args
 }

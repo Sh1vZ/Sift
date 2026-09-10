@@ -1,8 +1,8 @@
 import { computed, ref, shallowRef } from 'vue'
-import type { Clip, ExportJob } from '@shared/types'
+import type { Clip, ExportJob, ExportKind } from '@shared/types'
 import { clamp } from '@/utils/format'
 import { audibleTracks, tracks as mixerTracks } from './useAudioMixer'
-import { exportClip } from './useExports'
+import { exportAudio, exportClip } from './useExports'
 import { toast } from './useToasts'
 
 const api = window.api
@@ -33,7 +33,11 @@ export const exportTracks = computed<number[] | null>(() => {
   return audible.length < mixerTracks.value.length ? [...audible] : null
 })
 export const exportName = ref('')
-export const submitting = ref(false)
+/** Which export is on its way to main (or waiting on its save dialog); null when neither is. */
+export const submittingKind = ref<ExportKind | null>(null)
+export const submitting = computed(() => submittingKind.value !== null)
+/** Whether the clip being edited has any sound to export. */
+const sourceHasAudio = ref(false)
 
 let duration = 0
 
@@ -54,6 +58,19 @@ export const exportProblem = computed(() => {
     return `Selection is too short (at least ${MIN_SELECTION_S} s)`
   return ''
 })
+
+/**
+ * Why Export audio is off, or empty. Everything Export needs, and a track
+ * for the sound to come from. Shown in the button's tooltip rather than
+ * beside it: a silent clip would otherwise carry the notice the whole time.
+ */
+export const audioProblem = computed(() => {
+  if (!editing.value) return ''
+  if (!sourceHasAudio.value) return 'Source has no audio'
+  if (exportTracks.value?.length === 0) return 'Every track is muted in the mixer'
+  return exportProblem.value
+})
+export const canExportAudio = computed(() => canExport.value && !audioProblem.value)
 
 /**
  * The trim bar's filmstrip for the clip in the player: keyframes from across
@@ -114,6 +131,7 @@ export function enterEdit(clip: Clip): void {
   inSec.value = 0
   outSec.value = duration
   exportMuted.value = false
+  sourceHasAudio.value = clip.hasAudio
   exportName.value = `${clip.title} - Clip`
   editing.value = true
   prepareFilmstrip(clip)
@@ -138,7 +156,7 @@ export function resetRange(): void {
 
 export async function submit(clip: Clip): Promise<ExportJob | null> {
   if (!canExport.value) return null
-  submitting.value = true
+  submittingKind.value = 'clip'
   try {
     const job = await exportClip({
       id: clip.id,
@@ -154,6 +172,32 @@ export async function submit(clip: Clip): Promise<ExportJob | null> {
     }
     return job
   } finally {
-    submitting.value = false
+    submittingKind.value = null
+  }
+}
+
+/**
+ * The selection's audio alone, to wherever the save dialog ends up. The mixer's
+ * choice of tracks carries over exactly as it does for the clip; the mute does
+ * not — asking for the audio is asking for sound.
+ */
+export async function submitAudio(clip: Clip): Promise<ExportJob | null> {
+  if (!canExportAudio.value) return null
+  submittingKind.value = 'audio'
+  try {
+    const job = await exportAudio({
+      id: clip.id,
+      name: exportName.value.trim(),
+      start: inSec.value,
+      end: outSec.value,
+      tracks: exportTracks.value ?? undefined,
+    })
+    if (job) {
+      toast('info', 'Exporting audio', `${job.name}${job.ext}`)
+      exitEdit()
+    }
+    return job
+  } finally {
+    submittingKind.value = null
   }
 }

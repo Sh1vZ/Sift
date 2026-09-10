@@ -89,7 +89,7 @@ function openUploaded(j: UploadJob): void {
     <li v-for="item in activityItems" :key="item.id" class="item">
       <template v-if="item.kind === 'export'">
         <UIcon
-          name="i-lucide-scissors"
+          :name="item.job.kind === 'audio' ? 'i-lucide-audio-lines' : 'i-lucide-scissors'"
           class="item-icon"
           :class="{ 'is-failed': item.job.state === 'failed' }"
         />

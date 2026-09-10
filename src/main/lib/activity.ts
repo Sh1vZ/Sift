@@ -26,6 +26,10 @@ export class ActivityLog {
     return this.store.listActivity()
   }
 
+  find(id: string): ActivityRecord | undefined {
+    return this.list().find((r) => r.id === id)
+  }
+
   record(input: ActivityInput): void {
     const record: ActivityRecord = {
       ...input,

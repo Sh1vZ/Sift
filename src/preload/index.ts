@@ -28,6 +28,7 @@ const api: Api = {
     copyPath: (id) => ipcRenderer.invoke('clip:copy-path', id),
     copyFile: (id) => ipcRenderer.invoke('clip:copy-file', id),
     export: (req) => ipcRenderer.invoke('clip:export', req),
+    exportAudio: (req) => ipcRenderer.invoke('clip:export-audio', req),
     openYouTube: (id) => ipcRenderer.invoke('clip:open-youtube', id),
     copyYouTubeLink: (id) => ipcRenderer.invoke('clip:copy-youtube-link', id),
     removeFromYouTube: (id) => ipcRenderer.invoke('clip:remove-youtube', id),
@@ -41,8 +42,10 @@ const api: Api = {
   exports: {
     cancel: (id) => ipcRenderer.invoke('export:cancel', id),
     dismiss: (id) => ipcRenderer.invoke('export:dismiss', id),
+    reveal: (id) => ipcRenderer.invoke('export:reveal', id),
   },
   activity: {
+    reveal: (id) => ipcRenderer.invoke('activity:reveal', id),
     remove: (id) => ipcRenderer.invoke('activity:remove', id),
     clear: () => ipcRenderer.invoke('activity:clear'),
   },

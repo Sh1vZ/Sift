@@ -1,8 +1,16 @@
 import { type BrowserWindow, dialog, ipcMain } from 'electron'
 import { readFile } from 'node:fs/promises'
 import { basename } from 'node:path'
-import { THEME_IDS, type ExportRequest, type Settings } from '@shared/types'
+import {
+  AUDIO_EXPORT_FORMATS,
+  THEME_IDS,
+  type AudioExportExt,
+  type AudioExportRequest,
+  type ExportRequest,
+  type Settings,
+} from '@shared/types'
 import { YOUTUBE_PRIVACIES, type UploadRequest, type YouTubePrivacy } from '@shared/youtube'
+import { isAudioExportExt } from './lib/exports'
 import type { Library } from './lib/library'
 import type { Updater } from './lib/updater'
 import type { YouTube } from './lib/youtube'
@@ -37,6 +45,30 @@ async function pickFolder(win: BrowserWindow | null, title: string): Promise<str
   }
   const result = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts)
   return result.canceled ? null : (result.filePaths[0] ?? null)
+}
+
+/**
+ * Save dialog for an audio-only export. The file type picked there is the
+ * format: Windows appends the selected type's extension to a bare name and
+ * swaps it when the type changes. The format the last export used leads the
+ * list, because the dialog opens on the first entry.
+ */
+async function pickAudioFile(
+  win: BrowserWindow | null,
+  defaultPath: string,
+  first: AudioExportExt,
+): Promise<string | null> {
+  const ordered = [...AUDIO_EXPORT_FORMATS].sort((a, b) =>
+    a.ext === first ? -1 : b.ext === first ? 1 : 0,
+  )
+  const opts: Electron.SaveDialogOptions = {
+    title: 'Save audio as',
+    defaultPath,
+    filters: ordered.map((f) => ({ name: f.label, extensions: [f.ext.slice(1)] })),
+    properties: ['showOverwriteConfirmation', 'dontAddToRecent'],
+  }
+  const result = win ? await dialog.showSaveDialog(win, opts) : await dialog.showSaveDialog(opts)
+  return result.canceled || !result.filePath ? null : result.filePath
 }
 
 export function registerIpc(
@@ -76,6 +108,9 @@ export function registerIpc(
     if (p.youtubeCheckStatus !== undefined) p.youtubeCheckStatus = p.youtubeCheckStatus === true
     if (p.indexScreenshots !== undefined) p.indexScreenshots = p.indexScreenshots === true
     if (p.lastSeenVersion !== undefined) p.lastSeenVersion = str(p.lastSeenVersion)
+    if (p.audioExportDir !== undefined) p.audioExportDir = str(p.audioExportDir)
+    if (p.audioExportExt !== undefined && !isAudioExportExt(str(p.audioExportExt)))
+      delete p.audioExportExt
     // -1 is "leave every track audible"; anything below that is not a track.
     // Capped both ways: these are labels for a handful of streams, not storage.
     if (p.audioTrackNames !== undefined)
@@ -137,6 +172,19 @@ export function registerIpc(
     }
     return library.exportClip(req)
   })
+  ipcMain.handle('clip:export-audio', (_e, raw) => {
+    const r = (raw ?? {}) as Record<string, unknown>
+    const req: AudioExportRequest = {
+      id: str(r.id),
+      name: str(r.name),
+      start: num(r.start),
+      end: num(r.end),
+      tracks: trackList(r.tracks),
+    }
+    return library.exportAudio(req, (defaultPath, ext) =>
+      pickAudioFile(getWindow(), defaultPath, ext),
+    )
+  })
 
   ipcMain.handle('clip:audio-track', (_e, id, index) =>
     library.audioTrack(str(id), Math.trunc(num(index))),
@@ -154,7 +202,9 @@ export function registerIpc(
 
   ipcMain.handle('export:cancel', (_e, id) => library.cancelExport(str(id)))
   ipcMain.handle('export:dismiss', (_e, id) => library.dismissExport(str(id)))
+  ipcMain.handle('export:reveal', (_e, id) => library.revealExport(str(id)))
 
+  ipcMain.handle('activity:reveal', (_e, id) => library.revealActivity(str(id)))
   ipcMain.handle('activity:remove', (_e, id) => library.activity.remove(str(id)))
   ipcMain.handle('activity:clear', () => library.activity.clear())
 

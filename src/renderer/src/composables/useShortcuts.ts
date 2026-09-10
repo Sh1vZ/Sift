@@ -104,6 +104,7 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
       { chords: [['shift', 'M']], label: 'Mute the export' },
       { chords: [['shift', 'R']], label: 'Reset the range' },
       { chords: [['ctrl', 'enter']], label: 'Export' },
+      { chords: [['ctrl', 'shift', 'enter']], label: 'Export audio only' },
       { chords: [['escape']], label: 'Cancel trim' },
     ],
   },
