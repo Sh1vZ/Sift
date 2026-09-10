@@ -7,6 +7,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 uses [semantic versioning](https://semver.org/spec/v2.0.0.html) — beta builds carry a
 `-beta.N` suffix and update from the beta channel.
 
+## [1.0.0-beta.13] - 2026-09-10
+
+### Added
+
+- Export a trim selection as an animated GIF, up to 30 seconds, with the width and
+  frame rate set from the trim bar.
+- Export just the audio of a trim selection, as MP3, M4A, WAV or OGG.
+
 ## [1.0.0-beta.12] - 2026-09-09
 
 ### Added
