@@ -7,6 +7,21 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 uses [semantic versioning](https://semver.org/spec/v2.0.0.html) — beta builds carry a
 `-beta.N` suffix and update from the beta channel.
 
+## [1.0.0-beta.14] - 2026-09-11
+
+### Added
+
+- Preview a GIF before you export it, from the trim bar or with Shift+P. Sift renders
+  the real thing, so the export just saves what you saw.
+- Clips recorded in HDR say so, on the card and in the player.
+
+### Changed
+
+- Closing the window minimises Sift to the tray by default now. If you had turned
+  that off, it is on again — the switch is under Settings → Window & tray.
+- Settings → Storage breaks drive usage into a segmented bar, so you can see what is
+  taking the space.
+
 ## [1.0.0-beta.13] - 2026-09-10
 
 ### Added
