@@ -44,12 +44,12 @@ export async function revealAppData(): Promise<void> {
   if (!res.ok) toast('error', 'Could not open the folder', res.error)
 }
 
-/** Empties the preview cache after a confirm; main rebuilds it in the background. */
+/** Empties everything Sift made for itself after a confirm; main rebuilds what the grid needs in the background. */
 export async function clearPreviews(): Promise<void> {
   const ok = await confirm({
     title: 'Clear the preview cache?',
     message:
-      'Every poster frame and scrub strip is deleted and rebuilt in the background. Cards show placeholders until their previews come back.',
+      'Every poster frame, scrub strip, filmstrip, GIF preview and extracted audio track is deleted. Posters and strips are rebuilt in the background; cards show placeholders until they come back.',
     detailIcon: 'i-lucide-image',
     confirmLabel: 'Clear previews',
     danger: true,

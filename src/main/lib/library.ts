@@ -1,7 +1,7 @@
 import { app, clipboard, shell } from 'electron'
 import { randomUUID } from 'node:crypto'
 import { existsSync, statSync, type Stats } from 'node:fs'
-import { copyFile, mkdir, readdir, rename as fsRename, stat, unlink } from 'node:fs/promises'
+import { copyFile, mkdir, rename as fsRename, stat, unlink } from 'node:fs/promises'
 import { basename, dirname, extname, join, normalize, relative } from 'node:path'
 import type { FSWatcher } from 'chokidar'
 import type { ChangelogRelease } from '@shared/changelog'
@@ -34,7 +34,6 @@ import { fullChangelog, releaseNotesFor } from './changelog'
 import { copyFileToClipboard } from './clipboard'
 import { cleanTitle, clipId, deriveGame, parseRecordedAt, prettifyGame } from './clips'
 import {
-  GIF_PREVIEW_PREFIX,
   INVALID_NAME,
   type AudioExportPlan,
   type ExportPlan,
@@ -55,7 +54,9 @@ import {
   validateGifExportRequest,
   validateGifPreviewRequest,
 } from './exports'
+import { MAINTENANCE_TICK_MS, type MaintenanceRules, runMaintenance, touch } from './maintenance'
 import {
+  audioTrackName,
   extractAudioTrack,
   ffmpegAvailable,
   filmName,
@@ -76,7 +77,7 @@ import {
   spriteName,
   thumbName,
 } from './media'
-import { FFMPEG, cacheDir, libraryDb, userDataDir } from './paths'
+import { FFMPEG, audioDir, cacheDir, libraryDb, userDataDir } from './paths'
 import { MediaQueue, type MediaJob } from './queue'
 import { MAX_MEDIA_DEPTH, findMediaTooDeep, walkMedia } from './scanner'
 import { collectStats } from './stats'
@@ -202,6 +203,10 @@ export class Library {
   private burstSample: CpuSample | null = null
   /** Folder walks queued or running: a burst must outlive the walk that is still finding its files. */
   private scansQueued = 0
+  /** The quarter-hourly maintenance tick; see `startMaintenance`. */
+  private maintenance: NodeJS.Timeout | null = null
+  /** Runs one at a time: a tick that lands during Clear previews queues behind it. */
+  private maintenanceChain: Promise<void> = Promise.resolve()
 
   constructor(private readonly emit: Emit) {
     this.activity = new ActivityLog(this.store, emit)
@@ -219,7 +224,7 @@ export class Library {
     await this.store.load()
     this.media.setConcurrency(workerSetting(this.settings.concurrency))
     this.ensureClipsFolder()
-    void this.sweepGifPreviews()
+    this.startMaintenance()
     for (const folder of this.store.data.folders) {
       folder.available = existsSync(folder.path)
       this.store.upsertFolder(folder)
@@ -235,6 +240,7 @@ export class Library {
     this.exportAbort?.abort()
     this.film?.abort.abort()
     this.gifPreview?.abort.abort()
+    if (this.maintenance) clearInterval(this.maintenance)
     await this.exportChain.catch(() => undefined)
     this.activity.shutdown()
     this.endBurst()
@@ -584,11 +590,14 @@ export class Library {
   }
 
   /**
-   * Wipes the preview cache and rebuilds it. Every clip's poster and strip are
-   * unlinked and their fields cleared, so the cards fall back to placeholders at
-   * once; probed clips are then queued again and refill in the background. A
-   * job already in flight may land a fresh file just after the wipe — its patch
-   * names that file, so the index stays consistent either way.
+   * Wipes everything Sift made for itself and rebuilds what the grid needs.
+   * Every clip's poster and strip are unlinked and their fields cleared, so
+   * the cards fall back to placeholders at once; then a maintenance pass takes
+   * the rest — GIF previews, extracted audio tracks, orphans — whatever its
+   * age, ahead of the re-queue so a fresh poster is never caught by it; probed
+   * clips are queued again and refill in the background. A job already in
+   * flight may land a fresh file just after the wipe — its patch names that
+   * file, so the index stays consistent either way.
    */
   async clearPreviews(): Promise<ActionResult & { files?: number }> {
     let files = 0
@@ -601,6 +610,7 @@ export class Library {
       await removeArtifacts({ ...clip, film: filmName(clip) })
       this.applyPatch({ id: clip.id, thumb: '', sprite: '', spriteFrames: 0, render: '' })
     }
+    files += (await this.runMaintenance(true)).removed
     for (const clip of Object.values(this.store.data.clips)) {
       if (clip.probeState !== 'ok') continue
       this.enqueueWork(clip)
@@ -1198,7 +1208,11 @@ export class Library {
   ): Promise<GifPreviewResult> {
     const out = join(cacheDir(), name)
     const had = await fileSize(out)
-    if (had !== null) return { ok: true, preview: { file: name, bytes: had } }
+    if (had !== null) {
+      // Shown again: its hour (lib/maintenance.ts) starts over.
+      await touch(out)
+      return { ok: true, preview: { file: name, bytes: had } }
+    }
     // As an export: a `~` name while ffmpeg writes, renamed whole at the end.
     // Each render's own, so a cancelled one's cleanup can never take the
     // files of the render that replaced it. The GIF's name stays at the end,
@@ -1219,8 +1233,8 @@ export class Library {
       })
       await fsRename(tmp, out)
       const bytes = (await fileSize(out)) ?? 0
-      // Each is tens of megabytes; only the one just looked at is worth keeping.
-      void this.sweepGifPreviews(name)
+      // Each is tens of megabytes: a good moment to let the expired ones go.
+      void this.runMaintenance()
       return { ok: true, preview: { file: name, bytes } }
     } catch (err) {
       // Only ever our own partial file.
@@ -1235,30 +1249,64 @@ export class Library {
 
   /**
    * The preview of exactly this GIF, when one is on disk. An export never
-   * waits for one: a preview swept meanwhile only means the frames are rendered.
+   * waits for one: a preview expired meanwhile only means the frames are rendered.
    */
   private async readyGifPreview(job: ExportJob, source: Clip): Promise<string | null> {
     if (!job.gif) return null
     const cut = { start: job.start, end: job.end, ...job.gif }
     const path = join(cacheDir(), gifPreviewName(source, cut))
-    return (await fileSize(path)) === null ? null : path
+    if ((await fileSize(path)) === null) return null
+    // Copied into an export is a use: its hour starts over.
+    await touch(path)
+    return path
+  }
+
+  // ------------------------------------------------------------ maintenance
+
+  /**
+   * Everything Sift made for itself and no longer needs goes through one door,
+   * lib/maintenance.ts, which knows how long each kind may live. Run at launch,
+   * every quarter hour after, after each GIF preview render, and in full by
+   * Clear previews. A timer in main, so it runs with the window hidden to the
+   * tray or destroyed; each run is two listings and a shallow walk, and every
+   * step awaits, so a game running beside Sift never notices it.
+   */
+  private startMaintenance(): void {
+    void this.runMaintenance()
+    this.maintenance = setInterval(() => void this.runMaintenance(), MAINTENANCE_TICK_MS)
+  }
+
+  private runMaintenance(all = false): Promise<{ removed: number; bytes: number }> {
+    const run = this.maintenanceChain.then(() =>
+      runMaintenance(
+        { cache: cacheDir(), audio: audioDir(), clipsRoot: this.clipsRoot() },
+        this.maintenanceRules(all),
+      ),
+    )
+    this.maintenanceChain = run.then(
+      () => undefined,
+      () => undefined,
+    )
+    return run
   }
 
   /**
-   * Drops every preview but `keep` and the one being rendered, half-written
-   * ones included. Run at launch, when nothing from a past session is worth
-   * its megabytes, and after each render.
+   * What is still owned: every artifact a clip has, or will have once its
+   * job runs — the expected names as well as the recorded ones, so a file a
+   * job has just written and not yet patched in is never an orphan.
    */
-  private async sweepGifPreviews(keep = ''): Promise<void> {
-    const dir = cacheDir()
-    const live = this.gifPreview?.name ?? ''
-    const names = await readdir(dir).catch(() => [] as string[])
-    for (const n of names) {
-      // A finished preview is its name; a render's temp files carry it after a `~` and a token.
-      if (!n.includes(GIF_PREVIEW_PREFIX)) continue
-      if (n === keep || (live && n.includes(live))) continue
-      await unlink(join(dir, n)).catch(() => undefined)
+  private maintenanceRules(all: boolean): MaintenanceRules {
+    const cacheValid = new Set<string>()
+    const audioValid = new Set<string>()
+    for (const clip of Object.values(this.store.data.clips)) {
+      const names = [clip.thumb, clip.sprite, clip.render, thumbName(clip), renderName(clip)]
+      if (clip.kind === 'video') {
+        names.push(spriteName(clip), filmName(clip))
+        for (let i = 0; i < clip.audioTracks.length; i++) audioValid.add(audioTrackName(clip, i))
+      }
+      for (const n of names) if (n) cacheValid.add(n)
     }
+    return { cacheValid, audioValid, now: Date.now(), all }
   }
 
   /** Explorer on a finished job's file. Only while the job is in the list; `revealActivity` covers it after that. */

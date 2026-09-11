@@ -6,6 +6,7 @@ import { Worker } from 'node:worker_threads'
 import type { AudioTrack, Clip } from '@shared/types'
 import { ADTS_CONTAINERS, TONE_MAP } from './exports'
 import { jxrTuning } from './jxr'
+import { touch } from './maintenance'
 import jxrWorkerPath from './jxr.worker?modulePath'
 import { FFMPEG, FFPROBE, audioDir, cacheDir } from './paths'
 
@@ -844,7 +845,11 @@ export function audioTrackName(clip: Pick<Clip, 'id' | 'mtimeMs'>, index: number
 export async function extractAudioTrack(clip: Clip, index: number): Promise<string> {
   const file = audioTrackName(clip, index)
   const out = join(audioDir(), file)
-  if (await exists(out)) return file
+  if (await exists(out)) {
+    // Used now: its lifetime (lib/maintenance.ts) counts from here.
+    await touch(out)
+    return file
+  }
 
   const track = clip.audioTracks[index]
   const copy = track?.codec === 'aac'

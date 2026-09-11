@@ -208,7 +208,7 @@ onMounted(() => {
               id="storage-previews"
               icon="image"
               title="Preview cache"
-              :description="`${n.format(appStats.storage.cacheFiles)} poster frames, hover-scrub strips and HDR screenshot renders, generated once and reused.`"
+              :description="`${n.format(appStats.storage.cacheFiles)} poster frames, hover-scrub strips, filmstrips and HDR screenshot renders, generated once and reused. GIF previews go after an hour and extracted audio tracks after a week unused; Clear previews takes all of it at once.`"
               :value="formatBytes(appStats.storage.cacheBytes)"
             >
               <template #trailing>
