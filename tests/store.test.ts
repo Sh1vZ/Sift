@@ -127,6 +127,7 @@ CREATE TABLE clips (
 );
 INSERT INTO meta (key, value) VALUES ('schema_version', '2');
 INSERT INTO folders (id, path, name, added_at_ms) VALUES ('old', 'D:/Old', 'Old', 1);
+INSERT INTO settings (key, value) VALUES ('minimizeToTray', 'false');
 INSERT INTO clips (id, path, name, title, ext, folder_id, game, size, mtime_ms, recorded_at_ms, probe_state)
   VALUES ('oc', 'D:/Old/Game/x.mp4', 'x', 'x', '.mp4', 'old', 'Game', 1, 1, 1, 'ok');
 INSERT INTO clips (id, path, name, title, ext, folder_id, game, size, mtime_ms, recorded_at_ms, probe_state, has_audio)
@@ -193,7 +194,7 @@ async function storeCases(): Promise<void> {
   // 4. Settings and rows survive close/reopen; unset settings fall back to defaults.
   store.data.settings.volume = 0.33
   store.data.settings.gridSize = 'compact'
-  store.data.settings.minimizeToTray = true
+  store.data.settings.minimizeToTray = false
   store.saveSettings()
   await store.close()
   const again = new Store(dbFile)
@@ -202,7 +203,7 @@ async function storeCases(): Promise<void> {
     again.data.settings.volume === 0.33 && again.data.settings.gridSize === 'compact',
     'settings survive reopen',
   )
-  check(again.data.settings.minimizeToTray === true, 'minimize-to-tray survives reopen')
+  check(again.data.settings.minimizeToTray === false, 'minimize-to-tray survives reopen')
   check(again.data.settings.trayHintShown === false, 'unset tray hint flag uses its default')
   check(
     again.data.settings.concurrency === DEFAULT_SETTINGS.concurrency,
@@ -284,7 +285,11 @@ async function migrationCase(): Promise<void> {
     ].every((c) => names.includes(c)),
     'migration added the YouTube processing columns',
   )
-  check(version === '11', 'schema version advanced to 11')
+  check(version === '12', 'schema version advanced to 12')
+  check(
+    store.data.settings.minimizeToTray === true,
+    'a stored minimize-to-tray is dropped so the new default applies',
+  )
   check(names.includes('hdr'), 'migration added the hdr column')
   check(names.includes('audio_tracks'), 'migration added the audio_tracks column')
   check(

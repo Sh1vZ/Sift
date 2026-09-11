@@ -102,6 +102,10 @@ const MIGRATIONS: Array<(db: DatabaseSync) => void> = [
     db.exec('ALTER TABLE clips ADD COLUMN hdr INTEGER NOT NULL DEFAULT 0')
     db.exec("UPDATE clips SET probe_state = 'pending' WHERE kind = 'video'")
   },
+  // v11 -> v12: closing the window keeps Sift in the tray by default; drop any
+  // stored value so existing libraries pick the new default up instead of the
+  // old one. Settings are written whole, so every library has a row to drop.
+  (db) => db.prepare("DELETE FROM settings WHERE key = 'minimizeToTray'").run(),
 ]
 const SCHEMA_VERSION = MIGRATIONS.length + 1
 

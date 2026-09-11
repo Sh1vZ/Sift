@@ -655,7 +655,7 @@ export const DEFAULT_SETTINGS: Settings = {
   groupBy: 'date',
   theme: 'sift',
   concurrency: 2,
-  minimizeToTray: false,
+  minimizeToTray: true,
   sidebarCollapsed: false,
   autoCheckUpdates: true,
   youtubeCheckStatus: true,
