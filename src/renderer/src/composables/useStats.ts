@@ -1,5 +1,5 @@
 import { computed, ref } from 'vue'
-import type { AppStats, Clip, LibraryFolder } from '@shared/types'
+import type { AppStats, Clip, FolderKind, LibraryFolder } from '@shared/types'
 import { formatResolution, volumeRoot } from '@/utils/format'
 import { QUALITY_TIERS, qualityTier } from '@/utils/quality'
 import { confirm } from './useDialogs'
@@ -141,6 +141,25 @@ export const libraryTotals = computed<LibraryTotals>(() => {
 
 // ------------------------------------------------------------------ drives
 
+/**
+ * One coloured slice of a drive's Sift share: a watched folder, the clips
+ * folder, or the app-data folder. The pane paints these in the meter and lists
+ * them underneath, so "what is the NVIDIA folder costing me" is readable off
+ * the bar instead of only off the total.
+ */
+export interface DriveSegment {
+  id: string
+  /** The folder itself — what the row shows, and what makes the slice legible. */
+  path: string
+  kind: FolderKind | 'appdata' | 'other'
+  bytes: number
+  clips: number
+  /** False for a watched folder on a drive that is not reachable right now. */
+  available: boolean
+  /** 0-100 of the whole volume, sharing out the drive's clamped `siftPct`. */
+  pct: number
+}
+
 export interface DriveUsage {
   /** `D:\` — the root as the main process measured it, cased as the OS gave it. */
   root: string
@@ -155,6 +174,8 @@ export interface DriveUsage {
   siftBytes: number
   /** Watched folders rooted here, in the order the library keeps them. */
   folders: LibraryFolder[]
+  /** The same bytes broken out per folder, heaviest first. */
+  segments: DriveSegment[]
   /** 0-100, how full the volume is. Zero when the platform would not report it. */
   usedPct: number
   /** 0-100, Sift's share of the whole volume. Never above `usedPct`. */
@@ -186,24 +207,85 @@ export const drives = computed<DriveUsage[]>(() => {
           : 0,
       siftBytes: 0,
       folders: [],
+      segments: [],
       usedPct: 0,
       siftPct: 0,
     })
   }
   for (const f of folders.value) rows.get(volumeRoot(f.path).toUpperCase())?.folders.push(f)
+
+  // Bytes per watched folder, kept per drive so a clip always counts against
+  // the volume its own file sits on.
+  const perFolder = new Map<DriveUsage, Map<string, { bytes: number; clips: number }>>()
   for (const c of allClips.value) {
     const row = rows.get(volumeRoot(c.path).toUpperCase())
     if (!row) continue
     row.clipBytes += c.size
     row.clips++
+    const byFolder = perFolder.get(row) ?? new Map<string, { bytes: number; clips: number }>()
+    perFolder.set(row, byFolder)
+    const tally = byFolder.get(c.folderId) ?? { bytes: 0, clips: 0 }
+    tally.bytes += c.size
+    tally.clips++
+    byFolder.set(c.folderId, tally)
   }
+
   for (const row of rows.values()) {
     row.siftBytes = row.clipBytes + row.appDataBytes
+    const byFolder = perFolder.get(row)
+
+    const segments: DriveSegment[] = []
+    let attributed = 0
+    let attributedClips = 0
+    for (const f of row.folders) {
+      const tally = byFolder?.get(f.id)
+      if (!tally?.bytes) continue
+      attributed += tally.bytes
+      attributedClips += tally.clips
+      segments.push({
+        id: f.id,
+        path: f.path,
+        kind: f.kind,
+        bytes: tally.bytes,
+        clips: tally.clips,
+        available: f.available,
+        pct: 0,
+      })
+    }
+    // Files indexed from a folder that has since been removed, or one rooted on
+    // another drive: still Sift's bytes, so they get their own slice.
+    const loose = row.clipBytes - attributed
+    if (loose > 0)
+      segments.push({
+        id: `${row.root}:loose`,
+        path: 'Files outside your watched folders',
+        kind: 'other',
+        bytes: loose,
+        clips: Math.max(0, row.clips - attributedClips),
+        available: true,
+        pct: 0,
+      })
+    if (row.appDataBytes)
+      segments.push({
+        id: `${row.root}:appdata`,
+        path: storage.userDataPath,
+        kind: 'appdata',
+        bytes: row.appDataBytes,
+        clips: 0,
+        available: true,
+        pct: 0,
+      })
+    segments.sort((a, b) => b.bytes - a.bytes || a.path.localeCompare(b.path))
+    row.segments = segments
+
     if (!row.totalBytes) continue
     row.usedPct = Math.round(((row.totalBytes - row.freeBytes) / row.totalBytes) * 100)
     // An index that has not caught up with a deletion could otherwise claim
     // more of the drive than the drive says is used at all.
     row.siftPct = Math.min(row.usedPct, (row.siftBytes / row.totalBytes) * 100)
+    // Slices share out the clamped figure, so they always add up to the fill
+    // the meter is allowed to draw.
+    if (row.siftBytes) for (const s of segments) s.pct = (row.siftPct * s.bytes) / row.siftBytes
   }
   return [...rows.values()].sort(
     (a, b) => b.siftBytes - a.siftBytes || a.root.localeCompare(b.root),

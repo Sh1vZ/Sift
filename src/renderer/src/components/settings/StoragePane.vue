@@ -27,6 +27,7 @@ import {
   statsError,
   statsLoading,
   type CleanupHint,
+  type DriveSegment,
   type DriveUsage,
 } from '@/composables/useStats'
 import { formatBytes, formatDuration, formatFull, formatRelative } from '@/utils/format'
@@ -75,14 +76,42 @@ function driveSummary(d: DriveUsage): string {
   return `${parts.join(' · ')}.`
 }
 
-/** The two fills of the drive meter, as 0-1 scale factors. */
-const meter = (d: DriveUsage): Record<string, string> => ({
-  '--used': String(d.usedPct / 100),
-  '--sift': String(d.siftPct / 100),
-})
+/**
+ * The brand ramp the folder slices are drawn from. The heaviest folder keeps
+ * --primary, so a drive still reads as "Sift purple" at a glance, and the ends
+ * of the ramp are far enough apart that two folders never look alike.
+ */
+const RAMP = ['var(--primary)', 'var(--secondary)', 'var(--accent)']
 
-const meterLabel = (d: DriveUsage): string =>
-  `${d.root} is ${d.usedPct}% full; Sift accounts for ${formatBytes(d.siftBytes)} of that.`
+/** Colour for slice `i` of `n`, walking the ramp evenly. */
+function segColor(i: number, n: number): string {
+  if (n <= 1 || i <= 0) return RAMP[0]
+  const t = (i / (n - 1)) * (RAMP.length - 1)
+  const from = Math.min(Math.floor(t), RAMP.length - 2)
+  const mix = Math.round((t - from) * 100)
+  if (!mix) return RAMP[from]
+  return `color-mix(in oklab, ${RAMP[from + 1]} ${mix}%, ${RAMP[from]})`
+}
+
+/** A hairline of a slice is still a slice, so tiny folders keep 3px of bar. */
+const segWidth = (pct: number): string => `max(3px, ${pct}%)`
+
+/** The legend swatch: the drive's own slices, side by side. */
+const siftGradient = (d: DriveUsage): string => {
+  const stops = d.segments.map((_, i) => segColor(i, d.segments.length))
+  if (stops.length < 2) return stops[0] ?? RAMP[0]
+  return `linear-gradient(90deg, ${stops.join(', ')})`
+}
+
+const segLabel = (s: DriveSegment): string =>
+  s.kind === 'appdata' ? 'App data' : s.kind === 'other' ? 'Other files' : s.path
+
+const meterLabel = (d: DriveUsage): string => {
+  const parts = d.segments.map((s) => `${segLabel(s)} ${formatBytes(s.bytes)}`)
+  return `${d.root} is ${d.usedPct}% full; Sift accounts for ${formatBytes(d.siftBytes)} of that${
+    parts.length ? ` — ${parts.join(', ')}` : ''
+  }.`
+}
 
 // ------------------------------------------------------------ biggest clips
 
@@ -295,13 +324,25 @@ onMounted(() => {
               </template>
 
               <template v-if="d.totalBytes">
-                <span class="meter" :style="meter(d)" role="img" :aria-label="meterLabel(d)">
-                  <span class="meter-used" />
-                  <span class="meter-sift" />
+                <span class="meter" role="img" :aria-label="meterLabel(d)">
+                  <span
+                    v-for="(s, i) in d.segments"
+                    :key="s.id"
+                    class="meter-seg"
+                    :style="{
+                      width: segWidth(s.pct),
+                      background: segColor(i, d.segments.length),
+                    }"
+                  />
+                  <span
+                    class="meter-seg meter-other"
+                    :style="{ width: `${Math.max(0, d.usedPct - d.siftPct)}%` }"
+                  />
                 </span>
                 <p class="legend">
                   <span class="legend-item">
-                    <span class="swatch swatch-sift" />Sift {{ formatBytes(d.siftBytes) }}
+                    <span class="swatch" :style="{ background: siftGradient(d) }" />Sift
+                    {{ formatBytes(d.siftBytes) }}
                   </span>
                   <span class="legend-item">
                     <span class="swatch swatch-other" />Everything else
@@ -315,9 +356,30 @@ onMounted(() => {
               </template>
               <p v-else class="legend">This drive would not report its free space.</p>
 
-              <ul v-if="d.folders.length" class="folders">
-                <li v-for="f in d.folders" :key="f.id" class="folder truncate" :title="f.path">
-                  {{ f.path }}<template v-if="!f.available"> · not reachable right now</template>
+              <ul v-if="d.segments.length" class="folders">
+                <li v-for="(s, i) in d.segments" :key="s.id" class="folder">
+                  <span
+                    class="swatch"
+                    :style="{ background: segColor(i, d.segments.length) }"
+                    aria-hidden="true"
+                  />
+                  <span class="folder-path truncate" :title="s.path">{{ segLabel(s) }}</span>
+                  <span class="folder-note">
+                    <template v-if="!s.available">not reachable right now</template>
+                    <template v-else-if="s.kind === 'appdata'">cache, index and settings</template>
+                    <template v-else-if="s.clips">
+                      {{ n.format(s.clips) }} file{{ s.clips === 1 ? '' : 's' }}
+                    </template>
+                  </span>
+                  <span class="folder-size mono">{{ formatBytes(s.bytes) }}</span>
+                </li>
+              </ul>
+              <ul v-else-if="d.folders.length" class="folders">
+                <li v-for="f in d.folders" :key="f.id" class="folder">
+                  <span class="folder-path truncate" :title="f.path">{{ f.path }}</span>
+                  <span class="folder-note">
+                    {{ f.available ? 'nothing indexed here' : 'not reachable right now' }}
+                  </span>
                 </li>
               </ul>
             </SettingsRow>
@@ -443,11 +505,12 @@ onMounted(() => {
   padding: var(--s-8) var(--s-6);
 }
 
-/* Drive meter: how full the volume is, with Sift's share drawn over it. Sift's
-   bytes are part of the used bytes, so the two fills stack from the same edge. */
+/* Drive meter: how full the volume is, with Sift's share drawn over it. One
+   slice per folder first, then everything else on the drive; what is left of
+   the track is free space. The hairline gaps keep neighbouring slices apart. */
 .meter {
-  position: relative;
-  display: block;
+  display: flex;
+  gap: 1px;
   height: 10px;
   max-width: 420px;
   margin-top: var(--s-3);
@@ -455,21 +518,13 @@ onMounted(() => {
   background: var(--bg-2);
   overflow: hidden;
 }
-.meter-used,
-.meter-sift {
-  position: absolute;
-  inset: 0;
-  border-radius: var(--r-full);
-  transform-origin: left;
-  transition: transform var(--dur) var(--ease-out);
+.meter-seg {
+  flex: 0 0 auto;
+  min-width: 0;
+  transition: width var(--dur) var(--ease-out);
 }
-.meter-used {
+.meter-other {
   background: var(--bg-4);
-  transform: scaleX(var(--used));
-}
-.meter-sift {
-  background: linear-gradient(90deg, var(--primary), var(--secondary));
-  transform: scaleX(var(--sift));
 }
 .legend {
   display: flex;
@@ -490,9 +545,6 @@ onMounted(() => {
   flex: 0 0 auto;
   border-radius: 2px;
 }
-.swatch-sift {
-  background: linear-gradient(90deg, var(--primary), var(--secondary));
-}
 .swatch-other {
   background: var(--bg-4);
 }
@@ -500,15 +552,38 @@ onMounted(() => {
   background: var(--bg-2);
   border: 1px solid var(--border);
 }
+/* One line per meter slice, in the same order and the same colour, so the bar
+   above can be read off the paths. */
 .folders {
   list-style: none;
   margin: var(--s-2) 0 0;
   padding: 0;
+  max-width: 560px;
 }
 .folder {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: 2px 0;
   font-size: var(--text-sm);
   color: var(--fg-dim);
   user-select: text;
+}
+.folder-path {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+.folder-note {
+  flex: 0 0 auto;
+  font-size: var(--text-xs);
+  color: var(--fg-muted);
+  white-space: nowrap;
+}
+.folder-size {
+  flex: 0 0 auto;
+  margin-left: auto;
+  color: var(--fg-muted);
+  font-variant-numeric: tabular-nums;
 }
 
 /* Clip rows. The whole text block is the button so the row plays on a click;
