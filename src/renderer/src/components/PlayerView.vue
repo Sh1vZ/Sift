@@ -2156,7 +2156,6 @@ onBeforeUnmount(() => {
   border-radius: 50%;
   color: #fff;
   background: color-mix(in srgb, var(--bg-3) 75%, transparent);
-  backdrop-filter: blur(6px);
   pointer-events: none;
 }
 .flash-icon {
