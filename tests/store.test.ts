@@ -21,12 +21,14 @@ import {
   type LibraryFolder,
 } from '@shared/types'
 import {
+  GIF_PREVIEW_PREFIX,
   TONE_MAP,
   buildAudioExportArgs,
   buildExportArgs,
   buildGifExportArgs,
   copiesAudio,
   exportExt,
+  gifPreviewName,
   isAudioExportExt,
   mixesAudio,
   safeGameDir,
@@ -708,8 +710,36 @@ function exportHelperCases(): void {
     'an HDR source is tone-mapped in both passes',
   )
   check(
-    passes.every((pass) => pass.includes('-threads') && pass[pass.indexOf('-threads') + 1] === '1'),
-    'both GIF passes run on one thread',
+    passes.every((pass) => pass.includes('-threads') && pass[pass.indexOf('-threads') + 1] === '0'),
+    'both GIF passes give the decoder every core',
+  )
+  check(
+    passes.every(
+      (pass) =>
+        pass[pass.indexOf('-filter_threads') + 1] === '1' &&
+        pass[pass.indexOf('-filter_complex_threads') + 1] === '1',
+    ),
+    'the filters stay on one thread',
+  )
+
+  // -------------------------------------------------------- gif preview
+  const previewOf = { id: 'abc123', mtimeMs: 1_700_000_000_000, hdr: false }
+  const previewCut = { start: 1.5, end: 4, width: 480, fps: 15 }
+  const previewName = gifPreviewName(previewOf, previewCut)
+  check(
+    previewName.startsWith(GIF_PREVIEW_PREFIX) &&
+      previewName.endsWith('.gif') &&
+      !/[\\/\s]/.test(previewName),
+    'a preview is named as one cache file',
+  )
+  check(
+    gifPreviewName(previewOf, { ...previewCut }) === previewName &&
+      gifPreviewName(previewOf, { ...previewCut, end: 4.001 }) !== previewName &&
+      gifPreviewName(previewOf, { ...previewCut, width: 640 }) !== previewName &&
+      gifPreviewName(previewOf, { ...previewCut, fps: 10 }) !== previewName &&
+      gifPreviewName({ ...previewOf, hdr: true }, previewCut) !== previewName &&
+      gifPreviewName({ ...previewOf, mtimeMs: 1 }, previewCut) !== previewName,
+    'the same ask names the same preview, and any change to its frames another',
   )
 }
 

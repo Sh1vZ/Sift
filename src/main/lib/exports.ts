@@ -9,6 +9,7 @@ import {
   type Clip,
   type ExportRequest,
   type GifExportRequest,
+  type GifPreviewRequest,
 } from '@shared/types'
 
 /** Characters Windows refuses in a file or folder name (plus control characters). */
@@ -364,6 +365,33 @@ export function buildAudioExportArgs(p: AudioExportPlan): string[] {
   return args
 }
 
+/** As `validateGifExportRequest`, for a preview, which has no name to check. */
+export function validateGifPreviewRequest(
+  req: GifPreviewRequest,
+  clip: Clip | undefined,
+): string | null {
+  return validateGifExportRequest({ ...req, name: 'Preview' }, clip)
+}
+
+/** Every GIF preview's cache name starts with this, so a sweep can find them without a list. */
+export const GIF_PREVIEW_PREFIX = 'gifprev-'
+
+/**
+ * Cache name of the preview of one GIF. Everything that shapes a frame is in
+ * it — the source by id and modification time (a re-recorded file never
+ * matches its predecessor's preview), the cut to the millisecond, the width,
+ * the rate and whether it was tone-mapped — so a name that is on disk is the
+ * very GIF the export would write, and the export copies it instead.
+ */
+export function gifPreviewName(
+  clip: Pick<Clip, 'id' | 'mtimeMs' | 'hdr'>,
+  req: { start: number; end: number; width: number; fps: number },
+): string {
+  const ms = (s: number): number => Math.round(s * 1000)
+  const tone = clip.hdr ? 'h' : ''
+  return `${GIF_PREVIEW_PREFIX}${clip.id}-${clip.mtimeMs}-${ms(req.start)}-${ms(req.end)}-${req.width}x${req.fps}${tone}.gif`
+}
+
 export interface GifExportPlan {
   src: string
   /** The GIF, at its temp name. */
@@ -395,6 +423,13 @@ function gifFrames(p: GifExportPlan): string {
  * hundreds of megabytes over a selection this long — so the frames are
  * decoded twice instead, which costs seconds, not memory.
  *
+ * The decoder gets every core (`-threads 0`), the one job in Sift that does.
+ * The source is 60 fps with no B-frames, so every frame has to be decoded to
+ * keep one in four, twice over; on one thread that is 43 s for a 30 s SDR cut
+ * and 114 s for ultrawide HDR, and someone is sat waiting on it. Measured at
+ * 4–6x faster on all cores, at 270–540 MB while it runs. The filters stay on
+ * one thread: on a GIF-sized frame the spin-up costs more than it saves.
+ *
  * The palette pass writes nothing but one PNG, so `-progress` would have no
  * output time to report and the bar would sit at zero for half the job. A
  * second, null output takes the same frames and gives the report a clock.
@@ -406,7 +441,7 @@ export function buildGifExportArgs(p: GifExportPlan): string[][] {
     '-v',
     'error',
     '-threads',
-    '1',
+    '0',
     '-filter_threads',
     '1',
     '-filter_complex_threads',

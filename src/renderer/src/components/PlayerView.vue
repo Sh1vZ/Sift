@@ -70,6 +70,7 @@ import {
   exportMuted,
   exportName,
   filmstrip,
+  gifProblem,
   inSec,
   outSec,
   prepareFilmstrip,
@@ -84,6 +85,7 @@ import {
   submitting,
 } from '@/composables/useEditor'
 import { exportJobs } from '@/composables/useExports'
+import { gifPreviewOpen, openGifPreview } from '@/composables/useGifPreview'
 import { fadeOut, flipFrom, flipTo } from '@/composables/useMotion'
 import { activeTheme } from '@/composables/useTheme'
 import { visible as windowVisible } from '@/composables/useWindowVisibility'
@@ -788,6 +790,12 @@ async function exportGifNow(): Promise<void> {
   await submitGif(clip.value)
 }
 
+/** The GIF as it would be saved, in a dialog; saving from there copies the render. */
+function previewGifNow(): void {
+  if (!canExportGif.value) return
+  void openGifPreview(clip.value)
+}
+
 const stayOpen = (e: Event): void => e.preventDefault()
 
 /** One line each on what the format is for; the save dialog then opens on the pick. */
@@ -979,9 +987,16 @@ function onImageKey(e: KeyboardEvent): void {
 }
 
 function onKey(e: KeyboardEvent): void {
-  // A modal owns the keyboard: the confirm/prompt host, the upload form, or the
-  // shortcut list.
-  if (dialog.value || uploadDialog.value || shortcutsOpen.value || searchOpen.value) return
+  // A modal owns the keyboard: the confirm/prompt host, the upload form, the
+  // shortcut list, search, or the GIF preview.
+  if (
+    dialog.value ||
+    uploadDialog.value ||
+    shortcutsOpen.value ||
+    searchOpen.value ||
+    gifPreviewOpen.value
+  )
+    return
   const tag = (e.target as HTMLElement | null)?.tagName
   if (tag === 'INPUT' || tag === 'TEXTAREA') return
   if (isImage.value) return onImageKey(e)
@@ -1079,6 +1094,10 @@ function onKey(e: KeyboardEvent): void {
       break
     case 'G':
       if (editing.value) void exportGifNow()
+      else handled = false
+      break
+    case 'P':
+      if (editing.value) previewGifNow()
       else handled = false
       break
     case 'R':
@@ -1824,6 +1843,21 @@ onBeforeUnmount(() => {
                  pane and Esc all leave edit mode, and a third copy only pushed
                  Export onto a line of its own. -->
             <div class="submit">
+              <!-- A GIF can be looked at before it is saved; the export then copies it. -->
+              <UTooltip
+                v-if="exportKind === 'gif'"
+                :text="gifProblem || 'See the GIF before saving it'"
+                :kbds="['Shift', 'P']"
+              >
+                <UButton
+                  icon="i-lucide-eye"
+                  label="Preview"
+                  color="neutral"
+                  variant="subtle"
+                  :disabled="!canExportGif"
+                  @click="previewGifNow"
+                />
+              </UTooltip>
               <!-- A disabled button explains itself on hover too. -->
               <UTooltip :text="currentProblem || exportHint" :kbds="['Ctrl', 'Enter']">
                 <UButton

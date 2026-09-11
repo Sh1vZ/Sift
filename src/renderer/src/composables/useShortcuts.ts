@@ -1,5 +1,6 @@
 import { ref } from 'vue'
 import { dialog } from './useDialogs'
+import { gifPreviewOpen } from './useGifPreview'
 import { goBack, libraryFilters, screen } from './useLibrary'
 import { isOpen as playerOpen } from './usePlayer'
 import { openSearch, searchOpen } from './useSearch'
@@ -106,6 +107,7 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
       { chords: [['ctrl', 'enter']], label: 'Export in the chosen format' },
       { chords: [['ctrl', 'shift', 'enter']], label: 'Export the audio alone' },
       { chords: [['shift', 'G']], label: 'Export as a GIF' },
+      { chords: [['shift', 'P']], label: 'Preview the GIF' },
       { chords: [['escape']], label: 'Cancel trim' },
     ],
   },
@@ -131,7 +133,8 @@ function modalOpen(): boolean {
     uploadDialog.value !== null ||
     whatsNew.value !== null ||
     shortcutsOpen.value ||
-    searchOpen.value
+    searchOpen.value ||
+    gifPreviewOpen.value
   )
 }
 

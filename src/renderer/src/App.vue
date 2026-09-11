@@ -14,9 +14,11 @@ import WhatsNewDialog from './components/WhatsNewDialog.vue'
 import ShortcutsDialog from './components/ShortcutsDialog.vue'
 import SearchDialog from './components/SearchDialog.vue'
 import UploadDialog from './components/youtube/UploadDialog.vue'
+import GifPreviewDialog from './components/GifPreviewDialog.vue'
 import { initLibrary, initialActivity, initialExports, ready, view } from '@/composables/useLibrary'
 import { initActivityHistory } from '@/composables/useActivityHistory'
 import { initExports } from '@/composables/useExports'
+import { initGifPreview } from '@/composables/useGifPreview'
 import { initUpdates } from '@/composables/useUpdates'
 import { initUploads } from '@/composables/useUploads'
 import { initYouTube } from '@/composables/useYouTube'
@@ -43,6 +45,7 @@ onMounted(async () => {
   try {
     await initLibrary()
     initExports(initialExports.value)
+    initGifPreview()
     initActivityHistory(initialActivity.value)
     // Seeded from main like the updater: neither is part of the library snapshot.
     await initYouTube()
@@ -100,6 +103,7 @@ onBeforeUnmount(() => {
       <ShortcutsDialog />
       <SearchDialog />
       <UploadDialog />
+      <GifPreviewDialog />
       <ToastBridge />
     </div>
   </UApp>

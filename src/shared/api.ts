@@ -17,6 +17,8 @@ import type {
   ExportJob,
   ExportRequest,
   GifExportRequest,
+  GifPreview,
+  GifPreviewRequest,
   LibraryFolder,
   LibrarySnapshot,
   Settings,
@@ -87,6 +89,19 @@ export interface Api {
     exportGif(
       req: GifExportRequest,
     ): Promise<ActionResult & { job?: ExportJob; cancelled?: boolean }>
+    /**
+     * Renders the selection as the GIF `exportGif` would write, into the
+     * cache, and resolves with the file (for `thumbUrl`) once it is whole —
+     * at once for one rendered already. Progress arrives through
+     * `gif-preview:progress`. One at a time: a new ask stops the last, which
+     * resolves `cancelled`. An export of the same cut and settings afterwards
+     * copies the file rather than rendering it again.
+     */
+    previewGif(
+      req: GifPreviewRequest,
+    ): Promise<ActionResult & { preview?: GifPreview; cancelled?: boolean }>
+    /** Stops the preview being rendered, if one is. */
+    cancelGifPreview(): Promise<void>
     /** Opens the clip's YouTube page in the browser. */
     openYouTube(id: string): Promise<ActionResult>
     /** Puts `https://youtu.be/<id>` on the system clipboard. */

@@ -1,7 +1,7 @@
 import { app, clipboard, shell } from 'electron'
 import { randomUUID } from 'node:crypto'
 import { existsSync, statSync, type Stats } from 'node:fs'
-import { mkdir, rename as fsRename, stat, unlink } from 'node:fs/promises'
+import { copyFile, mkdir, readdir, rename as fsRename, stat, unlink } from 'node:fs/promises'
 import { basename, dirname, extname, join, normalize, relative } from 'node:path'
 import type { FSWatcher } from 'chokidar'
 import type { ChangelogRelease } from '@shared/changelog'
@@ -18,6 +18,8 @@ import type {
   ExportKind,
   ExportRequest,
   GifExportRequest,
+  GifPreview,
+  GifPreviewRequest,
   LibraryFolder,
   LibrarySnapshot,
   ScanState,
@@ -32,6 +34,7 @@ import { fullChangelog, releaseNotesFor } from './changelog'
 import { copyFileToClipboard } from './clipboard'
 import { cleanTitle, clipId, deriveGame, parseRecordedAt, prettifyGame } from './clips'
 import {
+  GIF_PREVIEW_PREFIX,
   INVALID_NAME,
   type AudioExportPlan,
   type ExportPlan,
@@ -40,6 +43,7 @@ import {
   buildExportArgs,
   buildGifExportArgs,
   exportExt,
+  gifPreviewName,
   isAudioExportExt,
   mixesAudio,
   parseProgressLine,
@@ -49,6 +53,7 @@ import {
   validateAudioExportRequest,
   validateExportRequest,
   validateGifExportRequest,
+  validateGifPreviewRequest,
 } from './exports'
 import {
   extractAudioTrack,
@@ -80,9 +85,28 @@ import { watchFolder } from './watcher'
 
 export type Emit = <K extends EventName>(name: K, payload: EventMap[K]) => void
 type FilmResult = ActionResult & { film?: string; frames?: number }
+type GifPreviewResult = ActionResult & { preview?: GifPreview; cancelled?: boolean }
 
 /** Renames remembered for `clipPath`; far more than a session's worth of renames. */
 const RENAMED_CAP = 200
+
+/** Size of a file, or null where there is no file. */
+const fileSize = (path: string): Promise<number | null> =>
+  stat(path)
+    .then((s) => s.size)
+    .catch(() => null)
+
+/**
+ * The cut as a job carries it: held inside the clip. Validation only checked
+ * the request against the clip; a preview and an export of the same ask have
+ * to land on the same numbers to share a file.
+ */
+function exportSpan(
+  req: { start: number; end: number },
+  source: Clip,
+): { start: number; end: number } {
+  return { start: Math.max(0, req.start), end: Math.min(req.end, source.duration) }
+}
 
 const FLUSH_MS = 150
 const ADD_BATCH = 40
@@ -95,6 +119,8 @@ const WARMUP_CLIPS = 3
 /** An export that prints nothing for this long is wedged, not slow. */
 const EXPORT_STALL_MS = 30_000
 const EXPORT_MAX_MS = 15 * 60_000
+/** How often a GIF preview's progress is pushed; a bar cannot use more. */
+const PREVIEW_EMIT_MS = 250
 /** How long a finished job stays in the list for the progress card to show its end state. */
 const EXPORT_PRUNE_DONE_MS = 10_000
 const EXPORT_PRUNE_FAILED_MS = 30_000
@@ -156,6 +182,12 @@ export class Library {
   private audioJobs = new Map<string, Promise<ActionResult & { file?: string }>>()
   /** The filmstrip being cut, if one is: one at a time, and the latest ask wins. */
   private film: { id: string; abort: AbortController; job: Promise<FilmResult> } | null = null
+  /** The GIF preview being rendered, if one is: one at a time, and the latest ask wins. */
+  private gifPreview: {
+    name: string
+    abort: AbortController
+    job: Promise<GifPreviewResult>
+  } | null = null
   /**
    * Old id → new id for every rename this session, so `clipPath` can keep
    * serving a `<video>` that is mid-clip on the old id: the renderer pins the
@@ -187,6 +219,7 @@ export class Library {
     await this.store.load()
     this.media.setConcurrency(workerSetting(this.settings.concurrency))
     this.ensureClipsFolder()
+    void this.sweepGifPreviews()
     for (const folder of this.store.data.folders) {
       folder.available = existsSync(folder.path)
       this.store.upsertFolder(folder)
@@ -201,6 +234,7 @@ export class Library {
     // The running export removes its own temp file on abort; wait for that.
     this.exportAbort?.abort()
     this.film?.abort.abort()
+    this.gifPreview?.abort.abort()
     await this.exportChain.catch(() => undefined)
     this.activity.shutdown()
     this.endBurst()
@@ -1073,8 +1107,7 @@ export class Library {
       name: basename(out, extname(out)),
       ext: extname(out).toLowerCase(),
       path: out,
-      start: Math.max(0, req.start),
-      end: Math.min(req.end, source.duration),
+      ...exportSpan(req, source),
       muted: false,
       state: 'queued',
       progress: 0,
@@ -1089,6 +1122,143 @@ export class Library {
     this.exportChain = this.exportChain
       .then(() => this.runExportJob(job, source))
       .catch(() => undefined)
+  }
+
+  /**
+   * The ffmpeg runs of one export or preview, in order, each an equal share
+   * of the progress bar. Throws on the first that fails, or when `abort` fires.
+   */
+  private async runPasses(
+    passes: Array<{ args: string[]; written: number }>,
+    abort: AbortController,
+    onProgress: (progress: number) => void,
+  ): Promise<void> {
+    for (const [i, pass] of passes.entries()) {
+      const { code, stderrTail } = await runLong(FFMPEG, pass.args, {
+        stallMs: EXPORT_STALL_MS,
+        maxMs: EXPORT_MAX_MS,
+        signal: abort.signal,
+        onLine: (line) => {
+          const t = parseProgressLine(line)
+          if (t === null || pass.written <= 0) return
+          onProgress(Math.min(1, (i + Math.min(1, t / pass.written)) / passes.length))
+        },
+      })
+      if (abort.signal.aborted) throw new Error('Export cancelled.')
+      if (code !== 0) throw new Error(stderrTail || `ffmpeg exited with code ${code}`)
+    }
+  }
+
+  // ------------------------------------------------------------ gif preview
+
+  /**
+   * The GIF an export would write, rendered into the cache to be looked at
+   * first — and so the export that follows, if nothing changed, is a copy of
+   * it rather than a second render (see `runExportJob`).
+   *
+   * One at a time and the latest ask wins, as the filmstrip: whoever asked
+   * again has changed the cut or the settings, and the render under way is of
+   * a GIF no one will look at. A preview is named for everything that shapes
+   * its frames, so asking for one already on disk costs a stat.
+   */
+  previewGif(req: GifPreviewRequest): Promise<GifPreviewResult> {
+    if (!ffmpegAvailable())
+      return Promise.resolve({ ok: false, error: 'ffmpeg is not available in this build.' })
+    const source = this.store.data.clips[req.id]
+    const invalid = validateGifPreviewRequest(req, source)
+    if (invalid || !source)
+      return Promise.resolve({ ok: false, error: invalid ?? 'Clip not found.' })
+    if (!existsSync(source.path))
+      return Promise.resolve({ ok: false, error: 'The source file is no longer on disk.' })
+
+    const cut = { ...exportSpan(req, source), width: req.width, fps: req.fps }
+    const name = gifPreviewName(source, cut)
+    // The same ask again joins the render under way — unless that one was
+    // just cancelled (closed, then reopened), whose answer would be nothing.
+    const live = this.gifPreview
+    if (live?.name === name && !live.abort.signal.aborted) return live.job
+    live?.abort.abort()
+    const abort = new AbortController()
+    const job = this.renderGifPreview(source, name, cut, abort).finally(() => {
+      if (this.gifPreview?.abort === abort) this.gifPreview = null
+    })
+    this.gifPreview = { name, abort, job }
+    return job
+  }
+
+  cancelGifPreview(): void {
+    this.gifPreview?.abort.abort()
+  }
+
+  private async renderGifPreview(
+    source: Clip,
+    name: string,
+    cut: { start: number; end: number; width: number; fps: number },
+    abort: AbortController,
+  ): Promise<GifPreviewResult> {
+    const out = join(cacheDir(), name)
+    const had = await fileSize(out)
+    if (had !== null) return { ok: true, preview: { file: name, bytes: had } }
+    // As an export: a `~` name while ffmpeg writes, renamed whole at the end.
+    // Each render's own, so a cancelled one's cleanup can never take the
+    // files of the render that replaced it. The GIF's name stays at the end,
+    // which is how ffmpeg picks the muxer.
+    const token = randomUUID().slice(0, 8)
+    const tmp = join(cacheDir(), `~${token}.${name}`)
+    const palette = join(cacheDir(), `~${token}.${name}.palette.png`)
+    const plan: GifExportPlan = { src: source.path, out: tmp, palette, ...cut, hdr: source.hdr }
+    const written = cut.end - cut.start
+    const passes = buildGifExportArgs(plan).map((args) => ({ args, written }))
+    let lastEmit = 0
+    try {
+      await this.runPasses(passes, abort, (progress) => {
+        const now = Date.now()
+        if (now - lastEmit < PREVIEW_EMIT_MS && progress < 1) return
+        lastEmit = now
+        this.emit('gif-preview:progress', { id: source.id, progress })
+      })
+      await fsRename(tmp, out)
+      const bytes = (await fileSize(out)) ?? 0
+      // Each is tens of megabytes; only the one just looked at is worth keeping.
+      void this.sweepGifPreviews(name)
+      return { ok: true, preview: { file: name, bytes } }
+    } catch (err) {
+      // Only ever our own partial file.
+      await unlink(tmp).catch(() => undefined)
+      return abort.signal.aborted
+        ? { ok: false, cancelled: true, error: 'Cancelled.' }
+        : { ok: false, error: (err as Error).message }
+    } finally {
+      await unlink(palette).catch(() => undefined)
+    }
+  }
+
+  /**
+   * The preview of exactly this GIF, when one is on disk. An export never
+   * waits for one: a preview swept meanwhile only means the frames are rendered.
+   */
+  private async readyGifPreview(job: ExportJob, source: Clip): Promise<string | null> {
+    if (!job.gif) return null
+    const cut = { start: job.start, end: job.end, ...job.gif }
+    const path = join(cacheDir(), gifPreviewName(source, cut))
+    return (await fileSize(path)) === null ? null : path
+  }
+
+  /**
+   * Drops every preview but `keep` and the one being rendered, half-written
+   * ones included. Run at launch, when nothing from a past session is worth
+   * its megabytes, and after each render.
+   */
+  private async sweepGifPreviews(keep = ''): Promise<void> {
+    const dir = cacheDir()
+    const live = this.gifPreview?.name ?? ''
+    const names = await readdir(dir).catch(() => [] as string[])
+    for (const n of names) {
+      // A finished preview is its name; a render's temp files carry it after a `~` and a token.
+      if (!n.includes(GIF_PREVIEW_PREFIX)) continue
+      if (n === keep || (live && n.includes(live))) continue
+      await unlink(join(dir, n)).catch(() => undefined)
+    }
   }
 
   /** Explorer on a finished job's file. Only while the job is in the list; `revealActivity` covers it after that. */
@@ -1145,22 +1315,17 @@ export class Library {
     const abort = new AbortController()
     this.exportAbort = abort
     try {
-      const passes = await this.planExport(job, source, tmp, palette)
-      for (const [i, pass] of passes.entries()) {
-        const { code, stderrTail } = await runLong(FFMPEG, pass.args, {
-          stallMs: EXPORT_STALL_MS,
-          maxMs: EXPORT_MAX_MS,
-          signal: abort.signal,
-          onLine: (line) => {
-            const t = parseProgressLine(line)
-            if (t === null || pass.written <= 0) return
-            // Each pass is an equal share of the bar.
-            job.progress = Math.min(1, (i + Math.min(1, t / pass.written)) / passes.length)
-            this.scheduleExportsEmit()
-          },
+      // A GIF previewed at exactly this cut and these settings is the file
+      // already: copy it rather than decode the selection twice more.
+      const ready = job.kind === 'gif' ? await this.readyGifPreview(job, source) : null
+      if (ready) {
+        await copyFile(ready, tmp)
+      } else {
+        const passes = await this.planExport(job, source, tmp, palette)
+        await this.runPasses(passes, abort, (progress) => {
+          job.progress = progress
+          this.scheduleExportsEmit()
         })
-        if (abort.signal.aborted) throw new Error('Export cancelled.')
-        if (code !== 0) throw new Error(stderrTail || `ffmpeg exited with code ${code}`)
       }
       await fsRename(tmp, out)
       if (job.kind === 'clip') job.clipId = await this.indexExport(job, source)

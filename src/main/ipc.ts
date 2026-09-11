@@ -214,6 +214,17 @@ export function registerIpc(
       pickSaveFile(getWindow(), 'Save GIF as', defaultPath, [{ name: 'GIF', extensions: ['gif'] }]),
     )
   })
+  ipcMain.handle('clip:preview-gif', (_e, raw) => {
+    const r = (raw ?? {}) as Record<string, unknown>
+    return library.previewGif({
+      id: str(r.id),
+      start: num(r.start),
+      end: num(r.end),
+      width: isGifWidth(r.width) ? r.width : DEFAULT_SETTINGS.gifWidth,
+      fps: isGifFps(r.fps) ? r.fps : DEFAULT_SETTINGS.gifFps,
+    })
+  })
+  ipcMain.handle('clip:cancel-gif-preview', () => library.cancelGifPreview())
 
   ipcMain.handle('clip:audio-track', (_e, id, index) =>
     library.audioTrack(str(id), Math.trunc(num(index))),

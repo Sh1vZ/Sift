@@ -39,6 +39,7 @@ declare module 'vue' {
     GameFilter: typeof import('./src/components/GameFilter.vue')['default']
     GameMergeHints: typeof import('./src/components/GameMergeHints.vue')['default']
     GamesBrowser: typeof import('./src/components/GamesBrowser.vue')['default']
+    GifPreviewDialog: typeof import('./src/components/GifPreviewDialog.vue')['default']
     Icon: typeof import('./src/components/Icon.vue')['default']
     ImageStage: typeof import('./src/components/ImageStage.vue')['default']
     IndexingPane: typeof import('./src/components/settings/IndexingPane.vue')['default']

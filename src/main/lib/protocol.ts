@@ -62,7 +62,9 @@ export function installProtocol(resolveClipPath: (id: string) => string | undefi
     const key = decodeURIComponent(url.pathname.replace(/^\/+/, ''))
 
     if (url.hostname === 'thumb') {
-      if (!key || key !== basename(key) || !key.endsWith('.jpg')) return bad(400)
+      // The cache holds Sift's own artifacts only: JPEG posters, strips and
+      // renders, and the GIF a preview is rendered to.
+      if (!key || key !== basename(key) || !/\.(jpg|gif)$/.test(key)) return bad(400)
       return serveFile(join(cacheDir(), key), request, {
         'Cache-Control': 'private, max-age=31536000, immutable',
       })

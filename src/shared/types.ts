@@ -199,6 +199,19 @@ export interface GifExportRequest extends Omit<ExportRequest, 'muted' | 'tracks'
   fps: GifFps
 }
 
+/**
+ * The GIF an export would write, rendered ahead of it into the cache to be
+ * looked at first. No file name: where it goes is decided at export, which
+ * then copies the preview instead of rendering the frames again.
+ */
+export type GifPreviewRequest = Omit<GifExportRequest, 'name'>
+
+/** A rendered preview: its cache file (for `thumbUrl`) and its size on disk. */
+export interface GifPreview {
+  file: string
+  bytes: number
+}
+
 export interface ExportJob {
   id: string
   kind: ExportKind
@@ -537,6 +550,8 @@ export interface EventMap {
   'scan:changed': ScanState
   /** Every live export job; a job is sent once in its terminal state and then dropped. */
   'exports:changed': ExportJob[]
+  /** How far the GIF preview being rendered has got, 0..1, with the clip it is of. */
+  'gif-preview:progress': { id: string; progress: number }
   'window:maximized': boolean
   /**
    * Whether the window is on screen. False while it is hidden to the tray or
