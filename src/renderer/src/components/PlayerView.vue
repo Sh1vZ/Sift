@@ -2,7 +2,13 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { DropdownMenuItem } from '@nuxt/ui'
 import type { AudioExportExt, Clip, ExportKind } from '@shared/types'
-import { AUDIO_EXPORT_FORMATS, GIF_FPS, GIF_WIDTHS, imageFormatLabel } from '@shared/types'
+import {
+  AUDIO_EXPORT_FORMATS,
+  GIF_FPS,
+  GIF_WIDTHS,
+  imageFormatLabel,
+  isHdrClip,
+} from '@shared/types'
 import ElasticSlider from './bits/ElasticSlider.vue'
 import AudioMixer from './AudioMixer.vue'
 import ImageStage from './ImageStage.vue'
@@ -196,6 +202,7 @@ const meta = computed(() =>
     clip.value.game,
     formatFull(clip.value.recordedAtMs),
     formatResolution(clip.value.width, clip.value.height, clip.value.fps),
+    isHdrClip(clip.value) ? 'HDR' : '',
     isImage.value ? imageFormatLabel(clip.value.ext, true) : formatBitrate(bitrate(clip.value)),
     formatBytes(clip.value.size),
   ]

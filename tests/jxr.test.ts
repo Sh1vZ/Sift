@@ -13,7 +13,7 @@ import {
   type DecodedJxr,
 } from '../src/main/lib/jxr'
 import { isMediaFile } from '../src/main/lib/scanner'
-import { imageFormatLabel, isHdrImage, mediaKindOf } from '../src/shared/types'
+import { imageFormatLabel, isHdrClip, isHdrImage, mediaKindOf } from '../src/shared/types'
 
 let failed = 0
 const check = (cond: unknown, msg: string): void => {
@@ -165,9 +165,19 @@ function labelCases(): void {
     imageFormatLabel('.jpeg') === 'JPG' && imageFormatLabel('.jpg', true) === 'JPEG',
     'jpeg labels',
   )
-  check(imageFormatLabel('.jxr') === 'HDR', 'the card calls a jxr HDR')
-  check(imageFormatLabel('.jxr', true) === 'JPEG XR · HDR', 'the details pane spells jxr out')
+  check(
+    imageFormatLabel('.jxr') === 'JXR',
+    'the card names a jxr by its format; HDR is its own tag',
+  )
+  check(imageFormatLabel('.jxr', true) === 'JPEG XR', 'the details pane spells jxr out')
   check(imageFormatLabel('.tiff') === 'TIFF', 'an unknown format falls back to its extension')
+  check(
+    isHdrClip({ kind: 'image', hdr: false, ext: '.jxr' }) &&
+      !isHdrClip({ kind: 'image', hdr: false, ext: '.png' }) &&
+      isHdrClip({ kind: 'video', hdr: true, ext: '.mp4' }) &&
+      !isHdrClip({ kind: 'video', hdr: false, ext: '.mp4' }),
+    'a jxr screenshot and a probed HDR recording carry the HDR tag; nothing else does',
+  )
 }
 
 function titleCases(): void {

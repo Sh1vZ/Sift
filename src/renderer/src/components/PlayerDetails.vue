@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import type { Clip } from '@shared/types'
-import { AUDIO_EXPORT_FORMATS, MAX_GIF_S, imageFormatLabel } from '@shared/types'
+import { AUDIO_EXPORT_FORMATS, MAX_GIF_S, imageFormatLabel, isHdrClip } from '@shared/types'
 import FavouriteButton from './FavouriteButton.vue'
 import { shareMenuItems } from '@/composables/useClipMenu'
 import { exportKind, exportMuted, inSec, outSec, selectionLength } from '@/composables/useEditor'
@@ -90,6 +90,7 @@ const codec = computed(() => {
 const resolution = computed(() =>
   formatResolution(props.clip.width, props.clip.height, props.clip.fps),
 )
+const hdr = computed(() => isHdrClip(props.clip))
 const folder = computed(() => dirname(props.clip.path))
 
 const isExport = computed(() => Boolean(props.clip.sourceId))
@@ -286,9 +287,10 @@ function audioValue(c: Clip): string {
 const rows = computed<Row[]>(() => {
   const c = props.clip
   const dims = c.width && c.height ? `${c.width} × ${c.height}` : ''
+  const range = hdr.value ? 'HDR' : ''
   if (isImage.value)
     return [
-      { label: 'Resolution', value: dims, mono: true },
+      { label: 'Resolution', value: [dims, range].filter(Boolean).join(' · '), mono: true },
       { label: 'Format', value: format.value },
       { label: 'Size', value: formatBytes(c.size), mono: true },
       { label: 'Taken', value: formatFull(c.recordedAtMs) },
@@ -298,7 +300,7 @@ const rows = computed<Row[]>(() => {
   const rate = formatBitrate(bitrate(c))
   return [
     { label: 'Duration', value: c.duration ? formatDuration(c.duration) : '', mono: true },
-    { label: 'Resolution', value: [dims, fps].filter(Boolean).join(' · '), mono: true },
+    { label: 'Resolution', value: [dims, fps, range].filter(Boolean).join(' · '), mono: true },
     { label: 'Codec', value: [codec.value, rate].filter(Boolean).join(' · ') },
     {
       label: 'Audio',
@@ -371,6 +373,15 @@ const rows = computed<Row[]>(() => {
           :label="tier.label"
         />
         <UBadge v-if="resolution" color="neutral" variant="subtle" size="md" :label="resolution" />
+        <UBadge
+          v-if="hdr"
+          color="neutral"
+          variant="subtle"
+          size="md"
+          icon="i-lucide-sun"
+          label="HDR"
+          title="High dynamic range"
+        />
         <UBadge v-if="codec" color="neutral" variant="subtle" size="md" :label="codec" />
         <UBadge
           v-if="format"

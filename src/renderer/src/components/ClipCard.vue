@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import type { Clip, ExportJob } from '@shared/types'
-import { imageFormatLabel } from '@shared/types'
+import { imageFormatLabel, isHdrClip } from '@shared/types'
 import type { UploadJob } from '@shared/youtube'
 import type { ClipMenuItem } from '@/composables/useClipMenu'
 import FavouriteButton from './FavouriteButton.vue'
@@ -74,6 +74,7 @@ const canScrub = computed(
 const resolution = computed(() =>
   formatResolution(props.clip.width, props.clip.height, props.clip.fps),
 )
+const hdr = computed(() => isHdrClip(props.clip))
 const when = computed(() =>
   formatRelative(
     props.variant === 'export'
@@ -351,7 +352,18 @@ const seen = computed(() => Boolean(props.clip.seenAtMs) && !veil.value)
 
         <FavouriteButton v-if="!job" :clip="clip" variant="card" />
 
-        <UBadge v-if="resolution && !job" class="badge res" size="sm" :label="resolution" />
+        <!-- What the picture is: its quality, and HDR when it has the range. -->
+        <div v-if="(resolution || hdr) && !job" class="badges-tl">
+          <UBadge v-if="resolution" class="badge res" size="sm" :label="resolution" />
+          <UBadge
+            v-if="hdr"
+            class="badge hdr"
+            size="sm"
+            label="HDR"
+            title="High dynamic range"
+            aria-label="HDR: high dynamic range"
+          />
+        </div>
 
         <!-- The right-hand corner carries what has happened to a clip; the left
              carries what it is. Grouped, so neither has to know the other is
@@ -597,14 +609,27 @@ const seen = computed(() => Boolean(props.clip.seenAtMs) && !veil.value)
   letter-spacing: 0.03em;
   backdrop-filter: blur(4px);
 }
-/* Quality reads at rest: it is how you tell two recordings of the same match
-   apart, so it must not depend on hover. */
-.badge.res {
+/* Spec chips, top-left: quality reads at rest — it is how you tell two
+   recordings of the same match apart, so it must not depend on hover — and
+   HDR sits beside it in the same violet, a spec like the rest. */
+.badges-tl {
+  position: absolute;
   top: 8px;
   left: 8px;
-  bottom: auto;
-  right: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: calc(100% - 16px);
+}
+.badges-tl .badge {
+  position: static;
+}
+.badge.res,
+.badge.hdr {
   color: var(--secondary);
+}
+.badge.hdr {
+  letter-spacing: 0.06em;
 }
 /* History chips, right-aligned so YouTube keeps the corner it has always had and
    Watched grows leftward beside it instead of pushing it out. */

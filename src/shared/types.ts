@@ -609,19 +609,28 @@ export function isHdrImage(ext: string): boolean {
   return ext.toLowerCase() === '.jxr'
 }
 
+/**
+ * Whether the picture is HDR: a recording with a PQ or HLG transfer (read by
+ * the probe), or a JPEG XR screenshot, which a game only writes in HDR. What
+ * the HDR tag on a card and in the details pane goes by.
+ */
+export function isHdrClip(clip: Pick<Clip, 'kind' | 'hdr' | 'ext'>): boolean {
+  return clip.hdr || (clip.kind === 'image' && isHdrImage(clip.ext))
+}
+
 const IMAGE_FORMAT_LABELS: Record<string, { short: string; long: string }> = {
   '.png': { short: 'PNG', long: 'PNG' },
   '.jpg': { short: 'JPG', long: 'JPEG' },
   '.jpeg': { short: 'JPG', long: 'JPEG' },
   '.bmp': { short: 'BMP', long: 'BMP' },
   '.gif': { short: 'GIF', long: 'GIF' },
-  '.jxr': { short: 'HDR', long: 'JPEG XR · HDR' },
+  '.jxr': { short: 'JXR', long: 'JPEG XR' },
 }
 
 /**
  * What a screenshot is, in the words a card badge (`short`) or a details row
- * (`long`) uses. The card says "HDR" rather than "JXR" because that is what
- * the format means to the person who took the shot.
+ * (`long`) uses. Names the format only: that a JPEG XR is HDR is said by the
+ * HDR tag beside it (`isHdrClip`), the same tag a recording gets.
  */
 export function imageFormatLabel(ext: string, long = false): string {
   const entry = IMAGE_FORMAT_LABELS[ext.toLowerCase()]
